@@ -81,22 +81,22 @@ def sync_wallet_data(wallet):
 
     chickens = get_chickens_by_wallet(wallet)
 
-    family_summaries = resolve_family_roots_for_all(
-        chickens,
-        contract_addresses=CONTRACTS,
-    )
-    clear_family_roots_for_wallet(wallet)
+#    family_summaries = resolve_family_roots_for_all(
+#        chickens,
+#        contract_addresses=CONTRACTS,
+#    )
+#    clear_family_roots_for_wallet(wallet)
 
-    owned_token_ids = {str(row["token_id"]) for row in chickens}
+#    owned_token_ids = {str(row["token_id"]) for row in chickens}
 
-    for summary in family_summaries:
-        upsert_family_root_summary(wallet, summary)
-        insert_family_root_items(
-            wallet_address=wallet,
-            token_id=summary["token_id"],
-            roots=summary["roots"],
-            owned_root_ids=owned_token_ids,
-        )
+#   for summary in family_summaries:
+#        upsert_family_root_summary(wallet, summary)
+#        insert_family_root_items(
+#            wallet_address=wallet,
+#            token_id=summary["token_id"],
+#            roots=summary["roots"],
+#            owned_root_ids=owned_token_ids,
+#        )
 
     return get_chickens_by_wallet(wallet)
 
