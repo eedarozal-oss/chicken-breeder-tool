@@ -1,4 +1,3 @@
-import os
 from flask import Flask, render_template, request, redirect, url_for, session
 from services.ronin_api import fetch_all_owned_chickens
 from services.metadata_parser import parse_chicken_record
@@ -33,7 +32,7 @@ from services.wallet_access import (
 )
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
+app.secret_key = "replace-this-with-a-real-secret-key"
 
 CONTRACTS = [
     "0xee9436518030616bc315665678738a4348463df4",
@@ -73,32 +72,50 @@ def sync_wallet_data(wallet):
     for record in parsed_records:
         upsert_chicken(record)
 
-#    chickens = get_chickens_by_wallet(wallet)
-#    enriched_chickens = enrich_chicken_records(chickens)
-
-#    for chicken in enriched_chickens:
-#        upsert_chicken(chicken)
-
-#    chickens = get_chickens_by_wallet(wallet)
-
-#    family_summaries = resolve_family_roots_for_all(
-#        chickens,
-#        contract_addresses=CONTRACTS,
-#    )
-#    clear_family_roots_for_wallet(wallet)
-
-#    owned_token_ids = {str(row["token_id"]) for row in chickens}
-
-#   for summary in family_summaries:
-#        upsert_family_root_summary(wallet, summary)
-#        insert_family_root_items(
-#            wallet_address=wallet,
-#            token_id=summary["token_id"],
-#            roots=summary["roots"],
-#            owned_root_ids=owned_token_ids,
-#        )
-
     return get_chickens_by_wallet(wallet)
+
+
+def needs_gene_enrichment(chicken):
+    primary_build = str(chicken.get("primary_build") or "").strip()
+    recessive_build = str(chicken.get("recessive_build") or "").strip()
+    return not primary_build and not recessive_build
+
+
+def enrich_missing_gene_data_in_batches(chickens, selected_token_id=None, batch_size=5):
+    selected_token_id = str(selected_token_id or "").strip()
+    prioritized = []
+    remaining = []
+
+    for chicken in chickens or []:
+        if not needs_gene_enrichment(chicken):
+            continue
+
+        token_id = str(chicken.get("token_id") or "").strip()
+        if selected_token_id and token_id == selected_token_id:
+            prioritized.append(chicken)
+        else:
+            remaining.append(chicken)
+
+    missing = prioritized + remaining
+    total_missing = len(missing)
+    batch = missing[:batch_size]
+
+    if not batch:
+        return {
+            "loaded_count": 0,
+            "remaining_count": 0,
+            "total_missing_before": 0,
+        }
+
+    enriched = enrich_chicken_records(batch)
+    for chicken in enriched:
+        upsert_chicken(chicken)
+
+    return {
+        "loaded_count": len(batch),
+        "remaining_count": max(0, total_missing - len(batch)),
+        "total_missing_before": total_missing,
+    }
 
 
 def get_wallet_chickens(wallet, ensure_loaded=False):
@@ -1038,10 +1055,22 @@ def match_gene_page():
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
+    gene_enrichment_loaded = 0
+    gene_enrichment_remaining = 0
     error = None
 
     if wallet:
         try:
+            chickens = get_wallet_chickens(wallet, ensure_loaded=True)
+
+            enrichment_status = enrich_missing_gene_data_in_batches(
+                chickens,
+                selected_token_id=selected_token_id,
+                batch_size=5,
+            )
+            gene_enrichment_loaded = enrichment_status["loaded_count"]
+            gene_enrichment_remaining = enrichment_status["remaining_count"]
+
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
             all_breedable = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
 
@@ -1174,17 +1203,19 @@ def match_gene_page():
             error = f"Failed to load gene breeding matches: {exc}"
 
     return render_template(
-    "match_gene.html",
-    wallet=wallet,
-    selected_token_id=selected_token_id,
-    selected_chicken=selected_chicken,
-    breedable_chickens=breedable_chickens,
-    potential_matches=potential_matches,
-    build_type=build_type,
-    ninuno_100_only=ninuno_100_only,
-    auto_match=auto_match,
-    auto_open_template_id=(f"compare-gene-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else ""),
-    error=error,
+        "match_gene.html",
+        wallet=wallet,
+        selected_token_id=selected_token_id,
+        selected_chicken=selected_chicken,
+        breedable_chickens=breedable_chickens,
+        potential_matches=potential_matches,
+        build_type=build_type,
+        ninuno_100_only=ninuno_100_only,
+        auto_match=auto_match,
+        auto_open_template_id=(f"compare-gene-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else ""),
+        gene_enrichment_loaded=gene_enrichment_loaded,
+        gene_enrichment_remaining=gene_enrichment_remaining,
+        error=error,
     )
 
 
@@ -1200,10 +1231,22 @@ def match_ultimate_page():
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
+    gene_enrichment_loaded = 0
+    gene_enrichment_remaining = 0
     error = None
 
     if wallet:
         try:
+            chickens = get_wallet_chickens(wallet, ensure_loaded=True)
+
+            enrichment_status = enrich_missing_gene_data_in_batches(
+                chickens,
+                selected_token_id=selected_token_id,
+                batch_size=5,
+            )
+            gene_enrichment_loaded = enrichment_status["loaded_count"]
+            gene_enrichment_remaining = enrichment_status["remaining_count"]
+
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
             all_breedable = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
 
@@ -1251,6 +1294,8 @@ def match_ultimate_page():
         breedable_chickens=breedable_chickens,
         potential_matches=potential_matches,
         auto_open_template_id=(f"compare-ultimate-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else ""),
+        gene_enrichment_loaded=gene_enrichment_loaded,
+        gene_enrichment_remaining=gene_enrichment_remaining,
         error=error,
     )
 
