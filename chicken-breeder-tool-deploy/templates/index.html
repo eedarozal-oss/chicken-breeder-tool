@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex Breeder</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="welcome-page">
+    <div class="welcome-stage">
+        <div class="welcome-art-wrap">
+            <img
+                src="{{ url_for('static', filename='images/apex-breeder-welcome.png') }}"
+                alt="Apex Breeder welcome screen"
+                class="welcome-hero-image"
+            >
+
+            <form method="POST" class="welcome-wallet-form">
+                <input
+                    type="text"
+                    name="wallet_address"
+                    placeholder="Enter wallet address"
+                    value="{{ wallet or '' }}"
+                    required
+                >
+                <button type="submit">Load Wallet</button>
+
+		{% if success %}
+   	    		<div class="welcome-success">{{ success }}</div>
+		{% endif %}
+        
+		{% if error %}
+            		<div class="welcome-error">{{ error }}</div>
+        	{% endif %}
+            </form>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+	{% if redirect_url %}
+		<script>
+    			setTimeout(function () {
+       	 		window.location.href = "{{ redirect_url }}";
+	    		}, 1800);
+		</script>
+	{% endif %}
+</body>
+</html>

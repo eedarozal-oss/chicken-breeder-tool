@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Breeding</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-auto-open-template-id="{{ auto_open_template_id or '' }}">
+    <div class="container">
+        <div class="topbar">
+		<div class="page-header">
+    			<h1>IP Breeding</h1>
+    			<p class="page-description">
+        			Compare IP-focused pairs, review instinct and lineage, and check the best breeding match for your selected chicken.
+    			</p>
+		</div>
+            <div class="topbar-actions">
+                <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+            </div>
+        </div>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        {% if wallet and not error %}
+            <div class="settings-box">
+               <form method="GET" action="{{ url_for('match_ip_page') }}" class="filter-form">
+    <input type="hidden" name="wallet_address" value="{{ wallet }}">
+    {% if selected_token_id %}
+        <input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">
+    {% endif %}
+
+    <div class="filter-grid ip-filter-grid">
+        <div>
+            <label for="min_ip"><strong>Minimum IP</strong></label>
+            <input
+                type="number"
+                id="min_ip"
+                name="min_ip"
+                min="0"
+                value="{{ min_ip if min_ip is not none else '' }}"
+                placeholder="e.g. 260"
+            >
+        </div>
+
+        <div>
+            <label for="ip_diff"><strong>IP Difference</strong></label>
+            <input
+                type="number"
+                id="ip_diff"
+                name="ip_diff"
+                min="0"
+                value="{{ ip_diff if ip_diff is not none else '' }}"
+                placeholder="e.g. 10"
+            >
+        </div>
+
+        <div>
+		<div class="ninuno-filter-box">
+    		<label for="ninuno_100_only"><strong>Ninuno Filter</strong></label>
+    		<div class="ninuno-filter-inline">
+        	<input
+            	type="checkbox"
+            	id="ninuno_100_only"
+            	name="ninuno_100_only"
+            	value="1"
+            	{% if ninuno_100_only %}checked{% endif %}
+        	>
+        	<span>Show only 100% Ninuno</span>
+    	</div>
+</div>
+        </div>
+
+		<div class="filter-actions-group">
+    			<button type="submit">Apply Filters</button>
+    			<a
+        			class="link-btn"
+        			href="{{ url_for('match_ip_page', wallet_address=wallet, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, auto_match=1) }}"
+    				>
+        			Auto Match
+    			</a>
+		</div>
+    </div>
+</form>            
+</div>
+        {% endif %}
+
+        <div class="panel">
+            <h2>Available Chickens</h2>
+
+            {% if breedable_chickens %}
+                <div class="table-wrap limited-table ip-available-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Chicken ID</th>
+                                <th>IP</th>
+                                <th>Instinct</th>
+				<th>Generation</th>
+                                <th>Breed Count</th>
+                                <th>Ninuno %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for chicken in breedable_chickens %}
+                            <tr>
+                                <td class="action-cell">
+                                    <a
+                                        class="link-btn compact-action-btn"
+                                        href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=chicken.token_id, min_ip=min_ip, enable_ip_diff=1 if enable_ip_diff else 0, ip_diff=ip_diff) }}#selected-chicken"
+                                    >
+                                        Select
+                                    </a>
+                                </td>
+                                <td>
+                                    <div class="chicken-id-card compact-id-card">
+                                        <img
+                                            src="{{ chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ chicken.token_id ~ '.png') }}"
+                                            alt="Chicken {{ chicken.token_id }}"
+                                            class="chicken-id-card-image compact-id-image"
+                                        >
+                                        <div class="chicken-id-card-text">#{{ chicken.token_id }}</div>
+                                    </div>
+                                </td>
+                                <td>{{ chicken.ip if chicken.ip is not none else "" }}</td>
+                                <td>{{ chicken.instinct or "" }}</td>
+                                <td>{{ chicken.generation_text or "" }}</td>
+                                <td>{{ chicken.breed_count if chicken.breed_count is not none else "" }}</td>
+                                <td>
+                                    {% if chicken.is_complete %}
+                                        {{ chicken.ownership_percent }}%
+                                    {% else %}
+                                        Recalculate
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>No available chickens found for IP breeding.</p>
+            {% endif %}
+        </div>
+
+        <div class="match-layout">
+            <div class="panel" id="selected-chicken">
+    {% if selected_chicken %}
+        <h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
+
+        <div class="selected-chicken-media-wrap">
+    		<img
+        		src="{{ selected_chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ selected_chicken.token_id ~ '.png') }}"
+        		alt="Chicken {{ selected_chicken.token_id }}"
+        		class="selected-chicken-image face-right"
+      	  		loading="lazy"
+    		>
+	</div>
+
+        <div class="selected-chicken-summary-grid">
+            <div>
+                <strong>IP:</strong>
+                {{ selected_chicken.ip if selected_chicken.ip is not none else "" }}
+            </div>
+
+            <div>
+                <strong>Ninuno %:</strong>
+                {% if selected_chicken.is_complete %}
+                    {{ selected_chicken.ownership_percent }}%
+                {% else %}
+                    <span class="recalculate-inline">
+                        <span>Recalculate</span>
+                        <form method="POST" action="{{ url_for('complete_ninuno') }}">
+                            <input type="hidden" name="wallet_address" value="{{ wallet }}">
+                            <input type="hidden" name="token_id" value="{{ selected_chicken.token_id }}">
+                            <input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+                            <button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+                        </form>
+                    </span>
+                {% endif %}
+            </div>
+
+            <div>
+                <strong>Breed Count:</strong>
+                {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}
+            </div>
+
+            <div></div>
+        </div>
+
+        <hr>
+
+        <div class="selected-chicken-details-grid">
+            <div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
+            <div><strong>Innate Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
+            <div><strong>Innate Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
+            <div><strong>Innate Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
+            <div><strong>Innate Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
+            <div><strong>Innate Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
+            <div><strong>Innate Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
+            <div><strong>Innate Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
+        </div>
+    {% else %}
+        <h2 class="selected-chicken-title">Selected Chicken</h2>
+        <p>Select a chicken from the available list.</p>
+    {% endif %}
+</div>
+            <div class="panel">
+                <h2>Potential IP Matches</h2>
+
+                {% if selected_chicken %}
+                    {% if potential_matches %}
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>Chicken ID</th>
+                                        <th>IP</th>
+                                        <th>IP Diff</th>
+                                        <th>Breed Count</th>
+                                        <th>Ninuno %</th>
+                                        <th>Warnings</th>
+                                        <th>View Stat</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in potential_matches %}
+                                    <tr>
+                                        <td class="action-cell">
+    						<button
+        							type="button"
+        							class="open-compare-btn"
+       							data-template-id="compare-ip-{{ row.candidate.token_id }}"
+   						 	>
+      						  	Match
+    						</button>
+					</td>
+                                        <td>
+                                            <div class="chicken-id-card compact-id-card">
+                                                <img
+                                                    src="{{ row.candidate.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.candidate.token_id ~ '.png') }}"
+                                                    alt="Chicken {{ row.candidate.token_id }}"
+                                                    class="chicken-id-card-image compact-id-image"
+                                                >
+                                                <div class="chicken-id-card-text">#{{ row.candidate.token_id }}</div>
+                                            </div>
+                                        </td>
+                                        <td>{{ row.candidate.ip if row.candidate.ip is not none else "" }}</td>
+                                        <td>{{ row.evaluation.ip_difference if row.evaluation.ip_difference is not none else "" }}</td>
+                                        <td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
+                                        <td>
+                                            {% if row.candidate.is_complete %}
+                                                {{ row.candidate.ownership_percent }}%
+                                            {% else %}
+                                                <span class="recalculate-inline">
+                                                    <span>Recalculate</span>
+                                                    <form method="POST" action="{{ url_for('complete_ninuno') }}">
+                                                        <input type="hidden" name="wallet_address" value="{{ wallet }}">
+                                                        <input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
+                                                        <input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+                                                        <button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+                                                    </form>
+                                                </span>
+					   {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if row.evaluation.warnings %}
+                                                {{ row.evaluation.warnings | join(', ') }}
+                                            {% else %}
+                                                OK
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                class="toggle-details-btn"
+                                                data-target="ip-details-{{ row.candidate.token_id }}"
+						data-open-label="View Stat"
+                                            >
+                                                View Stat
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr id="ip-details-{{ row.candidate.token_id }}" class="details-row hidden">
+                                        <td colspan="8">
+                                            <div class="details-card">
+                                                <h3>Chicken {{ row.candidate.token_id }} Full Innate Stats</h3>
+                                                <div class="stats-grid">
+                                                    <div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
+                                                    <div><strong>Innate Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
+                                                    <div><strong>Innate Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
+                                                    <div><strong>Innate Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
+                                                    <div><strong>Innate Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
+						    <div><strong>Innate Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
+						         <div><strong>Innate Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
+						    <div><strong>Innate Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p>No IP matches found for the selected chicken.</p>
+                    {% endif %}
+                {% else %}
+                    <p>Select a chicken first to see IP breeding matches.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+	{% if selected_chicken and potential_matches %}
+<div id="compare-modal" class="compare-modal hidden">
+    <div class="compare-backdrop" data-close-compare></div>
+    <div class="compare-dialog">
+        <div class="compare-header">
+            <h3>IP Match Preview</h3>
+            <button type="button" data-close-compare>Close</button>
+        </div>
+        <div id="compare-modal-body" class="compare-body"></div>
+    </div>
+</div>
+
+<div class="compare-template-store">
+    {% for row in potential_matches %}
+	{% set selected_item_candidates = get_ip_item_candidates(selected_chicken, row.candidate) %}
+	{% set candidate_item_candidates = get_ip_item_candidates(row.candidate, selected_chicken) %}
+	{% set selected_item, candidate_item = resolve_pair_item_recommendations(selected_item_candidates, candidate_item_candidates) %}
+
+        <template id="compare-ip-{{ row.candidate.token_id }}">
+            <div class="compare-grid">
+                <div class="compare-card">
+                    <h4>Selected Chicken #{{ selected_chicken.token_id }}</h4>
+
+                    <div class="compare-image-wrap">
+                        <img src="{{ selected_chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ selected_chicken.token_id ~ '.png') }}" alt="Chicken {{ selected_chicken.token_id }}" class="compare-image">
+                    </div>
+
+                    <div class="stats-grid">
+                        <div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
+                        <div><strong>Innate Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
+                        <div><strong>Innate Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
+                        <div><strong>Innate Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
+                        <div><strong>Innate Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
+<div><strong>Innate Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
+<div><strong>Innate Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
+<div><strong>Innate Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
+                    </div>
+
+                    <div class="compare-item-box">
+                        <div class="compare-item-label">Recommended Item</div>
+			{% if selected_item %}
+    			<div class="compare-item-name">{{ selected_item.name }}</div>
+    			<div class="compare-item-reason">{{ selected_item.reason }}</div>
+			{% else %}
+   			 <div class="compare-item-name">No item recommended</div>
+   			 <div class="compare-item-reason">This parent has no stat worth boosting for this pairing.</div>
+			{% endif %}
+                    </div>
+                </div>
+
+                <div class="compare-card">
+                    <h4>Matched Chicken #{{ row.candidate.token_id }}</h4>
+
+                    <div class="compare-image-wrap">
+                        <img src="{{ row.candidate.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.candidate.token_id ~ '.png') }}" alt="Chicken {{ row.candidate.token_id }}" class="compare-image">
+                    </div>
+
+                    <div class="stats-grid">
+                        <div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
+                        <div><strong>Innate Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
+                        <div><strong>Innate Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
+                        <div><strong>Innate Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
+                        <div><strong>Innate Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
+<div><strong>Innate Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
+<div><strong>Innate Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
+<div><strong>Innate Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
+                    </div>
+
+                    <div class="compare-item-box">
+                        <div class="compare-item-label">Recommended Item</div>
+			{% if candidate_item %}
+    				<div class="compare-item-name">{{ candidate_item.name }}</div>
+    				<div class="compare-item-reason">{{ candidate_item.reason }}</div>
+			{% else %}
+    				<div class="compare-item-name">No item recommended</div>
+    				<div class="compare-item-reason">This parent has no stat worth boosting for this pairing.</div>
+			{% endif %}
+                    </div>
+                </div>
+            </div>
+        </template>
+    {% endfor %}
+</div>
+{% endif %}
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

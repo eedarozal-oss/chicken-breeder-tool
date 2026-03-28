@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Available Chickens | Apex Breeder</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="topbar">
+            <div class="page-header">
+                <h1>Available Chickens for Breeding</h1>
+                <p class="page-description">Only chickens eligible for breeding are shown here.</p>
+            </div>
+            <div class="topbar-actions topbar-actions-wrap">
+                <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+            </div>
+        </div>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <div class="panel">
+            <div class="available-list-summary">
+                <div class="available-list-count">
+                    <span class="available-list-count-label">Total Breedable Chickens</span>
+                    <strong class="available-list-count-value">{{ breedable_chickens|length }}</strong>
+                </div>
+            </div>
+
+            {% if breedable_chickens %}
+                <div class="table-wrap">
+                    <table class="available-chickens-table">
+                        <thead>
+                            <tr>
+                                <th>Chicken ID</th>
+                                <th>IP</th>
+                                <th>Gen</th>
+                                <th>Breed Count</th>
+                                <th>Ninuno %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for chicken in breedable_chickens %}
+                            <tr>
+                                <td>
+                                    <div class="chicken-id-card">
+                                        <img
+                                            src="{{ chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ chicken.token_id ~ '.png') }}"
+                                            alt="Chicken {{ chicken.token_id }}"
+                                            class="chicken-id-card-image"
+                                        >
+                                        <div class="chicken-id-card-text">#{{ chicken.token_id }}</div>
+                                    </div>
+                                </td>
+                                <td>{{ chicken.ip if chicken.ip is not none else '' }}</td>
+                                <td>{{ chicken.generation_text or '' }}</td>
+                                <td>{{ chicken.breed_count if chicken.breed_count is not none else '' }}</td>
+                                <td>
+                                    {% if chicken.is_complete %}
+                                        {{ chicken.ownership_percent }}%
+                                    {% else %}
+                                        Recalculate
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>No chickens available for breeding were found.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

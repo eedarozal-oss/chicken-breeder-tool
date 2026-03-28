@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gene Breeding</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-auto-open-template-id="{{ auto_open_template_id or '' }}">
+    <div class="container">
+        <div class="topbar">
+            <div class="page-header">
+                <h1>Gene Breeding</h1>
+                <p class="page-description">
+                    Match primary and recessive trait builds, compare missing traits, and find the best breeding pair for your selected chicken.
+                </p>
+            </div>
+            <div class="topbar-actions">
+                <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+            </div>
+        </div>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        {% if wallet and not error %}
+            <div class="settings-box">
+                <form method="GET" action="{{ url_for('match_gene_page') }}" class="filter-form">
+    <input type="hidden" name="wallet_address" value="{{ wallet }}">
+    {% if selected_token_id %}
+        <input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">
+    {% endif %}
+
+    <div class="filter-grid gene-filter-grid">
+    <div>
+        <label for="build_type"><strong>Build Type</strong></label>
+        <select id="build_type" name="build_type">
+            <option value="">Select build</option>
+            <option value="jack" {% if build_type == "jack" %}selected{% endif %}>Jack</option>
+            <option value="damager" {% if build_type == "damager" %}selected{% endif %}>Damager</option>
+            <option value="runner" {% if build_type == "runner" %}selected{% endif %}>Runner</option>
+            <option value="ninja" {% if build_type == "ninja" %}selected{% endif %}>Ninja</option>
+            <option value="tank" {% if build_type == "tank" %}selected{% endif %}>Tank</option>
+        </select>
+    </div>
+
+    <div class="ninuno-filter-box">
+        <label for="ninuno_100_only"><strong>Ninuno Filter</strong></label>
+        <div class="ninuno-filter-inline">
+            <input
+                type="checkbox"
+                id="ninuno_100_only"
+                name="ninuno_100_only"
+                value="1"
+                {% if ninuno_100_only %}checked{% endif %}
+            >
+            <span>Show only 100% Ninuno</span>
+        </div>
+    </div>
+
+    <div class="filter-actions-group">
+        <button type="submit">Apply Filters</button>
+        <a
+            class="link-btn"
+            href="{{ url_for('match_gene_page', wallet_address=wallet, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0, auto_match=1) }}"
+        >
+            Auto Match
+        </a>
+    </div>
+</div>
+                </form>
+            </div>
+        {% endif %}
+
+        <div class="panel">
+            <h2>Available Chickens</h2>
+
+            {% if breedable_chickens %}
+                <div class="table-wrap limited-table ip-available-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Chicken ID</th>
+                                <th>Build Match</th>
+                                <th>Build Source</th>
+                                <th>Instinct</th>
+                                <th>IP</th>
+                                <th>Gen</th>
+                                <th>Breed Count</th>
+                                <th>Ninuno %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for chicken in breedable_chickens %}
+                            <tr>
+                                <td class="action-cell">
+                                    <a
+                                        class="link-btn compact-action-btn"
+                                        href="{{ url_for('match_gene_page', wallet_address=wallet, selected_token_id=chicken.token_id, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0) }}#selected-chicken"
+				    >
+                                        Select
+                                    </a>
+                                </td>
+                                <td>
+                                    <div class="chicken-id-card compact-id-card">
+                                        <img
+                                            src="{{ chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ chicken.token_id ~ '.png') }}"
+                                            alt="Chicken {{ chicken.token_id }}"
+                                            class="chicken-id-card-image compact-id-image"
+                                        >
+                                        <div class="chicken-id-card-text">#{{ chicken.token_id }}</div>
+                                    </div>
+                                </td>
+                                <td>{{ chicken.build_match_display or "" }}</td>
+                                <td>{{ chicken.build_source_display or "" }}</td>
+                                <td>{{ chicken.instinct or "" }}</td>
+                                <td>{{ chicken.ip if chicken.ip is not none else "" }}</td>
+                                <td>{{ chicken.generation_text or "" }}</td>
+                                <td>{{ chicken.breed_count if chicken.breed_count is not none else "" }}</td>
+                                <td>
+                                    {% if chicken.is_complete %}
+                                        {{ chicken.ownership_percent }}%
+                                    {% else %}
+                                        Recalculate
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% elif build_type %}
+                <p>No chickens found for this build.</p>
+            {% else %}
+                <p>Select a build to see available chickens for gene breeding.</p>
+            {% endif %}
+        </div>
+
+        <div class="match-layout">
+            <div class="panel" id="selected-chicken">
+                {% if selected_chicken %}
+                    <h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
+
+        <div class="selected-chicken-media-wrap">
+    		<img
+        		src="{{ selected_chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ selected_chicken.token_id ~ '.png') }}"
+        		alt="Chicken {{ selected_chicken.token_id }}"
+        		class="selected-chicken-image face-right"
+      	  		loading="lazy"
+    		>
+	</div>
+
+                    <div class="selected-chicken-summary-grid">
+                        <div>
+                            <strong>Build Source:</strong>
+                            {{ selected_chicken.build_source_display or "" }}
+                        </div>
+
+                        <div>
+                            <strong>Breed Count:</strong>
+                            {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}
+                        </div>
+
+                        <div>
+                            <strong>Build Match:</strong>
+                            {{ selected_chicken.build_match_display or "" }}
+                        </div>
+
+                        <div>
+                            <strong>Ninuno %:</strong>
+                            {% if selected_chicken.is_complete %}
+                                {{ selected_chicken.ownership_percent }}%
+                            {% else %}
+                                <span class="recalculate-inline">
+                                    <span>Recalculate</span>
+                                    <form method="POST" action="{{ url_for('complete_ninuno') }}">
+                                        <input type="hidden" name="wallet_address" value="{{ wallet }}">
+                                        <input type="hidden" name="token_id" value="{{ selected_chicken.token_id }}">
+                                        <input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+                                        <button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+                                    </form>
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="selected-chicken-details-grid">
+                        <div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
+
+                        {% if selected_chicken.build_source_display == "Recessive" %}
+                            <div><strong>Beak:</strong> {{ selected_chicken.beak_h1 or "" }}</div>
+                            <div><strong>Comb:</strong> {{ selected_chicken.comb_h1 or "" }}</div>
+                            <div><strong>Eyes:</strong> {{ selected_chicken.eyes_h1 or "" }}</div>
+                            <div><strong>Feet:</strong> {{ selected_chicken.feet_h1 or "" }}</div>
+                            <div><strong>Wings:</strong> {{ selected_chicken.wings_h1 or "" }}</div>
+                            <div><strong>Tail:</strong> {{ selected_chicken.tail_h1 or "" }}</div>
+                            <div><strong>Body:</strong> {{ selected_chicken.body_h1 or "" }}</div>
+                        {% else %}
+                            <div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
+                            <div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
+                            <div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
+                            <div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
+                            <div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
+                            <div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
+                            <div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <h2 class="selected-chicken-title">Selected Chicken</h2>
+                    <p>Select a chicken from the available list.</p>
+                {% endif %}
+            </div>
+
+            <div class="panel">
+                <h2>Potential Gene Matches</h2>
+
+                {% if selected_chicken %}
+                    {% if potential_matches %}
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Match</th>
+                                        <th>Chicken ID</th>
+                                        <th>Build Match</th>
+                                        <th>Build Source</th>
+                                        <th>Added Missing Traits</th>
+                                        <th>Breed Count</th>
+                                        <th>Ninuno %</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in potential_matches %}
+                                    <tr>
+                                        <td class="action-cell">
+                                            <button
+                                                type="button"
+                                                class="open-compare-btn"
+                                                data-template-id="compare-gene-{{ row.candidate.token_id }}"
+                                            >
+                                                Match
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <div class="chicken-id-card compact-id-card">
+                                                <img
+                                                    src="{{ row.candidate.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.candidate.token_id ~ '.png') }}"
+                                                    alt="Chicken {{ row.candidate.token_id }}"
+                                                    class="chicken-id-card-image compact-id-image"
+                                                >
+                                                <div class="chicken-id-card-text">#{{ row.candidate.token_id }}</div>
+                                            </div>
+                                        </td>
+                                        <td>{{ row.candidate.build_match_display or "" }}</td>
+                                        <td>{{ row.candidate.build_source_display or "" }}</td>
+                                        <td>{{ row.added_missing_traits if row.added_missing_traits is not none else "" }}</td>
+                                        <td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
+                                        <td>
+                                            {% if row.candidate.is_complete %}
+                                                {{ row.candidate.ownership_percent }}%
+                                            {% else %}
+                                                <span class="recalculate-inline">
+                                                    <span>Recalculate</span>
+                                                    <form method="POST" action="{{ url_for('complete_ninuno') }}">
+                                                        <input type="hidden" name="wallet_address" value="{{ wallet }}">
+                                                        <input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
+                                                        <input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+                                                        <button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+                                                    </form>
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="action-cell">
+                                            <button
+                                                type="button"
+                                                class="toggle-details-btn"
+                                                data-target="gene-details-{{ row.candidate.token_id }}"
+                                                data-open-label="View Traits"
+                                            >
+                                                View Traits
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr id="gene-details-{{ row.candidate.token_id }}" class="details-row hidden">
+                                        <td colspan="8">
+                                            <div class="details-card">
+                                                <h3>Chicken {{ row.candidate.token_id }} Trait Details</h3>
+                                                <div class="stats-grid">
+                                                    <div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
+
+                                                    {% if row.candidate.build_source_display == "Recessive" %}
+                                                        <div><strong>Beak:</strong> {{ row.candidate.beak_h1 or "" }}</div>
+                                                        <div><strong>Comb:</strong> {{ row.candidate.comb_h1 or "" }}</div>
+                                                        <div><strong>Eyes:</strong> {{ row.candidate.eyes_h1 or "" }}</div>
+                                                        <div><strong>Feet:</strong> {{ row.candidate.feet_h1 or "" }}</div>
+                                                        <div><strong>Wings:</strong> {{ row.candidate.wings_h1 or "" }}</div>
+                                                        <div><strong>Tail:</strong> {{ row.candidate.tail_h1 or "" }}</div>
+                                                        <div><strong>Body:</strong> {{ row.candidate.body_h1 or "" }}</div>
+                                                        <div><strong>Recessive Bonus:</strong> {{ row.candidate.recessive_build_repeat_bonus if row.candidate.recessive_build_repeat_bonus is not none else 0 }}</div>
+                                                    {% else %}
+                                                        <div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
+                                                        <div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
+                                                        <div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
+                                                        <div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
+                                                        <div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
+                                                        <div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
+                                                        <div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p>No gene matches found for the selected chicken.</p>
+                    {% endif %}
+                {% else %}
+                    <p>Select a chicken first to see gene breeding matches.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if selected_chicken and potential_matches %}
+    <div id="compare-modal" class="compare-modal hidden">
+        <div class="compare-backdrop" data-close-compare></div>
+        <div class="compare-dialog">
+            <div class="compare-header">
+                <h3>Gene Match Preview</h3>
+                <button type="button" data-close-compare>Close</button>
+            </div>
+            <div id="compare-modal-body" class="compare-body"></div>
+        </div>
+    </div>
+
+    <div class="compare-template-store">
+        {% for row in potential_matches %}
+        {% set selected_item_candidates = get_gene_item_candidates(selected_chicken, row.candidate, build_type) %}
+        {% set candidate_item_candidates = get_gene_item_candidates(row.candidate, selected_chicken, build_type) %}
+        {% set selected_item, candidate_item = resolve_pair_item_recommendations(selected_item_candidates, candidate_item_candidates) %}
+        <template id="compare-gene-{{ row.candidate.token_id }}">
+            <div class="compare-grid">
+                <div class="compare-card">
+                    <h4>Selected Chicken #{{ selected_chicken.token_id }}</h4>
+
+                    <div class="compare-image-wrap">
+                        {% if selected_chicken.image %}
+                            <img src="{{ selected_chicken.image }}" alt="Chicken {{ selected_chicken.token_id }}" class="compare-image">
+                        {% else %}
+                            <div class="compare-image-placeholder">No Image</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="compare-section-title">Traits</div>
+                    <div class="stats-grid">
+                        <div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
+
+                        {% if selected_chicken.build_source_display == "Recessive" %}
+                            <div><strong>Beak:</strong> {{ selected_chicken.beak_h1 or "" }}</div>
+                            <div><strong>Comb:</strong> {{ selected_chicken.comb_h1 or "" }}</div>
+                            <div><strong>Eyes:</strong> {{ selected_chicken.eyes_h1 or "" }}</div>
+                            <div><strong>Feet:</strong> {{ selected_chicken.feet_h1 or "" }}</div>
+                            <div><strong>Wings:</strong> {{ selected_chicken.wings_h1 or "" }}</div>
+                            <div><strong>Tail:</strong> {{ selected_chicken.tail_h1 or "" }}</div>
+                            <div><strong>Body:</strong> {{ selected_chicken.body_h1 or "" }}</div>
+                        {% else %}
+                            <div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
+                            <div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
+                            <div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
+                            <div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
+                            <div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
+                            <div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
+                            <div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="compare-item-box">
+                        <div class="compare-item-label">Recommended Item</div>
+                        <div class="compare-item-name">{{ selected_item.name }}</div>
+                        <div class="compare-item-reason">{{ selected_item.reason }}</div>
+                    </div>
+                </div>
+
+                <div class="compare-card">
+                    <h4>Matched Chicken #{{ row.candidate.token_id }}</h4>
+
+                    <div class="compare-image-wrap">
+                        {% if row.candidate.image %}
+                            <img src="{{ row.candidate.image }}" alt="Chicken {{ row.candidate.token_id }}" class="compare-image">
+                        {% else %}
+                            <div class="compare-image-placeholder">No Image</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="compare-section-title">Traits</div>
+                    <div class="stats-grid">
+                        <div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
+
+                        {% if row.candidate.build_source_display == "Recessive" %}
+                            <div><strong>Beak:</strong> {{ row.candidate.beak_h1 or "" }}</div>
+                            <div><strong>Comb:</strong> {{ row.candidate.comb_h1 or "" }}</div>
+                            <div><strong>Eyes:</strong> {{ row.candidate.eyes_h1 or "" }}</div>
+                            <div><strong>Feet:</strong> {{ row.candidate.feet_h1 or "" }}</div>
+                            <div><strong>Wings:</strong> {{ row.candidate.wings_h1 or "" }}</div>
+                            <div><strong>Tail:</strong> {{ row.candidate.tail_h1 or "" }}</div>
+                            <div><strong>Body:</strong> {{ row.candidate.body_h1 or "" }}</div>
+                        {% else %}
+                            <div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
+                            <div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
+                            <div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
+                            <div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
+                            <div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
+                            <div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
+                            <div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="compare-item-box">
+                        <div class="compare-item-label">Recommended Item</div>
+                        <div class="compare-item-name">{{ candidate_item.name }}</div>
+                        <div class="compare-item-reason">{{ candidate_item.reason }}</div>
+                    </div>
+                </div>
+            </div>
+        </template>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

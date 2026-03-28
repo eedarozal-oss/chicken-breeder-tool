@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chicken Inventory</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="topbar">
+            <h1>Inventory View</h1>
+            <a class="link-btn" href="{{ url_for('index', wallet_address=wallet) }}">Back to Breeder</a>
+        </div>
+
+        <form method="GET" class="wallet-form">
+            <input
+                type="text"
+                name="wallet_address"
+                placeholder="Enter wallet address"
+                value="{{ wallet }}"
+                required
+            >
+            <button type="submit">Load Inventory</button>
+        </form>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        {% if chickens %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Token ID</th>
+                            <th>State</th>
+                            <th>IP</th>
+                            <th>Generation</th>
+                            <th>Breed Count</th>
+                            <th>Breeding Remaining</th>
+                            <th>Parent 1</th>
+                            <th>Parent 2</th>
+                            <th>Owned Ninuno</th>
+                            <th>Total Ninuno</th>
+                            <th>Ninuno %</th>
+                            <th>Ninuno Complete</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for chicken in chickens %}
+                        <tr>
+                            <td>{{ chicken.token_id }}</td>
+                            <td>{{ chicken.state }}</td>
+                            <td>{{ chicken.ip if chicken.ip is not none else "" }}</td>
+                            <td>{{ chicken.generation_text or "" }}</td>
+                            <td>{{ chicken.breed_count if chicken.breed_count is not none else "" }}</td>
+                            <td>{{ chicken.breeding_time_remaining or "" }}</td>
+                            <td>{{ chicken.parent_1 or "" }}</td>
+                            <td>{{ chicken.parent_2 or "" }}</td>
+                            <td>{{ chicken.owned_root_count }}</td>
+                            <td>{{ chicken.total_root_count }}</td>
+                            <td>{{ chicken.ownership_percent }}%</td>
+                            <td>{{ "Yes" if chicken.is_complete else "No" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% elif wallet %}
+            <p>No chickens found for this wallet.</p>
+        {% endif %}
+    </div>
+</body>
+</html>
