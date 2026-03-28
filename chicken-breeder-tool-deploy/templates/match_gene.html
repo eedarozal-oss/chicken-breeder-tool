@@ -23,6 +23,17 @@
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
+	{% if wallet and not error %}
+    	<div
+        	id="gene-batch-status"
+        	class="info-message"
+        	data-wallet="{{ wallet }}"
+        	data-selected-token-id="{{ selected_token_id or '' }}"
+        	data-running="1"
+    		>
+        	Recessive gene data will load in the background.
+    	</div>
+	{% endif %}
 
         {% if wallet and not error and gene_enrichment_remaining > 0 %}
             <div class="info-message">
@@ -73,6 +84,7 @@
         >
             Auto Match
         </a>
+	<button type="button" id="toggle-gene-batch" class="link-btn secondary-link-btn">Stop</button>
     </div>
 </div>
                 </form>
@@ -440,16 +452,89 @@
         {% endfor %}
     </div>
     {% endif %}
+	<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const statusBox = document.getElementById("gene-batch-status");
+    const toggleBtn = document.getElementById("toggle-gene-batch");
 
-{% if wallet and not error and gene_enrichment_remaining > 0 %}
-<script>
-    setTimeout(function () {
-        const url = new URL(window.location.href);
-        window.location.replace(url.toString());
-    }, 2500);
+    if (!statusBox || !toggleBtn) return;
+
+    const wallet = statusBox.dataset.wallet;
+    const selectedTokenId = statusBox.dataset.selectedTokenId || "";
+    let running = true;
+    let timerId = null;
+
+    function setRunning(next) {
+        running = next;
+        toggleBtn.textContent = running ? "Stop" : "Resume";
+        statusBox.dataset.running = running ? "1" : "0";
+
+        if (running) {
+            statusBox.textContent = "Recessive gene data is loading in the background...";
+            scheduleNext(0);
+        } else {
+            statusBox.textContent = "Recessive gene background loading is paused.";
+            if (timerId) {
+                clearTimeout(timerId);
+                timerId = null;
+            }
+        }
+    }
+
+    function scheduleNext(delayMs) {
+        if (!running) return;
+        if (timerId) clearTimeout(timerId);
+        timerId = setTimeout(runBatch, delayMs);
+    }
+
+    async function runBatch() {
+        if (!running) return;
+
+        const formData = new URLSearchParams();
+        formData.append("wallet_address", wallet);
+        formData.append("selected_token_id", selectedTokenId);
+
+        try {
+            const response = await fetch("{{ url_for('process_gene_batch') }}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: formData.toString(),
+            });
+
+            const data = await response.json();
+
+            if (!data.ok) {
+                statusBox.textContent = "Background loading stopped due to an error.";
+                running = false;
+                toggleBtn.textContent = "Resume";
+                return;
+            }
+
+            if ((data.remaining || 0) > 0) {
+                statusBox.textContent =
+                    `Recessive gene data is loading in the background. Loaded ${data.loaded || 0} chickens this round. ${data.remaining || 0} still remaining.`;
+                scheduleNext(2500);
+            } else {
+                statusBox.textContent = "Recessive gene background loading is complete. Refresh results if needed.";
+                running = false;
+                toggleBtn.textContent = "Resume";
+            }
+        } catch (err) {
+            statusBox.textContent = "Background loading stopped due to a network error.";
+            running = false;
+            toggleBtn.textContent = "Resume";
+        }
+    }
+
+    toggleBtn.addEventListener("click", function () {
+        setRunning(!running);
+    });
+
+    setRunning(true);
+});
 </script>
-{% endif %}
-
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
