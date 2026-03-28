@@ -24,13 +24,6 @@
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
-
-        {% if wallet and not error and ultimate_enrichment_remaining > 0 %}
-            <div class="info-message">
-                Gene and build data is loading automatically in batches of 5. Loaded {{ ultimate_enrichment_loaded }} chickens this visit. {{ ultimate_enrichment_remaining }} still remaining.
-            </div>
-        {% endif %}
-
         <div class="panel">
             <h2>Available Chickens</h2>
 
@@ -386,15 +379,6 @@
         {% endfor %}
     </div>
     {% endif %}
-
-{% if wallet and not error and ultimate_enrichment_remaining > 0 %}
-<script>
-    setTimeout(function () {
-        const url = new URL(window.location.href);
-        window.location.replace(url.toString());
-    }, 2500);
-</script>
-{% endif %}
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
