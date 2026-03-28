@@ -1266,8 +1266,6 @@ def match_ultimate_page():
     wallet = request.args.get("wallet_address", "").strip().lower()
     selected_token_id = request.args.get("selected_token_id", "").strip()
     auto_match = str(request.args.get("auto_match") or "").strip().lower() in {"1", "true", "on", "yes"}
-    ultimate_enrichment_loaded = 0
-    ultimate_enrichment_remaining = 0
 
     if not require_authorized_wallet(wallet):
         return redirect(url_for("index"))
@@ -1275,26 +1273,11 @@ def match_ultimate_page():
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
-    ultimate_enrichment_loaded = 0
-    ultimate_enrichment_remaining = 0
     error = None
 
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-
-            batch_result = enrich_missing_gene_data_in_batches(
-                chickens=chickens,
-                wallet=wallet,
-                page_key="ultimate",
-                batch_size=5,
-                prioritized_token_id=selected_token_id or None,
-            )
-            ultimate_enrichment_loaded = batch_result["loaded"]
-
-            chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-            ultimate_enrichment_remaining = batch_result["remaining"]
-
             all_breedable = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
 
             breedable_chickens = [
@@ -1341,8 +1324,6 @@ def match_ultimate_page():
         breedable_chickens=breedable_chickens,
         potential_matches=potential_matches,
         auto_open_template_id=(f"compare-ultimate-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else ""),
-        ultimate_enrichment_loaded=ultimate_enrichment_loaded,
-        ultimate_enrichment_remaining=ultimate_enrichment_remaining,
         error=error,
     )
 
