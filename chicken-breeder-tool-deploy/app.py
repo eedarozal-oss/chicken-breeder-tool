@@ -1078,6 +1078,104 @@ def match_ip_page():
     )
 
 
+def needs_recessive_enrichment(chicken):
+    return not chicken.get("gene_profile_loaded")
+
+
+def enrich_missing_recessive_data_in_batches(chickens, wallet, page_key, batch_size=5, prioritized_token_id=None):
+    missing = [row for row in chickens if needs_recessive_enrichment(row)]
+
+    if not missing:
+        session[f"{page_key}_cursor_{wallet}"] = 0
+        return {
+            "loaded": 0,
+            "remaining": 0,
+        }
+
+    prioritized = []
+    remaining = missing
+
+    if prioritized_token_id:
+        prioritized = [
+            row for row in missing
+            if str(row.get("token_id") or "") == str(prioritized_token_id)
+        ]
+        remaining = [
+            row for row in missing
+            if str(row.get("token_id") or "") != str(prioritized_token_id)
+        ]
+
+    cursor_key = f"{page_key}_cursor_{wallet}"
+    cursor = safe_int(session.get(cursor_key), 0)
+    if cursor is None:
+        cursor = 0
+
+    if remaining:
+        if cursor >= len(remaining):
+            cursor = 0
+        rotated = remaining[cursor:] + remaining[:cursor]
+    else:
+        rotated = []
+
+    selected_batch = prioritized[:1]
+    remaining_slots = max(0, batch_size - len(selected_batch))
+    selected_batch.extend(rotated[:remaining_slots])
+
+    if not selected_batch:
+        return {
+            "loaded": 0,
+            "remaining": len(missing),
+        }
+
+    enriched = enrich_chicken_records(selected_batch)
+    loaded_count = 0
+
+    for chicken in enriched:
+        upsert_chicken(chicken)
+        if chicken.get("gene_profile_loaded"):
+            loaded_count += 1
+
+    if remaining:
+        next_cursor = cursor + remaining_slots
+        if next_cursor >= len(remaining):
+            next_cursor = 0
+        session[cursor_key] = next_cursor
+    else:
+        session[cursor_key] = 0
+
+    refreshed = get_chickens_by_wallet(wallet)
+    remaining_after = sum(1 for row in refreshed if needs_recessive_enrichment(row))
+
+    return {
+        "loaded": loaded_count,
+        "remaining": remaining_after,
+    }
+
+@app.route("/match/gene/process-batch", methods=["POST"])
+def process_gene_batch():
+    wallet = request.form.get("wallet_address", "").strip().lower()
+    selected_token_id = request.form.get("selected_token_id", "").strip()
+
+    if not require_authorized_wallet(wallet):
+        return {"ok": False, "error": "Unauthorized"}, 403
+
+    try:
+        chickens = get_wallet_chickens(wallet, ensure_loaded=True)
+        batch_result = enrich_missing_recessive_data_in_batches(
+            chickens=chickens,
+            wallet=wallet,
+            page_key="gene",
+            batch_size=5,
+            prioritized_token_id=selected_token_id or None,
+        )
+        return {
+            "ok": True,
+            "loaded": batch_result["loaded"],
+            "remaining": batch_result["remaining"],
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}, 500
+
 @app.route("/match/gene", methods=["GET"])
 def match_gene_page():
     wallet = request.args.get("wallet_address", "").strip().lower()
