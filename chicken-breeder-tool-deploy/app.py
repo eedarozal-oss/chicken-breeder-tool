@@ -73,13 +73,13 @@ def sync_wallet_data(wallet):
     for record in parsed_records:
         upsert_chicken(record)
 
-    chickens = get_chickens_by_wallet(wallet)
-    enriched_chickens = enrich_chicken_records(chickens)
+#    chickens = get_chickens_by_wallet(wallet)
+#    enriched_chickens = enrich_chicken_records(chickens)
 
-    for chicken in enriched_chickens:
-        upsert_chicken(chicken)
+#    for chicken in enriched_chickens:
+#        upsert_chicken(chicken)
 
-    chickens = get_chickens_by_wallet(wallet)
+#    chickens = get_chickens_by_wallet(wallet)
 
 #    family_summaries = resolve_family_roots_for_all(
 #        chickens,
