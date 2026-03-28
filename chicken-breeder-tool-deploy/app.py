@@ -1,3 +1,4 @@
+import os
 from flask import Flask, render_template, request, redirect, url_for, session
 from services.ronin_api import fetch_all_owned_chickens
 from services.metadata_parser import parse_chicken_record
@@ -32,7 +33,7 @@ from services.wallet_access import (
 )
 
 app = Flask(__name__)
-app.secret_key = "replace-this-with-a-real-secret-key"
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
 CONTRACTS = [
     "0xee9436518030616bc315665678738a4348463df4",
@@ -72,6 +73,31 @@ def sync_wallet_data(wallet):
     for record in parsed_records:
         upsert_chicken(record)
 
+    chickens = get_chickens_by_wallet(wallet)
+    enriched_chickens = enrich_chicken_records(chickens)
+
+    for chicken in enriched_chickens:
+        upsert_chicken(chicken)
+
+    chickens = get_chickens_by_wallet(wallet)
+
+    family_summaries = resolve_family_roots_for_all(
+        chickens,
+        contract_addresses=CONTRACTS,
+    )
+    clear_family_roots_for_wallet(wallet)
+
+    owned_token_ids = {str(row["token_id"]) for row in chickens}
+
+    for summary in family_summaries:
+        upsert_family_root_summary(wallet, summary)
+        insert_family_root_items(
+            wallet_address=wallet,
+            token_id=summary["token_id"],
+            roots=summary["roots"],
+            owned_root_ids=owned_token_ids,
+        )
+
     return get_chickens_by_wallet(wallet)
 
 
@@ -80,78 +106,6 @@ def get_wallet_chickens(wallet, ensure_loaded=False):
     if ensure_loaded and not chickens:
         chickens = sync_wallet_data(wallet)
     return chickens
-
-
-def needs_gene_enrichment(chicken):
-    return not chicken.get("primary_build") and not chicken.get("recessive_build")
-
-
-def enrich_missing_gene_data_in_batches(chickens, wallet, page_key, batch_size=5, prioritized_token_id=None):
-    missing = [row for row in (chickens or []) if needs_gene_enrichment(row)]
-
-    cursor_key = f"{page_key}_cursor_{wallet}"
-
-    if not missing:
-        session[cursor_key] = 0
-        return {
-            "loaded": 0,
-            "remaining": 0,
-        }
-
-    prioritized = []
-    remaining = list(missing)
-
-    if prioritized_token_id:
-        prioritized = [
-            row for row in missing
-            if str(row.get("token_id") or "") == str(prioritized_token_id)
-        ]
-        remaining = [
-            row for row in missing
-            if str(row.get("token_id") or "") != str(prioritized_token_id)
-        ]
-
-    cursor = safe_int(session.get(cursor_key), 0) or 0
-
-    if remaining:
-        if cursor >= len(remaining):
-            cursor = 0
-        rotated = remaining[cursor:] + remaining[:cursor]
-    else:
-        rotated = []
-
-    selected_batch = prioritized[:1]
-    remaining_slots = max(0, batch_size - len(selected_batch))
-    selected_batch.extend(rotated[:remaining_slots])
-
-    if not selected_batch:
-        remaining_after = len(missing)
-        session[cursor_key] = 0
-        return {
-            "loaded": 0,
-            "remaining": remaining_after,
-        }
-
-    enriched = enrich_chicken_records(selected_batch)
-
-    for chicken in enriched:
-        upsert_chicken(chicken)
-
-    if remaining:
-        next_cursor = cursor + remaining_slots
-        if next_cursor >= len(remaining):
-            next_cursor = 0
-        session[cursor_key] = next_cursor
-    else:
-        session[cursor_key] = 0
-
-    refreshed = get_chickens_by_wallet(wallet)
-    remaining_after = sum(1 for row in refreshed if needs_gene_enrichment(row))
-
-    return {
-        "loaded": len(selected_batch),
-        "remaining": remaining_after,
-    }
 
 
 def get_effective_ip_stat(chicken, stat_name):
@@ -1084,26 +1038,11 @@ def match_gene_page():
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
-    gene_enrichment_loaded = 0
-    gene_enrichment_remaining = 0
     error = None
 
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-
-            batch_result = enrich_missing_gene_data_in_batches(
-                chickens=chickens,
-                wallet=wallet,
-                page_key="gene",
-                batch_size=5,
-                prioritized_token_id=selected_token_id or None,
-            )
-            gene_enrichment_loaded = batch_result["loaded"]
-
-            chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-            gene_enrichment_remaining = batch_result["remaining"]
-
             all_breedable = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
 
             if build_type:
@@ -1245,8 +1184,6 @@ def match_gene_page():
     ninuno_100_only=ninuno_100_only,
     auto_match=auto_match,
     auto_open_template_id=(f"compare-gene-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else ""),
-    gene_enrichment_loaded=gene_enrichment_loaded,
-    gene_enrichment_remaining=gene_enrichment_remaining,
     error=error,
     )
 
@@ -1263,26 +1200,11 @@ def match_ultimate_page():
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
-    ultimate_enrichment_loaded = 0
-    ultimate_enrichment_remaining = 0
     error = None
 
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-
-            batch_result = enrich_missing_gene_data_in_batches(
-                chickens=chickens,
-                wallet=wallet,
-                page_key="ultimate",
-                batch_size=5,
-                prioritized_token_id=selected_token_id or None,
-            )
-            ultimate_enrichment_loaded = batch_result["loaded"]
-
-            chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-            ultimate_enrichment_remaining = batch_result["remaining"]
-
             all_breedable = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
 
             breedable_chickens = [
@@ -1329,8 +1251,6 @@ def match_ultimate_page():
         breedable_chickens=breedable_chickens,
         potential_matches=potential_matches,
         auto_open_template_id=(f"compare-ultimate-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else ""),
-        ultimate_enrichment_loaded=ultimate_enrichment_loaded,
-        ultimate_enrichment_remaining=ultimate_enrichment_remaining,
         error=error,
     )
 
