@@ -240,16 +240,16 @@ def upsert_chicken(record: dict):
                 gene_profile_loaded = COALESCE(excluded.gene_profile_loaded, chickens.gene_profile_loaded),
                 gene_last_updated = COALESCE(excluded.gene_last_updated, chickens.gene_last_updated),
 
-                primary_build = excluded.primary_build,
+                primary_build = COALESCE(excluded.primary_build, chickens.primary_build),
                 primary_build_match_count = COALESCE(excluded.primary_build_match_count, chickens.primary_build_match_count),
                 primary_build_match_total = COALESCE(excluded.primary_build_match_total, chickens.primary_build_match_total),
 
-                recessive_build = excluded.recessive_build,
+                recessive_build = COALESCE(excluded.recessive_build, chickens.recessive_build),
                 recessive_build_match_count = COALESCE(excluded.recessive_build_match_count, chickens.recessive_build_match_count),
                 recessive_build_match_total = COALESCE(excluded.recessive_build_match_total, chickens.recessive_build_match_total),
                 recessive_build_repeat_bonus = COALESCE(excluded.recessive_build_repeat_bonus, chickens.recessive_build_repeat_bonus),
 
-                ultimate_type = excluded.ultimate_type,
+                ultimate_type = COALESCE(excluded.ultimate_type, chickens.ultimate_type),
 
                 innate_attack = COALESCE(excluded.innate_attack, chickens.innate_attack),
                 innate_defense = COALESCE(excluded.innate_defense, chickens.innate_defense),
