@@ -24,19 +24,9 @@
             <div class="error">{{ error }}</div>
         {% endif %}
 
-        {% if gene_enrichment_loaded or gene_enrichment_remaining %}
-            <div class="panel">
-                <p>
-                    Gene data loads in batches of 5 per visit.
-                    {% if gene_enrichment_loaded %}
-                        Loaded {{ gene_enrichment_loaded }} chicken{% if gene_enrichment_loaded != 1 %}s{% endif %} this visit.
-                    {% endif %}
-                    {% if gene_enrichment_remaining > 0 %}
-                        {{ gene_enrichment_remaining }} still remaining. Refresh the page to load more.
-                    {% else %}
-                        Gene data is fully loaded.
-                    {% endif %}
-                </p>
+        {% if wallet and not error and gene_enrichment_remaining > 0 %}
+            <div class="info-message">
+                Gene data is loading automatically in batches of 5. Loaded {{ gene_enrichment_loaded }} chickens this visit. {{ gene_enrichment_remaining }} still remaining.
             </div>
         {% endif %}
 
