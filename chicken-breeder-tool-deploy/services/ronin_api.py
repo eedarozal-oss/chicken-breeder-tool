@@ -69,7 +69,7 @@ def fetch_nft_details(nft_ids: list, batch_size: int = 50):
         print("NFT DETAILS URL:", url)
         print("NFT DETAILS BATCH:", i // batch_size + 1, "SIZE:", len(batch))
 
-        response = requests.post(url, headers=HEADERS, json=payload, timeout=(5, 5))
+        response = requests.post(url, headers=HEADERS, json=payload, timeout=(5, 10))
         response.raise_for_status()
         data = response.json()
 
