@@ -7,6 +7,7 @@ from services.database import (
 )
 from services.metadata_parser import parse_chicken_record
 from services.ronin_api import fetch_chicken_by_token, fetch_nft_details
+from services.lineage_api import complete_ninuno_via_lineage
 
 ROOT_MAX_ID = 11110
 
