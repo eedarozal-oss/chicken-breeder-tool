@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session
+import os
 from services.ronin_api import fetch_all_owned_chickens
 from services.metadata_parser import parse_chicken_record
 from services.family_roots import resolve_family_roots_for_all
@@ -30,6 +31,7 @@ from services.wallet_access import (
     set_authorized_wallet,
     is_authorized_wallet,
     get_wallet_access_expiry_display,
+    grant_manual_access,
 )
 
 app = Flask(__name__)
@@ -48,6 +50,9 @@ MATCH_SETTINGS = {
 
 init_db()
 init_wallet_access_db()
+
+OWNER_ADMIN_PASSWORD = os.environ.get("OWNER_ADMIN_PASSWORD", "").strip()
+OWNER_WHITELIST_ROUTE = "/owner/grant-access"
 
 
 def is_breedable(chicken):
@@ -916,6 +921,56 @@ def index():
     )
 
 
+@app.route(OWNER_WHITELIST_ROUTE, methods=["GET", "POST"])
+def owner_grant_access_page():
+    wallet = request.values.get("wallet_address", "").strip().lower()
+    wallet_password = request.values.get("wallet_password", "").strip()
+    owner_password = request.values.get("owner_password", "").strip()
+    duration_days = request.values.get("duration_days", "").strip()
+    error = None
+    success = None
+
+    if request.method == "POST":
+        parsed_days = safe_int(duration_days)
+
+        if not OWNER_ADMIN_PASSWORD:
+            error = "Owner admin password is not configured on the server."
+        elif owner_password != OWNER_ADMIN_PASSWORD:
+            error = "Invalid owner password."
+        elif not wallet:
+            error = "Enter a wallet address."
+        elif not is_valid_wallet(wallet):
+            error = "Enter a valid 0x wallet address."
+        elif wallet_password.lower() != wallet[-8:]:
+            error = "Wallet password must match the last 8 characters of the wallet address."
+        elif parsed_days is None or parsed_days <= 0:
+            error = "Duration must be a whole number greater than 0."
+        else:
+            try:
+                grant_manual_access(
+                    wallet=wallet,
+                    notes=f"Owner manual grant for {parsed_days} day(s)",
+                    duration_days=parsed_days,
+                )
+                expiry_display = get_wallet_access_expiry_display(wallet)
+                success = f"Access granted to {wallet} for {parsed_days} day(s). Active until {expiry_display}."
+                wallet_password = ""
+                duration_days = ""
+                owner_password = ""
+            except Exception as exc:
+                error = f"Failed to grant access: {exc}"
+
+    return render_template(
+        "admin_whitelist.html",
+        wallet=wallet,
+        wallet_password=wallet_password,
+        duration_days=duration_days,
+        owner_password=owner_password,
+        error=error,
+        success=success,
+    )
+
+
 @app.route("/landing", methods=["GET"])
 def landing_page():
     wallet = request.args.get("wallet_address", "").strip().lower()
@@ -982,7 +1037,7 @@ def match_ip_page():
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
-    error = request.args.get("error", "").strip() or None
+    error = None
 
     if wallet:
         try:
@@ -1027,6 +1082,13 @@ def match_ip_page():
                         settings=MATCH_SETTINGS,
                     )
 
+                    matches = [
+                        row for row in matches
+                        if row.get("evaluation", {}).get("is_ip_recommended")
+                        and row.get("evaluation", {}).get("is_breed_count_recommended")
+                        and pair_has_usable_ip_items(source, row.get("candidate"))
+                    ]
+                    
                     matches = [
                         row for row in matches
                         if row.get("evaluation", {}).get("is_ip_recommended")
@@ -1096,11 +1158,6 @@ def match_ip_page():
         ip_diff=ip_diff,
         ninuno_100_only=ninuno_100_only,
         auto_match=auto_match,
-        auto_open_template_id=(
-            ""
-            if skip_auto_open
-            else (f"compare-ip-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else "")
-        ),
         error=error,
     )
 
@@ -1222,7 +1279,7 @@ def match_gene_page():
     potential_matches = []
     gene_enrichment_loaded = 0
     gene_enrichment_remaining = 0
-    error = request.args.get("error", "").strip() or None
+    error = None
 
     if wallet:
         try:
@@ -1404,7 +1461,7 @@ def match_ultimate_page():
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
-    error = request.args.get("error", "").strip() or None
+    error = None
 
     if wallet:
         try:
@@ -1424,25 +1481,9 @@ def match_ultimate_page():
                 )
 
             if auto_match:
+                selected_chicken, potential_matches = pick_best_ultimate_auto_match(breedable_chickens)
                 if selected_chicken:
-                    candidate_pool = [
-                        row for row in breedable_chickens
-                        if str(row["token_id"]) != selected_token_id
-                        and is_generation_gap_allowed(
-                            selected_chicken,
-                            row,
-                            max_gap=MATCH_SETTINGS["max_generation_gap"],
-                        )
-                    ]
-
-                    potential_matches = filter_and_sort_ultimate_candidates(
-                        selected_chicken,
-                        candidate_pool,
-                    )
-                else:
-                    selected_chicken, potential_matches = pick_best_ultimate_auto_match(breedable_chickens)
-                    if selected_chicken:
-                        selected_token_id = str(selected_chicken.get("token_id") or "")
+                    selected_token_id = str(selected_chicken.get("token_id") or "")
 
             if selected_chicken and not potential_matches:
                 candidate_pool = [
@@ -1492,45 +1533,27 @@ def complete_ninuno():
     if not wallet or not token_id:
         return redirect(url_for("index", wallet_address=wallet))
 
+    chickens = get_chickens_by_wallet(wallet)
+    owned_token_ids = {str(row["token_id"]) for row in chickens}
+
+    summary = complete_ninuno_via_lineage(
+        token_id=token_id,
+        owned_token_ids=owned_token_ids,
+        depth=6,
+        max_tokens=60,
+        contract_addresses=CONTRACTS,
+    )
+
+    clear_family_roots_for_token(wallet, token_id)
+    upsert_family_root_summary(wallet, summary)
+    insert_family_root_items(
+        wallet_address=wallet,
+        token_id=summary["token_id"],
+        roots=summary["roots"],
+        owned_root_ids=owned_token_ids,
+    )
+
     referrer = request.referrer or ""
-
-    try:
-        chickens = get_chickens_by_wallet(wallet)
-        owned_token_ids = {str(row["token_id"]) for row in chickens}
-
-        summary = complete_ninuno_via_lineage(
-            token_id=token_id,
-            owned_token_ids=owned_token_ids,
-            depth=6,
-            max_tokens=60,
-            contract_addresses=CONTRACTS,
-        )
-
-        clear_family_roots_for_token(wallet, token_id)
-        upsert_family_root_summary(wallet, summary)
-        insert_family_root_items(
-            wallet_address=wallet,
-            token_id=summary["token_id"],
-            roots=summary["roots"],
-            owned_root_ids=owned_token_ids,
-        )
-
-    except Exception as exc:
-        error_message = f"Failed to recalculate Ninuno: {exc}"
-
-        if referrer:
-            base_referrer = referrer.split("#")[0]
-            separator = "&" if "?" in base_referrer else "?"
-            if anchor_id:
-                return redirect(
-                    f"{base_referrer}{separator}skip_auto_open=1&error={error_message}#{anchor_id}"
-                )
-            return redirect(
-                f"{base_referrer}{separator}skip_auto_open=1&error={error_message}"
-            )
-
-        return redirect(url_for("match_ip_page", wallet_address=wallet, error=error_message))
-
     if referrer:
         base_referrer = referrer.split("#")[0]
         separator = "&" if "?" in base_referrer else "?"
