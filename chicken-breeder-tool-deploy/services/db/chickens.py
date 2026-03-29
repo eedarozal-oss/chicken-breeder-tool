@@ -240,16 +240,16 @@ def upsert_chicken(record: dict):
                 gene_profile_loaded = COALESCE(excluded.gene_profile_loaded, chickens.gene_profile_loaded),
                 gene_last_updated = COALESCE(excluded.gene_last_updated, chickens.gene_last_updated),
 
-                primary_build = excluded.primary_build,
+                primary_build = COALESCE(excluded.primary_build, chickens.primary_build),
                 primary_build_match_count = COALESCE(excluded.primary_build_match_count, chickens.primary_build_match_count),
                 primary_build_match_total = COALESCE(excluded.primary_build_match_total, chickens.primary_build_match_total),
 
-                recessive_build = excluded.recessive_build,
+                recessive_build = COALESCE(excluded.recessive_build, chickens.recessive_build),
                 recessive_build_match_count = COALESCE(excluded.recessive_build_match_count, chickens.recessive_build_match_count),
                 recessive_build_match_total = COALESCE(excluded.recessive_build_match_total, chickens.recessive_build_match_total),
                 recessive_build_repeat_bonus = COALESCE(excluded.recessive_build_repeat_bonus, chickens.recessive_build_repeat_bonus),
 
-                ultimate_type = excluded.ultimate_type,
+                ultimate_type = COALESCE(excluded.ultimate_type, chickens.ultimate_type),
 
                 innate_attack = COALESCE(excluded.innate_attack, chickens.innate_attack),
                 innate_defense = COALESCE(excluded.innate_defense, chickens.innate_defense),
@@ -374,7 +374,9 @@ def get_chickens_by_wallet(wallet_address: str):
                 COALESCE(fr.owned_root_count, 0) AS owned_root_count,
                 COALESCE(fr.total_root_count, 0) AS total_root_count,
                 COALESCE(fr.ownership_percent, 0) AS ownership_percent,
-                COALESCE(fr.is_complete, 0) AS is_complete
+                COALESCE(fr.is_complete, 0) AS is_complete,
+                COALESCE(fr.root_check_target_count, 0) AS root_check_target_count,
+                COALESCE(fr.pending_root_check_count, 0) AS pending_root_check_count
             FROM chickens c
             LEFT JOIN chicken_family_roots fr
                 ON fr.wallet_address = ?
@@ -385,20 +387,4 @@ def get_chickens_by_wallet(wallet_address: str):
             (wallet_address, wallet_address),
         ).fetchall()
 
-    result = []
-
-    for row in rows:
-        item = dict(row)
-
-        generation_num = item.get("generation_num")
-        generation_text = str(item.get("generation_text") or "").strip().lower()
-
-        if generation_num == 0 or generation_text == "gen 0":
-            item["owned_root_count"] = 1
-            item["total_root_count"] = 1
-            item["ownership_percent"] = 100.0
-            item["is_complete"] = 1
-
-        result.append(item)
-
-    return result
+    return [dict(row) for row in rows]

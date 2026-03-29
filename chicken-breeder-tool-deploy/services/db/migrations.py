@@ -128,6 +128,9 @@ def init_db():
                 token_id TEXT NOT NULL,
                 root_token_id TEXT NOT NULL,
                 is_owned_root INTEGER DEFAULT 0,
+                root_check_status TEXT DEFAULT 'unchecked',
+                is_dead_root INTEGER DEFAULT 0,
+                last_checked_at TEXT,
                 PRIMARY KEY (wallet_address, token_id, root_token_id),
                 FOREIGN KEY (token_id) REFERENCES chickens(token_id)
             )
@@ -178,5 +181,9 @@ def init_db():
 
         ensure_column(conn, "chicken_family_roots", "root_check_target_count", "INTEGER DEFAULT 0")
         ensure_column(conn, "chicken_family_roots", "pending_root_check_count", "INTEGER DEFAULT 0")
+
+        ensure_column(conn, "chicken_family_root_items", "root_check_status", "TEXT DEFAULT 'unchecked'")
+        ensure_column(conn, "chicken_family_root_items", "is_dead_root", "INTEGER DEFAULT 0")
+        ensure_column(conn, "chicken_family_root_items", "last_checked_at", "TEXT")
 
         conn.commit()
