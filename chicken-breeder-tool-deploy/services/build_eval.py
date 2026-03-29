@@ -65,12 +65,41 @@ def evaluate_all_builds(traits):
 
 
 def select_qualified_build(evaluations, min_matches):
+    qualified = []
+
     for build_name in BUILD_PRIORITY:
         result = evaluations.get(build_name)
-        if result and result["match_count"] >= min_matches:
-            return result
-    return None
+        if not result:
+            continue
 
+        match_count = result.get("match_count", 0) or 0
+        match_total = result.get("match_total", 0) or 0
+
+        if match_count < min_matches or match_total <= 0:
+            continue
+
+        completion_ratio = match_count / match_total
+
+        qualified.append({
+            "build_name": build_name,
+            "result": result,
+            "match_count": match_count,
+            "completion_ratio": completion_ratio,
+            "priority_index": BUILD_PRIORITY.index(build_name),
+        })
+
+    if not qualified:
+        return None
+
+    qualified.sort(
+        key=lambda item: (
+            -item["match_count"],       # higher raw matches first
+            -item["completion_ratio"],  # then better fit
+            item["priority_index"],     # then configured priority
+        )
+    )
+
+    return qualified[0]["result"]
 
 def count_added_missing_traits(selected_result, candidate_result):
     selected_missing = set(selected_result.get("missing_slots", []))
