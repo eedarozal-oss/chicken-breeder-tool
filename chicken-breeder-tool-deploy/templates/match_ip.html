@@ -110,7 +110,7 @@
                                 <td class="action-cell">
                                     <a
                                         class="link-btn compact-action-btn"
-                                        href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=chicken.token_id, min_ip=min_ip, enable_ip_diff=1 if enable_ip_diff else 0, ip_diff=ip_diff) }}#selected-chicken"
+                                        href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=chicken.token_id, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0) }}#selected-chicken"
                                     >
                                         Select
                                     </a>
