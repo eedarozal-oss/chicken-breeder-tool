@@ -970,6 +970,7 @@ def match_ip_page():
     wallet = request.args.get("wallet_address", "").strip().lower()
     selected_token_id = request.args.get("selected_token_id", "").strip()
     auto_match = str(request.args.get("auto_match") or "").strip().lower() in {"1", "true", "on", "yes"}
+    skip_auto_open = str(request.args.get("skip_auto_open") or "").strip().lower() in {"1", "true", "on", "yes"}
 
     if not require_authorized_wallet(wallet):
         return redirect(url_for("index"))
@@ -1213,6 +1214,7 @@ def match_gene_page():
     ninuno_100_only = str(request.args.get("ninuno_100_only") or "").strip().lower() in {"1", "true", "on", "yes"}
     gene_enrichment_loaded = 0
     gene_enrichment_remaining = 0
+    skip_auto_open = str(request.args.get("skip_auto_open") or "").strip().lower() in {"1", "true", "on", "yes"}
 
     if not require_authorized_wallet(wallet):
         return redirect(url_for("index"))
@@ -1380,7 +1382,11 @@ def match_gene_page():
     build_type=build_type,
     ninuno_100_only=ninuno_100_only,
     auto_match=auto_match,
-    auto_open_template_id=(f"compare-gene-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else ""),
+    auto_open_template_id=(
+        ""
+        if skip_auto_open
+        else (f"compare-gene-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else "")
+    ),
     gene_enrichment_loaded=gene_enrichment_loaded,
     gene_enrichment_remaining=gene_enrichment_remaining,
     error=error,
@@ -1392,6 +1398,7 @@ def match_ultimate_page():
     wallet = request.args.get("wallet_address", "").strip().lower()
     selected_token_id = request.args.get("selected_token_id", "").strip()
     auto_match = str(request.args.get("auto_match") or "").strip().lower() in {"1", "true", "on", "yes"}
+    skip_auto_open = str(request.args.get("skip_auto_open") or "").strip().lower() in {"1", "true", "on", "yes"}
 
     if not require_authorized_wallet(wallet):
         return redirect(url_for("index"))
@@ -1449,7 +1456,11 @@ def match_ultimate_page():
         selected_chicken=selected_chicken,
         breedable_chickens=breedable_chickens,
         potential_matches=potential_matches,
-        auto_open_template_id=(f"compare-ultimate-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else ""),
+        auto_open_template_id=(
+            ""
+            if skip_auto_open
+            else (f"compare-ultimate-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else "")
+        ),
         error=error,
     )
 
@@ -1490,9 +1501,10 @@ def complete_ninuno():
     referrer = request.referrer or ""
     if referrer:
         base_referrer = referrer.split("#")[0]
+        separator = "&" if "?" in base_referrer else "?"
         if anchor_id:
-            return redirect(f"{base_referrer}#{anchor_id}")
-        return redirect(base_referrer)
+            return redirect(f"{base_referrer}{separator}skip_auto_open=1#{anchor_id}")
+        return redirect(f"{base_referrer}{separator}skip_auto_open=1")
 
     return redirect(url_for("match_ip_page", wallet_address=wallet, selected_token_id=selected_token_id or token_id))
 
