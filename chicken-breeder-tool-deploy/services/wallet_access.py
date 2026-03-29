@@ -130,9 +130,10 @@ def deactivate_old_payment_access(wallet: str):
     conn.close()
 
 
-def save_access_record(wallet: str, source: str, reference: str, granted_at: datetime, notes: str = ""):
+def save_access_record(wallet: str, source: str, reference: str, granted_at: datetime, notes: str = "", duration_days: int = ACCESS_DAYS):
     wallet = wallet.strip().lower()
-    expires_at = granted_at + timedelta(days=ACCESS_DAYS)
+    duration_days = max(1, int(duration_days or ACCESS_DAYS))
+    expires_at = granted_at + timedelta(days=duration_days)
 
     conn = get_conn()
     cur = conn.cursor()
@@ -153,9 +154,37 @@ def save_access_record(wallet: str, source: str, reference: str, granted_at: dat
     conn.close()
 
 
-def grant_manual_access(wallet: str, notes: str = "manual access"):
+def get_latest_active_access_expiry(wallet: str):
+    wallet = (wallet or "").strip().lower()
+
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT expires_at
+        FROM wallet_access
+        WHERE wallet_address = ?
+          AND status = 'active'
+        ORDER BY expires_at DESC
+        LIMIT 1
+    """, (wallet,))
+    row = cur.fetchone()
+    conn.close()
+
+    if not row or not row[0]:
+        return None
+
+    try:
+        return datetime.fromisoformat(row[0])
+    except Exception:
+        return None
+
+
+def grant_manual_access(wallet: str, notes: str = "manual access", duration_days: int = ACCESS_DAYS):
     now = datetime.now(timezone.utc)
-    save_access_record(wallet, "manual", "manual", now, notes)
+    current_expiry = get_latest_active_access_expiry(wallet)
+    granted_at = current_expiry if current_expiry and current_expiry > now else now
+    reference = f"manual:{wallet}:{int(now.timestamp())}"
+    save_access_record(wallet, "manual", reference, granted_at, notes, duration_days=duration_days)
 
 
 def find_latest_qualifying_payment(wallet: str):
