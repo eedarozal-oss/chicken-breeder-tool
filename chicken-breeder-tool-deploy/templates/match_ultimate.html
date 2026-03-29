@@ -71,11 +71,16 @@
                                 <td>{{ chicken.generation_text or "" }}</td>
                                 <td>{{ chicken.breed_count if chicken.breed_count is not none else "" }}</td>
                                 <td>
-                                    {% if chicken.is_complete %}
-                                        {{ chicken.ownership_percent }}%
-                                    {% else %}
-                                        Recalculate
-                                    {% endif %}
+									{% if chicken.total_root_count %}
+										{{ chicken.ownership_percent }}%
+										{% if not chicken.is_complete and chicken.root_check_target_count %}
+											<span>(Partial {{ chicken.pending_root_check_count }}/{{ chicken.root_check_target_count }})</span>
+										{% elif not chicken.is_complete %}
+											<span>(Partial)</span>
+										{% endif %}
+									{% else %}
+										Recalculate
+									{% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
