@@ -35,12 +35,6 @@
     	</div>
 	{% endif %}
 
-        {% if wallet and not error and gene_enrichment_remaining > 0 %}
-            <div class="info-message">
-                Recessive gene data is loading in batches of 5 per visit. Loaded {{ gene_enrichment_loaded }} chickens this visit. {{ gene_enrichment_remaining }} still remaining.
-            </div>
-        {% endif %}
-
         {% if wallet and not error %}
             <div class="settings-box">
                 <form method="GET" action="{{ url_for('match_gene_page') }}" class="filter-form">
