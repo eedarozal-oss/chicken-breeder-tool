@@ -4,7 +4,8 @@ from services.ronin_api import fetch_all_owned_chickens
 from services.metadata_parser import parse_chicken_record
 from services.family_roots import resolve_family_roots_for_all
 from services.match_rules import find_potential_matches, is_generation_gap_allowed
-from services.lineage_api import complete_ninuno_via_lineage
+#from services.lineage_api import complete_ninuno_via_lineage
+from services.family_roots import complete_ninuno_via_lineage_with_resume
 from services.chicken_enricher import enrich_chicken_records
 from services.build_eval import evaluate_build, count_added_missing_traits
 from services.wallet_access import get_wallet_access_expiry_display
@@ -15,6 +16,7 @@ from services.database import (
     get_chickens_by_wallet,
     clear_family_roots_for_wallet,
     clear_family_roots_for_token,
+    clear_stale_family_root_summaries,
     upsert_family_root_summary,
     insert_family_root_items,
 )
@@ -89,9 +91,16 @@ def sync_wallet_data(wallet):
 
 
 def get_wallet_chickens(wallet, ensure_loaded=False):
+    if wallet:
+        clear_stale_family_root_summaries(wallet, max_age_hours=24)
+
     chickens = get_chickens_by_wallet(wallet)
     if ensure_loaded and not chickens:
         chickens = sync_wallet_data(wallet)
+        if wallet:
+            clear_stale_family_root_summaries(wallet, max_age_hours=24)
+            chickens = get_chickens_by_wallet(wallet)
+
     return chickens
 
 
@@ -1536,7 +1545,8 @@ def complete_ninuno():
     chickens = get_chickens_by_wallet(wallet)
     owned_token_ids = {str(row["token_id"]) for row in chickens}
 
-    summary = complete_ninuno_via_lineage(
+    summary = complete_ninuno_via_lineage_with_resume(
+        wallet_address=wallet,
         token_id=token_id,
         owned_token_ids=owned_token_ids,
         depth=6,
@@ -1544,14 +1554,7 @@ def complete_ninuno():
         contract_addresses=CONTRACTS,
     )
 
-    clear_family_roots_for_token(wallet, token_id)
     upsert_family_root_summary(wallet, summary)
-    insert_family_root_items(
-        wallet_address=wallet,
-        token_id=summary["token_id"],
-        roots=summary["roots"],
-        owned_root_ids=owned_token_ids,
-    )
 
     referrer = request.referrer or ""
     if referrer:
