@@ -114,8 +114,24 @@
                         <div><strong>Breed Count:</strong> {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}</div>
 						<div id="ninuno-{{ selected_chicken.token_id }}">
 							<strong>Ninuno %:</strong>
-							{% if selected_chicken.is_complete %}
+							{% if selected_chicken.total_root_count %}
 								{{ selected_chicken.ownership_percent }}%
+								{% if not selected_chicken.is_complete and selected_chicken.root_check_target_count %}
+									<span>(Partial {{ selected_chicken.pending_root_check_count }}/{{ selected_chicken.root_check_target_count }})</span>
+								{% elif not selected_chicken.is_complete %}
+									<span>(Partial)</span>
+								{% endif %}
+								{% if not selected_chicken.is_complete %}
+									<span class="recalculate-inline">
+										<form method="POST" action="{{ url_for('complete_ninuno') }}">
+											<input type="hidden" name="wallet_address" value="{{ wallet }}">
+											<input type="hidden" name="token_id" value="{{ selected_chicken.token_id }}">
+											<input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+											<input type="hidden" name="anchor_id" value="ninuno-{{ selected_chicken.token_id }}">
+											<button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+										</form>
+									</span>
+								{% endif %}
 							{% else %}
 								<span class="recalculate-inline">
 									<span>Recalculate</span>
@@ -210,9 +226,25 @@
                                         <td>{{ row.build_complement if row.build_complement is not none else "" }}</td>
                                         <td>{{ row.candidate.ip if row.candidate.ip is not none else "" }}</td>
                                         <td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
-                                        <td id="ninuno-{{ row.candidate.token_id }}">
-											{% if row.candidate.is_complete %}
+										<td id="ninuno-{{ row.candidate.token_id }}">
+											{% if row.candidate.total_root_count %}
 												{{ row.candidate.ownership_percent }}%
+												{% if not row.candidate.is_complete and row.candidate.root_check_target_count %}
+													<span>(Partial {{ row.candidate.pending_root_check_count }}/{{ row.candidate.root_check_target_count }})</span>
+												{% elif not row.candidate.is_complete %}
+													<span>(Partial)</span>
+												{% endif %}
+												{% if not row.candidate.is_complete %}
+													<span class="recalculate-inline">
+														<form method="POST" action="{{ url_for('complete_ninuno') }}">
+															<input type="hidden" name="wallet_address" value="{{ wallet }}">
+															<input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
+															<input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+															<input type="hidden" name="anchor_id" value="ninuno-{{ row.candidate.token_id }}">
+															<button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+														</form>
+													</span>
+												{% endif %}
 											{% else %}
 												<span class="recalculate-inline">
 													<span>Recalculate</span>
