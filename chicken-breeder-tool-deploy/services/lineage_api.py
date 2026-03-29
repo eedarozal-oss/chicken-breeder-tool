@@ -5,6 +5,46 @@ from services.family_roots import build_family_root_summary
 
 LINEAGE_API_BASE = "https://breeding.sabongsaga-services.com/lineages"
 ROOT_MAX_ID = 11110
+CHICKEN_API_BASE = "https://chicken-api-ivory.vercel.app/api"
+
+
+def fetch_chicken_api_record(token_id: str):
+    token_id = str(token_id).strip()
+    if not token_id:
+        return None
+
+    url = f"{CHICKEN_API_BASE}/{token_id}"
+
+    try:
+        response = requests.get(url, timeout=(5, 10))
+        response.raise_for_status()
+        data = response.json()
+    except Exception:
+        return None
+
+    return data if isinstance(data, dict) else None
+
+
+def extract_parent_ids_from_chicken_api(data):
+    parent_ids = []
+
+    for attr in data.get("attributes", []) or []:
+        trait_type = str(attr.get("trait_type") or "").strip().lower()
+        value = attr.get("value")
+
+        if trait_type == "parent 1" and value not in (None, ""):
+            parent_ids.append(str(value).strip())
+        elif trait_type == "parent 2" and value not in (None, ""):
+            parent_ids.append(str(value).strip())
+
+    seen = set()
+    result = []
+    for parent_id in parent_ids:
+        if parent_id and parent_id not in seen:
+            seen.add(parent_id)
+            result.append(parent_id)
+
+    return result
 
 _LINEAGE_CACHE = {}
 _LINEAGE_CACHE_TTL = 300  # 5 minutes
@@ -157,6 +197,40 @@ def extract_roots_and_unresolved_from_tree(tree, root_max_id=ROOT_MAX_ID):
     walk(tree)
     return {"roots": roots, "unresolved": unresolved}
 
+def resolve_unresolved_token_via_chicken_api(token_id, root_max_id=ROOT_MAX_ID):
+    token_id = str(token_id).strip()
+    token_num = _safe_int(token_id)
+
+    if not token_id:
+        return {"roots": set(), "next_tokens": set(), "resolved": False}
+
+    if token_num is not None and token_num <= root_max_id:
+        return {"roots": {token_id}, "next_tokens": set(), "resolved": True}
+
+    data = fetch_chicken_api_record(token_id)
+    if not data:
+        return {"roots": set(), "next_tokens": set(), "resolved": False}
+
+    parent_ids = extract_parent_ids_from_chicken_api(data)
+
+    if not parent_ids:
+        return {"roots": set(), "next_tokens": set(), "resolved": False}
+
+    roots = set()
+    next_tokens = set()
+
+    for parent_id in parent_ids:
+        parent_num = _safe_int(parent_id)
+        if parent_num is not None and parent_num <= root_max_id:
+            roots.add(parent_id)
+        else:
+            next_tokens.add(parent_id)
+
+    return {
+        "roots": roots,
+        "next_tokens": next_tokens,
+        "resolved": True,
+    }
 
 def complete_ninuno_via_lineage(token_id: str, owned_token_ids, depth: int = 6, max_tokens: int = 60, contract_addresses=None):
     """
@@ -211,7 +285,20 @@ def complete_ninuno_via_lineage(token_id: str, owned_token_ids, depth: int = 6, 
 
         tree = fetch_lineage_tree(current, depth=depth)
         if not tree:
-            had_fetch_failure = True
+            fallback_result = resolve_unresolved_token_via_chicken_api(
+                current,
+                root_max_id=ROOT_MAX_ID,
+            )
+
+            roots_found.update(fallback_result["roots"])
+
+            if fallback_result["resolved"]:
+                for next_token in fallback_result["next_tokens"]:
+                    if next_token not in processed:
+                        pending.append(next_token)
+            else:
+                had_fetch_failure = True
+
             continue
 
         extracted = extract_roots_and_unresolved_from_tree(tree)
@@ -219,8 +306,22 @@ def complete_ninuno_via_lineage(token_id: str, owned_token_ids, depth: int = 6, 
 
         for unresolved_token in extracted["unresolved"]:
             unresolved_num = _safe_int(unresolved_token)
+
             if unresolved_num is not None and unresolved_num <= ROOT_MAX_ID:
                 roots_found.add(unresolved_token)
+                continue
+
+            fallback_result = resolve_unresolved_token_via_chicken_api(
+                unresolved_token,
+                root_max_id=ROOT_MAX_ID,
+            )
+
+            roots_found.update(fallback_result["roots"])
+
+            if fallback_result["resolved"]:
+                for next_token in fallback_result["next_tokens"]:
+                    if next_token not in processed:
+                        pending.append(next_token)
             elif unresolved_token not in processed:
                 pending.append(unresolved_token)
 
