@@ -982,7 +982,7 @@ def match_ip_page():
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
-    error = None
+    error = request.args.get("error", "").strip() or None
 
     if wallet:
         try:
@@ -1027,13 +1027,6 @@ def match_ip_page():
                         settings=MATCH_SETTINGS,
                     )
 
-                    matches = [
-                        row for row in matches
-                        if row.get("evaluation", {}).get("is_ip_recommended")
-                        and row.get("evaluation", {}).get("is_breed_count_recommended")
-                        and pair_has_usable_ip_items(source, row.get("candidate"))
-                    ]
-                    
                     matches = [
                         row for row in matches
                         if row.get("evaluation", {}).get("is_ip_recommended")
@@ -1103,6 +1096,11 @@ def match_ip_page():
         ip_diff=ip_diff,
         ninuno_100_only=ninuno_100_only,
         auto_match=auto_match,
+        auto_open_template_id=(
+            ""
+            if skip_auto_open
+            else (f"compare-ip-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else "")
+        ),
         error=error,
     )
 
@@ -1224,7 +1222,7 @@ def match_gene_page():
     potential_matches = []
     gene_enrichment_loaded = 0
     gene_enrichment_remaining = 0
-    error = None
+    error = request.args.get("error", "").strip() or None
 
     if wallet:
         try:
@@ -1406,7 +1404,7 @@ def match_ultimate_page():
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
-    error = None
+    error = request.args.get("error", "").strip() or None
 
     if wallet:
         try:
@@ -1426,9 +1424,25 @@ def match_ultimate_page():
                 )
 
             if auto_match:
-                selected_chicken, potential_matches = pick_best_ultimate_auto_match(breedable_chickens)
                 if selected_chicken:
-                    selected_token_id = str(selected_chicken.get("token_id") or "")
+                    candidate_pool = [
+                        row for row in breedable_chickens
+                        if str(row["token_id"]) != selected_token_id
+                        and is_generation_gap_allowed(
+                            selected_chicken,
+                            row,
+                            max_gap=MATCH_SETTINGS["max_generation_gap"],
+                        )
+                    ]
+
+                    potential_matches = filter_and_sort_ultimate_candidates(
+                        selected_chicken,
+                        candidate_pool,
+                    )
+                else:
+                    selected_chicken, potential_matches = pick_best_ultimate_auto_match(breedable_chickens)
+                    if selected_chicken:
+                        selected_token_id = str(selected_chicken.get("token_id") or "")
 
             if selected_chicken and not potential_matches:
                 candidate_pool = [
@@ -1478,27 +1492,45 @@ def complete_ninuno():
     if not wallet or not token_id:
         return redirect(url_for("index", wallet_address=wallet))
 
-    chickens = get_chickens_by_wallet(wallet)
-    owned_token_ids = {str(row["token_id"]) for row in chickens}
-
-    summary = complete_ninuno_via_lineage(
-        token_id=token_id,
-        owned_token_ids=owned_token_ids,
-        depth=6,
-        max_tokens=60,
-        contract_addresses=CONTRACTS,
-    )
-
-    clear_family_roots_for_token(wallet, token_id)
-    upsert_family_root_summary(wallet, summary)
-    insert_family_root_items(
-        wallet_address=wallet,
-        token_id=summary["token_id"],
-        roots=summary["roots"],
-        owned_root_ids=owned_token_ids,
-    )
-
     referrer = request.referrer or ""
+
+    try:
+        chickens = get_chickens_by_wallet(wallet)
+        owned_token_ids = {str(row["token_id"]) for row in chickens}
+
+        summary = complete_ninuno_via_lineage(
+            token_id=token_id,
+            owned_token_ids=owned_token_ids,
+            depth=6,
+            max_tokens=60,
+            contract_addresses=CONTRACTS,
+        )
+
+        clear_family_roots_for_token(wallet, token_id)
+        upsert_family_root_summary(wallet, summary)
+        insert_family_root_items(
+            wallet_address=wallet,
+            token_id=summary["token_id"],
+            roots=summary["roots"],
+            owned_root_ids=owned_token_ids,
+        )
+
+    except Exception as exc:
+        error_message = f"Failed to recalculate Ninuno: {exc}"
+
+        if referrer:
+            base_referrer = referrer.split("#")[0]
+            separator = "&" if "?" in base_referrer else "?"
+            if anchor_id:
+                return redirect(
+                    f"{base_referrer}{separator}skip_auto_open=1&error={error_message}#{anchor_id}"
+                )
+            return redirect(
+                f"{base_referrer}{separator}skip_auto_open=1&error={error_message}"
+            )
+
+        return redirect(url_for("match_ip_page", wallet_address=wallet, error=error_message))
+
     if referrer:
         base_referrer = referrer.split("#")[0]
         separator = "&" if "?" in base_referrer else "?"
