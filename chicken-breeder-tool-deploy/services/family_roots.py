@@ -207,10 +207,8 @@ def refresh_pending_and_stale_root_items(wallet_address, token_id, root_items, c
         chicken = batch_lookup.get(root_id)
 
         if chicken is None:
-            chicken = get_or_fetch_chicken_record(
-                root_id,
-                contract_addresses=contract_addresses,
-            )
+            game_api_data = fetch_chicken_from_game_api(root_id)
+            chicken = normalize_game_api_chicken(game_api_data, root_id)
 
         if chicken is None:
             upsert_family_root_item(
@@ -606,7 +604,7 @@ def resolve_family_roots_for_all(chickens, contract_addresses=None):
 
     return results
 
-def complete_ninuno_via_lineage_with_resume(wallet_address, token_id: str, owned_token_ids, depth: int = 6, max_tokens: int = 60, contract_addresses=None):
+def complete_ninuno_via_lineage_with_resume(wallet_address, token_id: str, owned_token_ids, depth: int = 3, max_tokens: int = 300, contract_addresses=None):
     token_id = str(token_id).strip()
 
     existing_root_items = get_family_root_items(wallet_address, token_id)

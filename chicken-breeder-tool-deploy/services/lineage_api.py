@@ -67,7 +67,7 @@ def _cache_set(key, value, ttl=_LINEAGE_CACHE_TTL):
     _LINEAGE_CACHE[key] = (time.time() + ttl, value)
 
 
-def fetch_lineage_tree(token_id: str, depth: int = 6, max_retries: int = 4, base_delay: float = 1.5):
+def fetch_lineage_tree(token_id: str, depth: int = 3, max_retries: int = 4, base_delay: float = 1.5):
     token_id = str(token_id).strip()
     if not token_id:
         return None
@@ -232,7 +232,7 @@ def resolve_unresolved_token_via_chicken_api(token_id, root_max_id=ROOT_MAX_ID):
         "resolved": True,
     }
 
-def complete_ninuno_via_lineage(token_id: str, owned_token_ids, depth: int = 6, max_tokens: int = 60, contract_addresses=None):
+def complete_ninuno_via_lineage(token_id: str, owned_token_ids, depth: int = 3, max_tokens: int = 300, contract_addresses=None):
     """
     Better Ninuno completion strategy:
     - fetch lineage tree for the selected chicken
