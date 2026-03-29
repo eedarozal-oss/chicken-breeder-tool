@@ -2,10 +2,12 @@ from flask import Flask, render_template, request, redirect, url_for, session
 import os
 from services.ronin_api import fetch_all_owned_chickens
 from services.metadata_parser import parse_chicken_record
-from services.family_roots import resolve_family_roots_for_all
 from services.match_rules import find_potential_matches, is_generation_gap_allowed
-#from services.lineage_api import complete_ninuno_via_lineage
-from services.family_roots import complete_ninuno_via_lineage_with_resume
+from services.family_roots import (
+    resolve_family_roots_for_all,
+    complete_ninuno_via_lineage_with_resume,
+    initialize_simple_family_roots_for_wallet,
+)
 from services.chicken_enricher import enrich_chicken_records
 from services.build_eval import evaluate_build, count_added_missing_traits
 from services.wallet_access import get_wallet_access_expiry_display
@@ -86,6 +88,14 @@ def sync_wallet_data(wallet):
             "ultimate_type": primary_build_data.get("ultimate_type"),
         })
         upsert_chicken(record)
+
+    chickens = get_chickens_by_wallet(wallet)
+
+    initialize_simple_family_roots_for_wallet(
+        chickens=chickens,
+        wallet_address=wallet,
+        contract_addresses=CONTRACTS,
+    )
 
     return get_chickens_by_wallet(wallet)
 
