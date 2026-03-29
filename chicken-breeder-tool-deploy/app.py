@@ -1549,8 +1549,8 @@ def complete_ninuno():
         wallet_address=wallet,
         token_id=token_id,
         owned_token_ids=owned_token_ids,
-        depth=6,
-        max_tokens=60,
+        depth=3,
+        max_tokens=300,
         contract_addresses=CONTRACTS,
     )
 
