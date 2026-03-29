@@ -1,3 +1,4 @@
+import requests
 from datetime import datetime, timedelta, timezone
 from services.database import (
     get_chicken_by_token,
@@ -9,6 +10,53 @@ from services.metadata_parser import parse_chicken_record
 from services.ronin_api import fetch_chicken_by_token, fetch_nft_details
 
 ROOT_MAX_ID = 11110
+
+def fetch_chicken_from_game_api(token_id):
+    token_id = str(token_id or "").strip()
+    if not token_id:
+        return None
+
+    url = f"https://chicken-api-ivory.vercel.app/api/{token_id}"
+
+    try:
+        response = requests.get(url, timeout=(5, 10))
+        response.raise_for_status()
+        data = response.json()
+    except Exception:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    return data
+
+def normalize_game_api_chicken(data, token_id):
+    if not isinstance(data, dict):
+        return None
+
+    state = ""
+    is_dead = None
+
+    for attr in data.get("attributes", []) or []:
+        trait_type = str(attr.get("trait_type") or "").strip().lower()
+        value = attr.get("value")
+
+        if trait_type == "state":
+            state = str(value or "").strip().lower()
+        elif trait_type == "breeding":
+            # optional, not needed for dead check
+            pass
+
+    if is_dead is None:
+        is_dead = state == "dead"
+
+    return {
+        "token_id": str(token_id),
+        "state": state,
+        "is_dead": bool(is_dead),
+    }
+
+
 
 def is_root_check_stale(last_checked_at, max_age_hours=24):
     if not last_checked_at:
