@@ -251,8 +251,8 @@ tr:hover td {
 .compare-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    gap: 12px;
+    align-items: flex-start;
+    gap: 16px;
     padding: 16px 18px;
     border-bottom: 1px solid #e5e7eb;
     background: #ffffff;
@@ -1251,4 +1251,19 @@ body.welcome-page {
     background: #f7f7f7;
     border-radius: 8px;
     line-height: 1.4;
+}
+
+.compare-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.compare-header-main {
+    flex: 1;
+}
+
+.compare-header-main h3 {
+    margin: 0 0 10px;
 }
