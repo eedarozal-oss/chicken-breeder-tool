@@ -539,6 +539,13 @@ def choose_non_duplicate_item(primary_item, fallback_items, blocked_name):
 
     return None
 
+def pair_has_usable_ip_items(left_chicken, right_chicken):
+    left_candidates = get_ip_item_candidates(left_chicken, right_chicken)
+    right_candidates = get_ip_item_candidates(right_chicken, left_chicken)
+
+    left_item, right_item = resolve_pair_item_recommendations(left_candidates, right_candidates)
+
+    return bool(left_item) and bool(right_item)
 
 def get_gene_item_candidates(parent, other_parent, build_type):
     candidates = []
@@ -734,7 +741,6 @@ def build_gene_potential_matches(selected_chicken, breedable_chickens, build_typ
 
     return scored_matches
 
-
 def pick_best_ip_auto_match(breedable_chickens, enable_ip_diff=False, ip_diff=None):
     best_selected = None
     best_matches = []
@@ -757,6 +763,14 @@ def pick_best_ip_auto_match(breedable_chickens, enable_ip_diff=False, ip_diff=No
                 ]
 
         matches = find_potential_matches(selected, candidate_pool, settings=MATCH_SETTINGS)
+
+        matches = [
+            row for row in matches
+            if row.get("evaluation", {}).get("is_ip_recommended")
+            and row.get("evaluation", {}).get("is_breed_count_recommended")
+            and pair_has_usable_ip_items(selected, row.get("candidate"))
+        ]
+
         if not matches:
             continue
 
@@ -1011,6 +1025,20 @@ def match_ip_page():
                         candidate_pool,
                         settings=MATCH_SETTINGS,
                     )
+
+                    matches = [
+                        row for row in matches
+                        if row.get("evaluation", {}).get("is_ip_recommended")
+                        and row.get("evaluation", {}).get("is_breed_count_recommended")
+                        and pair_has_usable_ip_items(source, row.get("candidate"))
+                    ]
+                    
+                    matches = [
+                        row for row in matches
+                        if row.get("evaluation", {}).get("is_ip_recommended")
+                        and row.get("evaluation", {}).get("is_breed_count_recommended")
+                        and pair_has_usable_ip_items(source, row.get("candidate"))
+                    ]
 
                     if matches:
                         top_match = matches[0]
@@ -1428,6 +1456,7 @@ def match_ultimate_page():
 
 @app.route("/complete-ninuno", methods=["POST"])
 def complete_ninuno():
+    anchor_id = request.form.get("anchor_id", "").strip()
     wallet = request.form.get("wallet_address", "").strip().lower()
     token_id = request.form.get("token_id", "").strip()
     selected_token_id = request.form.get("selected_token_id", "").strip()
@@ -1460,7 +1489,10 @@ def complete_ninuno():
 
     referrer = request.referrer or ""
     if referrer:
-        return redirect(referrer)
+        base_referrer = referrer.split("#")[0]
+        if anchor_id:
+            return redirect(f"{base_referrer}#{anchor_id}")
+        return redirect(base_referrer)
 
     return redirect(url_for("match_ip_page", wallet_address=wallet, selected_token_id=selected_token_id or token_id))
 
