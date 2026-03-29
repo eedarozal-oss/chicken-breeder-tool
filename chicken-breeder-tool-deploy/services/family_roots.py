@@ -20,6 +20,11 @@ def is_family_root(token_id):
     return token_num is not None and token_num <= ROOT_MAX_ID
 
 
+def should_check_root_alive_state(token_id):
+    token_num = safe_int(token_id)
+    return token_num is not None and 2222 < token_num < ROOT_MAX_ID
+
+
 def is_breedable_chicken(chicken):
     if not chicken:
         return False
@@ -89,9 +94,23 @@ def filter_alive_roots(roots, contract_addresses=None):
 
     alive_roots = []
     dead_roots = []
+    had_lookup_failure = False
 
     for root_id in unique_roots:
-        chicken = get_or_fetch_chicken_record(root_id, contract_addresses=contract_addresses)
+        if not should_check_root_alive_state(root_id):
+            alive_roots.append(root_id)
+            continue
+
+        try:
+            chicken = get_or_fetch_chicken_record(root_id, contract_addresses=contract_addresses)
+        except Exception:
+            had_lookup_failure = True
+            chicken = None
+
+        if chicken is None:
+            had_lookup_failure = True
+            alive_roots.append(root_id)
+            continue
 
         if is_dead_chicken(chicken):
             dead_roots.append(root_id)
@@ -101,6 +120,7 @@ def filter_alive_roots(roots, contract_addresses=None):
     return {
         "alive_roots": alive_roots,
         "dead_roots": dead_roots,
+        "had_lookup_failure": had_lookup_failure,
     }
 
 
@@ -213,12 +233,14 @@ def build_family_root_summary(token_id, roots, owned_token_ids, is_complete, con
     if total_root_count > 0:
         ownership_percent = round((owned_root_count / total_root_count) * 100, 2)
 
+    final_complete = bool(is_complete) and not filtered.get("had_lookup_failure")
+
     return {
         "token_id": str(token_id),
         "owned_root_count": owned_root_count,
         "total_root_count": total_root_count,
         "ownership_percent": ownership_percent,
-        "is_complete": 1 if is_complete else 0,
+        "is_complete": 1 if final_complete else 0,
         "roots": alive_roots,
         "dead_roots": filtered["dead_roots"],
     }

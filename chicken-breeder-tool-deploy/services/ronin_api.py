@@ -18,7 +18,7 @@ def fetch_balances(wallet_address: str, contract_address: str, limit: int = 25):
         )
         print("URL:", url)
 
-        response = requests.get(url, headers=HEADERS, timeout=30)
+        response = requests.get(url, headers=HEADERS, timeout=12)
         response.raise_for_status()
         data = response.json()
 
@@ -69,7 +69,7 @@ def fetch_nft_details(nft_ids: list, batch_size: int = 50):
         print("NFT DETAILS URL:", url)
         print("NFT DETAILS BATCH:", i // batch_size + 1, "SIZE:", len(batch))
 
-        response = requests.post(url, headers=HEADERS, json=payload, timeout=60)
+        response = requests.post(url, headers=HEADERS, json=payload, timeout=12)
         response.raise_for_status()
         data = response.json()
 
