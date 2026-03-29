@@ -362,9 +362,11 @@
         <div class="compare-backdrop" data-close-compare></div>
         <div class="compare-dialog">
 				<div class="compare-header">
-					<h3>Gene Match Preview</h3>
-					<div class="match-disclaimer">
-						This gene match guide is for reference only. It highlights promising pairings based on current trait matching, but breeding outcomes are not guaranteed.
+					<div class="compare-header-main">
+						<h3>Gene Match Preview</h3>
+						<div class="match-disclaimer">
+							This gene match guide is for reference only. It highlights promising pairings based on current trait matching, but breeding outcomes are not guaranteed.
+						</div>
 					</div>
 					<button type="button" data-close-compare>Close</button>
 				</div>
@@ -466,91 +468,95 @@
     </div>
     {% endif %}
 	<script>
-document.addEventListener("DOMContentLoaded", function () {
-    const statusBox = document.getElementById("gene-batch-status");
-    const toggleBtn = document.getElementById("toggle-gene-batch");
+	document.addEventListener("DOMContentLoaded", function () {
+		const statusBox = document.getElementById("gene-batch-status");
+		const toggleBtn = document.getElementById("toggle-gene-batch");
 
-    if (!statusBox || !toggleBtn) return;
+		if (!statusBox || !toggleBtn) return;
 
-    const wallet = statusBox.dataset.wallet;
-    const selectedTokenId = statusBox.dataset.selectedTokenId || "";
-    let running = true;
-    let timerId = null;
+		const wallet = statusBox.dataset.wallet;
+		const selectedTokenId = statusBox.dataset.selectedTokenId || "";
+		const pauseKey = `gene-batch-paused-${wallet}`;
+		let running = localStorage.getItem(pauseKey) !== "1";
+		let timerId = null;
 
-    function setRunning(next) {
-        running = next;
-		toggleBtn.textContent = running ? "Stop Recessive Check" : "Resume Recessive Check";
-        statusBox.dataset.running = running ? "1" : "0";
+		function setRunning(next) {
+			running = next;
+			toggleBtn.textContent = running ? "Stop Recessive Check" : "Resume Recessive Check";
+			statusBox.dataset.running = running ? "1" : "0";
 
-        if (running) {
-            statusBox.textContent = "Recessive gene data is loading in the background...";
-            scheduleNext(0);
-        } else {
-            statusBox.textContent = "Recessive gene background loading is paused.";
-            if (timerId) {
-                clearTimeout(timerId);
-                timerId = null;
-            }
-        }
-    }
-
-    function scheduleNext(delayMs) {
-        if (!running) return;
-        if (timerId) clearTimeout(timerId);
-        timerId = setTimeout(runBatch, delayMs);
-    }
-
-    async function runBatch() {
-        if (!running) return;
-
-        const formData = new URLSearchParams();
-        formData.append("wallet_address", wallet);
-        formData.append("selected_token_id", selectedTokenId);
-
-        try {
-            const response = await fetch("{{ url_for('process_gene_batch') }}", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                body: formData.toString(),
-            });
-
-            const data = await response.json();
-
-            if (!data.ok) {
-                statusBox.textContent = "Background loading stopped due to an error.";
-                running = false;
-				toggleBtn.textContent = "Resume Recessive Check";
-                return;
-            }
-
-			if ((data.remaining || 0) > 0) {
-				statusBox.style.display = "";
-				toggleBtn.style.display = "";
-				statusBox.textContent =
-					`Recessive gene data is loading in the background. Loaded ${data.loaded || 0} chickens this round. ${data.remaining || 0} still remaining.`;
-				scheduleNext(2500);
+			if (running) {
+				statusBox.textContent = "Recessive gene data is loading in the background...";
+				scheduleNext(0);
 			} else {
-				running = false;
-				statusBox.textContent = "";
-				statusBox.style.display = "none";
-				toggleBtn.style.display = "none";
+				statusBox.textContent = "Recessive gene background loading is paused.";
+				if (timerId) {
+					clearTimeout(timerId);
+					timerId = null;
+				}
 			}
-        } catch (err) {
-            statusBox.textContent = "Background loading stopped due to a network error.";
-            running = false;
-			toggleBtn.textContent = "Resume Recessive Check";
-        }
-    }
+		}
 
-    toggleBtn.addEventListener("click", function () {
-        setRunning(!running);
-    });
+		function scheduleNext(delayMs) {
+			if (!running) return;
+			if (timerId) clearTimeout(timerId);
+			timerId = setTimeout(runBatch, delayMs);
+		}
 
-    setRunning(true);
-});
-</script>
+		async function runBatch() {
+			if (!running) return;
+
+			const formData = new URLSearchParams();
+			formData.append("wallet_address", wallet);
+			formData.append("selected_token_id", selectedTokenId);
+
+			try {
+				const response = await fetch("{{ url_for('process_gene_batch') }}", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/x-www-form-urlencoded",
+					},
+					body: formData.toString(),
+				});
+
+				const data = await response.json();
+
+				if (!data.ok) {
+					statusBox.textContent = "Background loading stopped due to an error.";
+					running = false;
+					toggleBtn.textContent = "Resume Recessive Check";
+					return;
+				}
+
+				if ((data.remaining || 0) > 0) {
+					statusBox.style.display = "";
+					toggleBtn.style.display = "";
+					statusBox.textContent =
+						`Recessive gene data is loading in the background. Loaded ${data.loaded || 0} chickens this round. ${data.remaining || 0} still remaining.`;
+					scheduleNext(2500);
+				} else {
+					running = false;
+					localStorage.removeItem(pauseKey);
+					statusBox.textContent = "";
+					statusBox.style.display = "none";
+					toggleBtn.style.display = "none";
+				}
+			} catch (err) {
+				statusBox.textContent = "Background loading stopped due to a network error.";
+				running = false;
+				toggleBtn.textContent = "Resume Recessive Check";
+			}
+		}
+
+		toggleBtn.addEventListener("click", function () {
+			running = !running;
+			localStorage.setItem(pauseKey, running ? "0" : "1");
+			setRunning(running);
+		});
+
+		setRunning(true);
+	});
+	</script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
