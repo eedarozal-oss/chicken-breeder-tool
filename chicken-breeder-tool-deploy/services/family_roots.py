@@ -159,6 +159,12 @@ def refresh_pending_and_stale_root_items(wallet_address, token_id, root_items, c
         chicken = batch_lookup.get(root_id)
 
         if chicken is None:
+            chicken = get_or_fetch_chicken_record(
+                root_id,
+                contract_addresses=contract_addresses,
+            )
+
+        if chicken is None:
             upsert_family_root_item(
                 wallet_address=wallet_address,
                 token_id=token_id,
