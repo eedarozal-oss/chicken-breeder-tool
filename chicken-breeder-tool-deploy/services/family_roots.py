@@ -5,6 +5,8 @@ from services.database import (
     upsert_chicken,
     get_family_root_items,
     upsert_family_root_item,
+    upsert_family_root_summary,
+    insert_family_root_items,
 )
 from services.metadata_parser import parse_chicken_record
 from services.ronin_api import fetch_chicken_by_token, fetch_nft_details
@@ -661,3 +663,120 @@ def complete_ninuno_via_lineage_with_resume(wallet_address, token_id: str, owned
         root_items=final_items,
         owned_token_ids=owned_token_ids,
     )
+
+def initialize_simple_family_roots_for_wallet(chickens, wallet_address, contract_addresses=None):
+    chickens = chickens or []
+    owned_token_ids = build_owned_token_set(chickens)
+    now_utc = datetime.now(timezone.utc).isoformat()
+
+    simple_candidates = []
+    roots_to_check = set()
+
+    for chicken in chickens:
+        if not is_breedable_chicken(chicken):
+            continue
+
+        token_id = str(chicken.get("token_id") or "").strip()
+        if not token_id:
+            continue
+
+        roots = []
+
+        # Case 1: chicken itself is already a root
+        if is_family_root(token_id):
+            roots = [token_id]
+
+        # Case 2: both parents are roots
+        else:
+            parent_1 = str(chicken.get("parent_1") or "").strip()
+            parent_2 = str(chicken.get("parent_2") or "").strip()
+
+            if not parent_1 or not parent_2:
+                continue
+
+            if not is_family_root(parent_1) or not is_family_root(parent_2):
+                continue
+
+            seen = set()
+            for root_id in [parent_1, parent_2]:
+                if root_id and root_id not in seen:
+                    seen.add(root_id)
+                    roots.append(root_id)
+
+        if not roots:
+            continue
+
+        for root_id in roots:
+            if root_id not in owned_token_ids and should_check_root_alive_state(root_id):
+                roots_to_check.add(root_id)
+
+        simple_candidates.append({
+            "token_id": token_id,
+            "roots": roots,
+        })
+
+    batch_lookup = fetch_root_records_in_batch(
+        sorted(roots_to_check, key=lambda x: safe_int(x) or 0),
+        contract_addresses=contract_addresses,
+    )
+
+    for entry in simple_candidates:
+        token_id = entry["token_id"]
+        roots = entry["roots"]
+
+        root_status_map = {}
+
+        for root_id in roots:
+            if root_id in owned_token_ids:
+                root_status_map[root_id] = {
+                    "root_check_status": "skipped",
+                    "is_dead_root": False,
+                    "last_checked_at": now_utc,
+                }
+                continue
+
+            if not should_check_root_alive_state(root_id):
+                root_status_map[root_id] = {
+                    "root_check_status": "skipped",
+                    "is_dead_root": False,
+                    "last_checked_at": now_utc,
+                }
+                continue
+
+            root_chicken = batch_lookup.get(root_id)
+
+            if root_chicken is None:
+                root_status_map[root_id] = {
+                    "root_check_status": "pending",
+                    "is_dead_root": False,
+                    "last_checked_at": None,
+                }
+            elif is_dead_chicken(root_chicken):
+                root_status_map[root_id] = {
+                    "root_check_status": "dead_checked",
+                    "is_dead_root": True,
+                    "last_checked_at": now_utc,
+                }
+            else:
+                root_status_map[root_id] = {
+                    "root_check_status": "alive_checked",
+                    "is_dead_root": False,
+                    "last_checked_at": now_utc,
+                }
+
+        insert_family_root_items(
+            wallet_address=wallet_address,
+            token_id=token_id,
+            roots=roots,
+            owned_root_ids=owned_token_ids,
+            root_status_map=root_status_map,
+        )
+
+        stored_items = get_family_root_items(wallet_address, token_id)
+        summary = build_family_root_summary_from_items(
+            token_id=token_id,
+            root_items=stored_items,
+            owned_token_ids=owned_token_ids,
+        )
+        upsert_family_root_summary(wallet_address, summary)
+        
