@@ -1083,7 +1083,7 @@ def needs_recessive_enrichment(chicken):
 
 
 def enrich_missing_recessive_data_in_batches(chickens, wallet, page_key, batch_size=5, prioritized_token_id=None):
-    missing = [row for row in chickens if needs_recessive_enrichment(row)]
+    missing = [row for row in chickens if is_breedable(row) and needs_recessive_enrichment(row)]
 
     if not missing:
         session[f"{page_key}_cursor_{wallet}"] = 0
@@ -1144,7 +1144,7 @@ def enrich_missing_recessive_data_in_batches(chickens, wallet, page_key, batch_s
         session[cursor_key] = 0
 
     refreshed = get_chickens_by_wallet(wallet)
-    remaining_after = sum(1 for row in refreshed if needs_recessive_enrichment(row))
+    remaining_after = sum(1 for row in refreshed if is_breedable(row) and needs_recessive_enrichment(row))
 
     return {
         "loaded": loaded_count,
