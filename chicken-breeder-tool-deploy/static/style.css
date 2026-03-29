@@ -1232,3 +1232,23 @@ body.welcome-page {
         white-space: normal;
     }
 }
+
+.match-disclaimer {
+    margin: 10px 0 16px;
+    padding: 10px 12px;
+    border: 1px solid #d9a3a3;
+    background: #fff1f1;
+    color: #8a2f2f;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+.build-type-guide {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid #d6d6d6;
+    background: #f7f7f7;
+    border-radius: 8px;
+    line-height: 1.4;
+}
