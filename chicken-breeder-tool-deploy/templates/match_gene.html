@@ -78,7 +78,7 @@
         >
             Auto Match
         </a>
-	<button type="button" id="toggle-gene-batch" class="link-btn secondary-link-btn">Stop</button>
+	<button type="button" id="toggle-gene-batch" class="link-btn secondary-link-btn">Stop Recessive Check</button>
     </div>
 </div>
                 </form>
@@ -87,7 +87,21 @@
 
         <div class="panel">
             <h2>Available Chickens</h2>
-
+			{% if build_type %}
+				<div class="build-type-guide">
+					{% if build_type == "damager" %}
+						Aiming for a high-damage build focused on strong offensive trait combinations.
+					{% elif build_type == "runner" %}
+						Aiming for a speed-focused build that favors fast and efficient trait combinations.
+					{% elif build_type == "ninja" %}
+						Aiming for an evasive offensive build that balances attack pressure and agility traits.
+					{% elif build_type == "tank" %}
+						Aiming for a durable defensive build with traits suited for survivability and frontline strength.
+					{% elif build_type == "jack" %}
+						Aiming for a flexible all-rounder build with balanced traits across multiple roles.
+					{% endif %}
+				</div>
+			{% endif %}
             {% if breedable_chickens %}
                 <div class="table-wrap limited-table ip-available-table">
                     <table>
@@ -180,22 +194,23 @@
                             {{ selected_chicken.build_match_display or "" }}
                         </div>
 
-                        <div>
-                            <strong>Ninuno %:</strong>
-                            {% if selected_chicken.is_complete %}
-                                {{ selected_chicken.ownership_percent }}%
-                            {% else %}
-                                <span class="recalculate-inline">
-                                    <span>Recalculate</span>
-                                    <form method="POST" action="{{ url_for('complete_ninuno') }}">
-                                        <input type="hidden" name="wallet_address" value="{{ wallet }}">
-                                        <input type="hidden" name="token_id" value="{{ selected_chicken.token_id }}">
-                                        <input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
-                                        <button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
-                                    </form>
-                                </span>
-                            {% endif %}
-                        </div>
+						<div id="ninuno-{{ selected_chicken.token_id }}">
+							<strong>Ninuno %:</strong>
+							{% if selected_chicken.is_complete %}
+								{{ selected_chicken.ownership_percent }}%
+							{% else %}
+								<span class="recalculate-inline">
+									<span>Recalculate</span>
+									<form method="POST" action="{{ url_for('complete_ninuno') }}">
+										<input type="hidden" name="wallet_address" value="{{ wallet }}">
+										<input type="hidden" name="token_id" value="{{ selected_chicken.token_id }}">
+										<input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+										<input type="hidden" name="anchor_id" value="ninuno-{{ selected_chicken.token_id }}">
+										<button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+									</form>
+								</span>
+							{% endif %}
+						</div>
                     </div>
 
                     <hr>
@@ -272,21 +287,22 @@
                                         <td>{{ row.candidate.build_source_display or "" }}</td>
                                         <td>{{ row.added_missing_traits if row.added_missing_traits is not none else "" }}</td>
                                         <td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
-                                        <td>
-                                            {% if row.candidate.is_complete %}
-                                                {{ row.candidate.ownership_percent }}%
-                                            {% else %}
-                                                <span class="recalculate-inline">
-                                                    <span>Recalculate</span>
-                                                    <form method="POST" action="{{ url_for('complete_ninuno') }}">
-                                                        <input type="hidden" name="wallet_address" value="{{ wallet }}">
-                                                        <input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
-                                                        <input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
-                                                        <button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
-                                                    </form>
-                                                </span>
-                                            {% endif %}
-                                        </td>
+										<td id="ninuno-{{ row.candidate.token_id }}">
+											{% if row.candidate.is_complete %}
+												{{ row.candidate.ownership_percent }}%
+											{% else %}
+												<span class="recalculate-inline">
+													<span>Recalculate</span>
+													<form method="POST" action="{{ url_for('complete_ninuno') }}">
+														<input type="hidden" name="wallet_address" value="{{ wallet }}">
+														<input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
+														<input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+														<input type="hidden" name="anchor_id" value="ninuno-{{ row.candidate.token_id }}">
+														<button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+													</form>
+												</span>
+											{% endif %}
+										</td>
                                         <td class="action-cell">
                                             <button
                                                 type="button"
@@ -345,10 +361,13 @@
     <div id="compare-modal" class="compare-modal hidden">
         <div class="compare-backdrop" data-close-compare></div>
         <div class="compare-dialog">
-            <div class="compare-header">
-                <h3>Gene Match Preview</h3>
-                <button type="button" data-close-compare>Close</button>
-            </div>
+				<div class="compare-header">
+					<h3>Gene Match Preview</h3>
+					<div class="match-disclaimer">
+						This gene match guide is for reference only. It highlights promising pairings based on current trait matching, but breeding outcomes are not guaranteed.
+					</div>
+					<button type="button" data-close-compare>Close</button>
+				</div>
             <div id="compare-modal-body" class="compare-body"></div>
         </div>
     </div>
@@ -460,7 +479,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function setRunning(next) {
         running = next;
-        toggleBtn.textContent = running ? "Stop" : "Resume";
+		toggleBtn.textContent = running ? "Stop Recessive Check" : "Resume Recessive Check";
         statusBox.dataset.running = running ? "1" : "0";
 
         if (running) {
@@ -502,23 +521,26 @@ document.addEventListener("DOMContentLoaded", function () {
             if (!data.ok) {
                 statusBox.textContent = "Background loading stopped due to an error.";
                 running = false;
-                toggleBtn.textContent = "Resume";
+				toggleBtn.textContent = "Resume Recessive Check";
                 return;
             }
 
-            if ((data.remaining || 0) > 0) {
-                statusBox.textContent =
-                    `Recessive gene data is loading in the background. Loaded ${data.loaded || 0} chickens this round. ${data.remaining || 0} still remaining.`;
-                scheduleNext(2500);
-            } else {
-                statusBox.textContent = "Recessive gene background loading is complete. Refresh results if needed.";
-                running = false;
-                toggleBtn.textContent = "Resume";
-            }
+			if ((data.remaining || 0) > 0) {
+				statusBox.style.display = "";
+				toggleBtn.style.display = "";
+				statusBox.textContent =
+					`Recessive gene data is loading in the background. Loaded ${data.loaded || 0} chickens this round. ${data.remaining || 0} still remaining.`;
+				scheduleNext(2500);
+			} else {
+				running = false;
+				statusBox.textContent = "";
+				statusBox.style.display = "none";
+				toggleBtn.style.display = "none";
+			}
         } catch (err) {
             statusBox.textContent = "Background loading stopped due to a network error.";
             running = false;
-            toggleBtn.textContent = "Resume";
+			toggleBtn.textContent = "Resume Recessive Check";
         }
     }
 

@@ -107,22 +107,23 @@
                         <div><strong>Build:</strong> {{ selected_chicken.ultimate_build_display or "" }}</div>
                         <div><strong>Build Match:</strong> {{ selected_chicken.ultimate_build_match_display or "" }}</div>
                         <div><strong>Breed Count:</strong> {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}</div>
-                        <div>
-                            <strong>Ninuno %:</strong>
-                            {% if selected_chicken.is_complete %}
-                                {{ selected_chicken.ownership_percent }}%
-                            {% else %}
-                                <span class="recalculate-inline">
-                                    <span>Recalculate</span>
-                                    <form method="POST" action="{{ url_for('complete_ninuno') }}">
-                                        <input type="hidden" name="wallet_address" value="{{ wallet }}">
-                                        <input type="hidden" name="token_id" value="{{ selected_chicken.token_id }}">
-                                        <input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
-                                        <button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
-                                    </form>
-                                </span>
-                            {% endif %}
-                        </div>
+						<div id="ninuno-{{ selected_chicken.token_id }}">
+							<strong>Ninuno %:</strong>
+							{% if selected_chicken.is_complete %}
+								{{ selected_chicken.ownership_percent }}%
+							{% else %}
+								<span class="recalculate-inline">
+									<span>Recalculate</span>
+									<form method="POST" action="{{ url_for('complete_ninuno') }}">
+										<input type="hidden" name="wallet_address" value="{{ wallet }}">
+										<input type="hidden" name="token_id" value="{{ selected_chicken.token_id }}">
+										<input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+										<input type="hidden" name="anchor_id" value="ninuno-{{ selected_chicken.token_id }}">
+										<button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+									</form>
+								</span>
+							{% endif %}
+						</div>
                     </div>
 
                     <hr>
@@ -204,21 +205,22 @@
                                         <td>{{ row.build_complement if row.build_complement is not none else "" }}</td>
                                         <td>{{ row.candidate.ip if row.candidate.ip is not none else "" }}</td>
                                         <td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
-                                        <td>
-                                            {% if row.candidate.is_complete %}
-                                                {{ row.candidate.ownership_percent }}%
-                                            {% else %}
-                                                <span class="recalculate-inline">
-                                                    <span>Recalculate</span>
-                                                    <form method="POST" action="{{ url_for('complete_ninuno') }}">
-                                                        <input type="hidden" name="wallet_address" value="{{ wallet }}">
-                                                        <input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
-                                                        <input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
-                                                        <button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
-                                                    </form>
-                                                </span>
-                                            {% endif %}
-                                        </td>
+                                        <td id="ninuno-{{ row.candidate.token_id }}">
+											{% if row.candidate.is_complete %}
+												{{ row.candidate.ownership_percent }}%
+											{% else %}
+												<span class="recalculate-inline">
+													<span>Recalculate</span>
+													<form method="POST" action="{{ url_for('complete_ninuno') }}">
+														<input type="hidden" name="wallet_address" value="{{ wallet }}">
+														<input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
+														<input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+														<input type="hidden" name="anchor_id" value="ninuno-{{ row.candidate.token_id }}">
+														<button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+													</form>
+												</span>
+											{% endif %}
+										</td>
                                         <td class="action-cell">
                                             <button
                                                 type="button"
@@ -278,10 +280,13 @@
     <div id="compare-modal" class="compare-modal hidden">
         <div class="compare-backdrop" data-close-compare></div>
         <div class="compare-dialog">
-            <div class="compare-header">
-                <h3>Ultimate Match Preview</h3>
-                <button type="button" data-close-compare>Close</button>
-            </div>
+				<div class="compare-header">
+					<h3>Ultimate Match Preview</h3>
+					<div class="match-disclaimer">
+						This ultimate match guide is for reference only. It highlights promising pairings based on current build and stat evaluation, but breeding outcomes are not guaranteed.
+					</div>
+					<button type="button" data-close-compare>Close</button>
+				</div>
             <div id="compare-modal-body" class="compare-body"></div>
         </div>
     </div>
