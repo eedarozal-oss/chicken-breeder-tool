@@ -1,10 +1,65 @@
 from services.database import get_chicken_by_token, upsert_chicken
 from services.metadata_parser import parse_chicken_record
-from services.ronin_api import fetch_chicken_by_token
+from services.ronin_api import fetch_chicken_by_token, fetch_nft_details
 
 
 ROOT_MAX_ID = 11110
 
+def fetch_root_records_in_batch(root_ids, contract_addresses=None):
+    root_ids = [str(root_id).strip() for root_id in (root_ids or []) if str(root_id).strip()]
+    if not root_ids or not contract_addresses:
+        return {}
+
+    result_lookup = {}
+    missing_root_ids = []
+
+    for root_id in root_ids:
+        chicken = get_chicken_by_token(root_id)
+        if chicken:
+            result_lookup[root_id] = chicken
+        else:
+            missing_root_ids.append(root_id)
+
+    if not missing_root_ids:
+        return result_lookup
+
+    candidates = []
+    for root_id in missing_root_ids:
+        for contract in contract_addresses or []:
+            if not contract:
+                continue
+            candidates.append({
+                "tokenId": root_id,
+                "contractAddress": contract,
+                "balance": "1",
+            })
+
+    if not candidates:
+        return result_lookup
+
+    try:
+        items = fetch_nft_details(candidates)
+    except Exception:
+        return result_lookup
+
+    raw_lookup = {}
+    for item in items or []:
+        token_id = str(item.get("tokenId") or "").strip()
+        if token_id and token_id not in raw_lookup:
+            raw_lookup[token_id] = item
+
+    for root_id in missing_root_ids:
+        raw_item = raw_lookup.get(root_id)
+        if not raw_item:
+            continue
+
+        parsed = parse_chicken_record(wallet_address=None, item=raw_item)
+        upsert_chicken(parsed)
+
+        chicken = get_chicken_by_token(root_id)
+        result_lookup[root_id] = chicken or parsed
+
+    return result_lookup
 
 def safe_int(value):
     if value is None or value == "":
@@ -89,23 +144,33 @@ def get_or_fetch_chicken_record(token_id, contract_addresses=None):
     return chicken or parsed
 
 
-def filter_alive_roots(roots, contract_addresses=None):
+def filter_alive_roots(roots, owned_token_ids=None, contract_addresses=None):
     unique_roots = sorted({str(root) for root in (roots or set())}, key=lambda x: int(x))
+    owned_token_ids = {str(token_id) for token_id in (owned_token_ids or set())}
 
     alive_roots = []
     dead_roots = []
     had_lookup_failure = False
+    roots_to_check = []
 
     for root_id in unique_roots:
+        if root_id in owned_token_ids:
+            alive_roots.append(root_id)
+            continue
+
         if not should_check_root_alive_state(root_id):
             alive_roots.append(root_id)
             continue
 
-        try:
-            chicken = get_or_fetch_chicken_record(root_id, contract_addresses=contract_addresses)
-        except Exception:
-            had_lookup_failure = True
-            chicken = None
+        roots_to_check.append(root_id)
+
+    batch_lookup = fetch_root_records_in_batch(
+        roots_to_check,
+        contract_addresses=contract_addresses,
+    )
+
+    for root_id in roots_to_check:
+        chicken = batch_lookup.get(root_id)
 
         if chicken is None:
             had_lookup_failure = True
@@ -221,7 +286,11 @@ def resolve_family_roots_for_token(token_id, chicken_lookup, cache=None, visited
 
 
 def build_family_root_summary(token_id, roots, owned_token_ids, is_complete, contract_addresses=None):
-    filtered = filter_alive_roots(roots, contract_addresses=contract_addresses)
+    filtered = filter_alive_roots(
+        roots,
+        owned_token_ids=owned_token_ids,
+        contract_addresses=contract_addresses,
+    )
 
     alive_roots = filtered["alive_roots"]
     owned_roots = [root for root in alive_roots if root in owned_token_ids]
