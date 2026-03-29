@@ -1,9 +1,26 @@
-from services.database import get_chicken_by_token, upsert_chicken
+from datetime import datetime, timedelta, timezone
+from services.database import (
+    get_chicken_by_token,
+    upsert_chicken,
+    get_family_root_items,
+    upsert_family_root_item,
+)
 from services.metadata_parser import parse_chicken_record
 from services.ronin_api import fetch_chicken_by_token, fetch_nft_details
 
-
 ROOT_MAX_ID = 11110
+
+def is_root_check_stale(last_checked_at, max_age_hours=24):
+    if not last_checked_at:
+        return True
+
+    try:
+        checked_at = datetime.fromisoformat(last_checked_at)
+    except Exception:
+        return True
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    return checked_at <= cutoff
 
 def fetch_root_records_in_batch(root_ids, contract_addresses=None):
     root_ids = [str(root_id).strip() for root_id in (root_ids or []) if str(root_id).strip()]
@@ -74,11 +91,155 @@ def is_family_root(token_id):
     token_num = safe_int(token_id)
     return token_num is not None and token_num <= ROOT_MAX_ID
 
+def build_initial_root_status_map(roots, owned_token_ids):
+    owned_token_ids = {str(token_id) for token_id in (owned_token_ids or set())}
+    now_utc = datetime.now(timezone.utc).isoformat()
+    result = {}
+
+    for root_id in roots or []:
+        root_id = str(root_id).strip()
+        if not root_id:
+            continue
+
+        if root_id in owned_token_ids:
+            result[root_id] = {
+                "root_check_status": "skipped",
+                "is_dead_root": False,
+                "last_checked_at": now_utc,
+            }
+        elif not should_check_root_alive_state(root_id):
+            result[root_id] = {
+                "root_check_status": "skipped",
+                "is_dead_root": False,
+                "last_checked_at": now_utc,
+            }
+        else:
+            result[root_id] = {
+                "root_check_status": "pending",
+                "is_dead_root": False,
+                "last_checked_at": None,
+            }
+
+    return result
+
+def refresh_pending_and_stale_root_items(wallet_address, token_id, root_items, contract_addresses=None, max_age_hours=24):
+    now_utc = datetime.now(timezone.utc).isoformat()
+    roots_to_check = []
+
+    for item in root_items or []:
+        root_id = str(item.get("root_token_id") or "").strip()
+        status = str(item.get("root_check_status") or "").strip().lower()
+        is_owned_root = int(item.get("is_owned_root") or 0)
+
+        if not root_id:
+            continue
+
+        if is_owned_root:
+            continue
+
+        if status == "dead_checked":
+            continue
+
+        if status == "pending":
+            roots_to_check.append(root_id)
+            continue
+
+        if status == "alive_checked" and is_root_check_stale(item.get("last_checked_at"), max_age_hours=max_age_hours):
+            roots_to_check.append(root_id)
+
+    if not roots_to_check:
+        return
+
+    batch_lookup = fetch_root_records_in_batch(
+        roots_to_check,
+        contract_addresses=contract_addresses,
+    )
+
+    for root_id in roots_to_check:
+        chicken = batch_lookup.get(root_id)
+
+        if chicken is None:
+            upsert_family_root_item(
+                wallet_address=wallet_address,
+                token_id=token_id,
+                root_token_id=root_id,
+                root_check_status="pending",
+                is_dead_root=0,
+                last_checked_at=None,
+            )
+            continue
+
+        if is_dead_chicken(chicken):
+            upsert_family_root_item(
+                wallet_address=wallet_address,
+                token_id=token_id,
+                root_token_id=root_id,
+                root_check_status="dead_checked",
+                is_dead_root=1,
+                last_checked_at=now_utc,
+            )
+        else:
+            upsert_family_root_item(
+                wallet_address=wallet_address,
+                token_id=token_id,
+                root_check_status="alive_checked",
+                root_token_id=root_id,
+                is_dead_root=0,
+                last_checked_at=now_utc,
+            )
 
 def should_check_root_alive_state(token_id):
     token_num = safe_int(token_id)
     return token_num is not None and 2222 < token_num < ROOT_MAX_ID
 
+def build_family_root_summary_from_items(token_id, root_items, owned_token_ids):
+    alive_roots = []
+    dead_roots = []
+    pending_root_check_count = 0
+    root_check_target_count = 0
+
+    owned_token_ids = {str(token_id) for token_id in (owned_token_ids or set())}
+
+    for item in root_items or []:
+        root_id = str(item.get("root_token_id") or "").strip()
+        status = str(item.get("root_check_status") or "").strip().lower()
+        is_dead_root = int(item.get("is_dead_root") or 0)
+
+        if not root_id:
+            continue
+
+        if status in {"alive_checked", "pending"}:
+            root_check_target_count += 1
+
+        if status == "dead_checked" or is_dead_root:
+            dead_roots.append(root_id)
+            continue
+
+        if status == "pending":
+            pending_root_check_count += 1
+
+        alive_roots.append(root_id)
+
+    owned_roots = [root for root in alive_roots if root in owned_token_ids]
+
+    total_root_count = len(alive_roots)
+    owned_root_count = len(owned_roots)
+
+    ownership_percent = 0.0
+    if total_root_count > 0:
+        ownership_percent = round((owned_root_count / total_root_count) * 100, 2)
+
+    return {
+        "token_id": str(token_id),
+        "owned_root_count": owned_root_count,
+        "total_root_count": total_root_count,
+        "ownership_percent": ownership_percent,
+        "is_complete": 1 if pending_root_check_count == 0 else 0,
+        "roots": alive_roots,
+        "dead_roots": dead_roots,
+        "root_check_target_count": root_check_target_count,
+        "pending_root_check_count": pending_root_check_count,
+    }
 
 def is_breedable_chicken(chicken):
     if not chicken:
@@ -390,3 +551,59 @@ def resolve_family_roots_for_all(chickens, contract_addresses=None):
         results.append(summary)
 
     return results
+
+def complete_ninuno_via_lineage_with_resume(wallet_address, token_id: str, owned_token_ids, depth: int = 6, max_tokens: int = 60, contract_addresses=None):
+    token_id = str(token_id).strip()
+
+    existing_root_items = get_family_root_items(wallet_address, token_id)
+
+    if existing_root_items:
+        refresh_pending_and_stale_root_items(
+            wallet_address=wallet_address,
+            token_id=token_id,
+            root_items=existing_root_items,
+            contract_addresses=contract_addresses,
+            max_age_hours=24,
+        )
+        refreshed_items = get_family_root_items(wallet_address, token_id)
+        return build_family_root_summary_from_items(
+            token_id=token_id,
+            root_items=refreshed_items,
+            owned_token_ids=owned_token_ids,
+        )
+
+    summary = complete_ninuno_via_lineage(
+        token_id=token_id,
+        owned_token_ids=owned_token_ids,
+        depth=depth,
+        max_tokens=max_tokens,
+        contract_addresses=contract_addresses,
+    )
+
+    root_status_map = build_initial_root_status_map(summary.get("roots", []), owned_token_ids)
+
+    from services.database import insert_family_root_items
+    insert_family_root_items(
+        wallet_address=wallet_address,
+        token_id=token_id,
+        roots=summary.get("roots", []),
+        owned_root_ids=owned_token_ids,
+        root_status_map=root_status_map,
+    )
+
+    stored_items = get_family_root_items(wallet_address, token_id)
+
+    refresh_pending_and_stale_root_items(
+        wallet_address=wallet_address,
+        token_id=token_id,
+        root_items=stored_items,
+        contract_addresses=contract_addresses,
+        max_age_hours=24,
+    )
+
+    final_items = get_family_root_items(wallet_address, token_id)
+    return build_family_root_summary_from_items(
+        token_id=token_id,
+        root_items=final_items,
+        owned_token_ids=owned_token_ids,
+    )
