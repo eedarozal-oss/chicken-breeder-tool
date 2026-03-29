@@ -112,6 +112,8 @@ def init_db():
                 total_root_count INTEGER DEFAULT 0,
                 ownership_percent REAL DEFAULT 0,
                 is_complete INTEGER DEFAULT 0,
+                root_check_target_count INTEGER DEFAULT 0,
+                pending_root_check_count INTEGER DEFAULT 0,
                 last_updated TEXT,
                 PRIMARY KEY (wallet_address, token_id),
                 FOREIGN KEY (token_id) REFERENCES chickens(token_id)
@@ -173,5 +175,8 @@ def init_db():
         ensure_column(conn, "chickens", "recessive_build_repeat_bonus", "INTEGER")
 
         ensure_column(conn, "chickens", "ultimate_type", "TEXT")
+
+        ensure_column(conn, "chicken_family_roots", "root_check_target_count", "INTEGER DEFAULT 0")
+        ensure_column(conn, "chicken_family_roots", "pending_root_check_count", "INTEGER DEFAULT 0")
 
         conn.commit()

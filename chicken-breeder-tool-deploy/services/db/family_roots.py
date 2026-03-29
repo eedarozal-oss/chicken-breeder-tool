@@ -53,6 +53,8 @@ def upsert_family_root_summary(wallet_address: str, summary: dict):
                 total_root_count,
                 ownership_percent,
                 is_complete,
+                root_check_target_count,
+                pending_root_check_count,
                 last_updated
             )
             VALUES (
@@ -62,6 +64,8 @@ def upsert_family_root_summary(wallet_address: str, summary: dict):
                 :total_root_count,
                 :ownership_percent,
                 :is_complete,
+                :root_check_target_count,
+                :pending_root_check_count,
                 :last_updated
             )
             ON CONFLICT(wallet_address, token_id) DO UPDATE SET
@@ -69,6 +73,8 @@ def upsert_family_root_summary(wallet_address: str, summary: dict):
                 total_root_count = excluded.total_root_count,
                 ownership_percent = excluded.ownership_percent,
                 is_complete = excluded.is_complete,
+                root_check_target_count = excluded.root_check_target_count,
+                pending_root_check_count = excluded.pending_root_check_count,
                 last_updated = excluded.last_updated
             """,
             {
@@ -78,6 +84,8 @@ def upsert_family_root_summary(wallet_address: str, summary: dict):
                 "total_root_count": int(summary.get("total_root_count") or 0),
                 "ownership_percent": float(summary.get("ownership_percent") or 0),
                 "is_complete": int(summary.get("is_complete") or 0),
+                "root_check_target_count": int(summary.get("root_check_target_count") or 0),
+                "pending_root_check_count": int(summary.get("pending_root_check_count") or 0),
                 "last_updated": now_utc,
             },
         )
