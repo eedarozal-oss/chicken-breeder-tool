@@ -152,6 +152,7 @@ def filter_alive_roots(roots, owned_token_ids=None, contract_addresses=None):
     dead_roots = []
     had_lookup_failure = False
     roots_to_check = []
+    pending_root_check_count = 0
 
     for root_id in unique_roots:
         if root_id in owned_token_ids:
@@ -174,6 +175,7 @@ def filter_alive_roots(roots, owned_token_ids=None, contract_addresses=None):
 
         if chicken is None:
             had_lookup_failure = True
+            pending_root_check_count += 1
             alive_roots.append(root_id)
             continue
 
@@ -186,6 +188,8 @@ def filter_alive_roots(roots, owned_token_ids=None, contract_addresses=None):
         "alive_roots": alive_roots,
         "dead_roots": dead_roots,
         "had_lookup_failure": had_lookup_failure,
+        "root_check_target_count": len(roots_to_check),
+        "pending_root_check_count": pending_root_check_count,
     }
 
 
@@ -312,6 +316,8 @@ def build_family_root_summary(token_id, roots, owned_token_ids, is_complete, con
         "is_complete": 1 if final_complete else 0,
         "roots": alive_roots,
         "dead_roots": filtered["dead_roots"],
+        "root_check_target_count": filtered.get("root_check_target_count", 0),
+        "pending_root_check_count": filtered.get("pending_root_check_count", 0),
     }
 
 
