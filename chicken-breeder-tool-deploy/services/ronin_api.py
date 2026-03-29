@@ -6,7 +6,6 @@ HEADERS = {
     "Accept": "application/json",
 }
 
-
 def fetch_balances(wallet_address: str, contract_address: str, limit: int = 25):
     offset = 0
     all_items = []
@@ -35,7 +34,7 @@ def fetch_balances(wallet_address: str, contract_address: str, limit: int = 25):
 
     return all_items
 
-def fetch_nft_details(nft_ids: list, batch_size: int = 50):
+def fetch_nft_details(nft_ids: list, batch_size: int = 20):
     if not nft_ids:
         return []
 
