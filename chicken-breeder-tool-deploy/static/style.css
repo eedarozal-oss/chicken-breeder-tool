@@ -560,16 +560,6 @@ body.modal-open {
 
 .ip-available-table table th:first-child,
 .ip-available-table table td:first-child {
-    width: 70px;
-    min-width: 70px;
-    max-width: 70px;
-    white-space: nowrap;
-    padding-left: 6px;
-    padding-right: 6px;
-}
-
-.ip-available-table table th:nth-child(2),
-.ip-available-table table td:nth-child(2) {
     width: 88px;
     max-width: 88px;
     padding-left: 24px;
@@ -1396,4 +1386,32 @@ body.welcome-page {
 
 .selected-auto-match-btn {
     min-width: 160px;
+}
+
+.clickable-row {
+    cursor: pointer;
+}
+
+.clickable-row:hover td {
+    background: #eef6ff !important;
+}
+
+.clickable-row:focus-within td {
+    background: #eef6ff !important;
+}
+
+.details-card-title {
+    margin-top: 0;
+    margin-bottom: 12px;
+    #padding-left: 6px;
+    text-align: center;
+}
+
+.details-section-title {
+    margin: 8px 0 10px;
+    padding-left: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1f2937;
+    text-align: left;
 }

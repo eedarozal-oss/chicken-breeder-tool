@@ -1,9 +1,21 @@
 document.addEventListener("DOMContentLoaded", function () {
     const detailButtons = document.querySelectorAll(".toggle-details-btn");
+    const clickableRows = document.querySelectorAll(".clickable-row");
     const compareModal = document.getElementById("compare-modal");
     const compareModalBody = document.getElementById("compare-modal-body");
     const compareOpenButtons = document.querySelectorAll(".open-compare-btn");
     const compareCloseButtons = document.querySelectorAll("[data-close-compare]");
+
+    function hideAllDetails() {
+        document.querySelectorAll(".details-row").forEach((row) => {
+            row.classList.add("hidden");
+        });
+
+        document.querySelectorAll(".toggle-details-btn").forEach((btn) => {
+            const btnOpenLabel = btn.getAttribute("data-open-label") || "View Details";
+            btn.textContent = btnOpenLabel;
+        });
+    }
 
     detailButtons.forEach((button) => {
         const openLabel = button.getAttribute("data-open-label") || button.textContent.trim();
@@ -16,18 +28,61 @@ document.addEventListener("DOMContentLoaded", function () {
 
             const isHidden = detailsRow.classList.contains("hidden");
 
-            document.querySelectorAll(".details-row").forEach((row) => {
-                row.classList.add("hidden");
-            });
-
-            document.querySelectorAll(".toggle-details-btn").forEach((btn) => {
-                const btnOpenLabel = btn.getAttribute("data-open-label") || "View Details";
-                btn.textContent = btnOpenLabel;
-            });
+            hideAllDetails();
 
             if (isHidden) {
                 detailsRow.classList.remove("hidden");
                 button.textContent = "Hide";
+            } else {
+                button.textContent = openLabel;
+            }
+        });
+    });
+
+    clickableRows.forEach((row) => {
+        row.addEventListener("click", function (event) {
+            if (event.target.closest("a, button, input, select, textarea, label, form")) return;
+
+            if (row.dataset.href) {
+                window.location.href = row.dataset.href;
+                return;
+            }
+
+            if (row.dataset.target) {
+                const detailsRow = document.getElementById(row.dataset.target);
+                if (!detailsRow) return;
+
+                const isHidden = detailsRow.classList.contains("hidden");
+
+                hideAllDetails();
+
+                if (isHidden) {
+                    detailsRow.classList.remove("hidden");
+                }
+            }
+        });
+
+        row.addEventListener("keydown", function (event) {
+            if (event.key !== "Enter" && event.key !== " ") return;
+
+            event.preventDefault();
+
+            if (row.dataset.href) {
+                window.location.href = row.dataset.href;
+                return;
+            }
+
+            if (row.dataset.target) {
+                const detailsRow = document.getElementById(row.dataset.target);
+                if (!detailsRow) return;
+
+                const isHidden = detailsRow.classList.contains("hidden");
+
+                hideAllDetails();
+
+                if (isHidden) {
+                    detailsRow.classList.remove("hidden");
+                }
             }
         });
     });
@@ -70,7 +125,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
-    // Auto-open the first match popup when auto_match=1 is present in the URL
     const urlParams = new URLSearchParams(window.location.search);
     const shouldAutoMatch = (urlParams.get("auto_match") || "").trim().toLowerCase();
 
