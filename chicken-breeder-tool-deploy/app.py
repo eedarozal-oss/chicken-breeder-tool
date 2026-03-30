@@ -1,3 +1,6 @@
+import sqlite3
+from pathlib import Path
+from services.db.connection import DB_PATH
 from flask import Flask, render_template, request, redirect, url_for, session
 import os
 from services.ronin_api import fetch_all_owned_chickens
@@ -21,6 +24,8 @@ from services.database import (
     clear_stale_family_root_summaries,
     upsert_family_root_summary,
     insert_family_root_items,
+    get_static_chickens_by_token_ids,
+    preload_cached_family_roots_for_wallet,
 )
 from services.ultimate_breeding import (
     is_ultimate_eligible,
@@ -57,6 +62,181 @@ init_wallet_access_db()
 
 OWNER_ADMIN_PASSWORD = os.environ.get("OWNER_ADMIN_PASSWORD", "").strip()
 OWNER_WHITELIST_ROUTE = "/owner/grant-access"
+
+STATIC_EXPORT_DB_PATH = DB_PATH.parent / "chicken_static_export.db"
+
+
+def quote_sqlite_identifier(name):
+    return '"' + str(name).replace('"', '""') + '"'
+
+def sync_static_export_tables_to_main_db(source_path=None):
+    source_path = Path(source_path or STATIC_EXPORT_DB_PATH)
+
+    if not source_path.exists():
+        raise FileNotFoundError(f"Static export DB not found: {source_path}")
+
+    synced = []
+
+    with sqlite3.connect(source_path) as source_conn, sqlite3.connect(DB_PATH) as dest_conn:
+        source_conn.row_factory = sqlite3.Row
+        dest_conn.row_factory = sqlite3.Row
+
+        table_rows = source_conn.execute(
+            """
+            SELECT name, sql
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+            """
+        ).fetchall()
+
+        if not table_rows:
+            raise ValueError("No user tables found in the static export DB.")
+
+        for row in table_rows:
+            table_name = str(row["name"] or "").strip()
+            create_sql = row["sql"]
+
+            if not table_name or not create_sql:
+                continue
+
+            quoted_table = quote_sqlite_identifier(table_name)
+
+            dest_conn.execute(f"DROP TABLE IF EXISTS {quoted_table}")
+            dest_conn.execute(create_sql)
+
+            source_rows = source_conn.execute(f"SELECT * FROM {quoted_table}").fetchall()
+
+            if source_rows:
+                column_names = [col[1] for col in source_conn.execute(f"PRAGMA table_info({quoted_table})").fetchall()]
+                quoted_columns = ", ".join(quote_sqlite_identifier(col) for col in column_names)
+                placeholders = ", ".join(["?"] * len(column_names))
+
+                dest_conn.executemany(
+                    f"INSERT INTO {quoted_table} ({quoted_columns}) VALUES ({placeholders})",
+                    [tuple(row[col] for col in column_names) for row in source_rows],
+                )
+
+            index_rows = source_conn.execute(
+                """
+                SELECT sql
+                FROM sqlite_master
+                WHERE type = 'index'
+                  AND tbl_name = ?
+                  AND sql IS NOT NULL
+                ORDER BY name
+                """,
+                (table_name,),
+            ).fetchall()
+
+            for index_row in index_rows:
+                index_sql = index_row["sql"]
+                if index_sql:
+                    try:
+                        dest_conn.execute(index_sql)
+                    except sqlite3.OperationalError:
+                        pass
+
+            row_count = dest_conn.execute(f"SELECT COUNT(*) FROM {quoted_table}").fetchone()[0]
+            synced.append({
+                "table": table_name,
+                "row_count": row_count,
+            })
+
+        dest_conn.commit()
+
+    return synced
+
+STATIC_CHICKEN_CACHE_FIELDS = [
+    "image",
+    "generation_text",
+    "generation_num",
+    "parent_1",
+    "parent_2",
+    "breed_count",
+    "gender",
+    "type",
+    "instinct",
+    "innate_attack",
+    "innate_defense",
+    "innate_speed",
+    "innate_health",
+    "innate_ferocity",
+    "innate_cockrage",
+    "innate_evasion",
+    "beak",
+    "comb",
+    "eyes",
+    "feet",
+    "wings",
+    "tail",
+    "body",
+    "beak_h1",
+    "beak_h2",
+    "beak_h3",
+    "comb_h1",
+    "comb_h2",
+    "comb_h3",
+    "eyes_h1",
+    "eyes_h2",
+    "eyes_h3",
+    "feet_h1",
+    "feet_h2",
+    "feet_h3",
+    "wings_h1",
+    "wings_h2",
+    "wings_h3",
+    "tail_h1",
+    "tail_h2",
+    "tail_h3",
+    "body_h1",
+    "body_h2",
+    "body_h3",
+    "is_dead",
+    "is_egg",
+    "gene_profile_loaded",
+    "recessive_build",
+    "recessive_build_match_count",
+    "recessive_build_match_total",
+    "recessive_build_repeat_bonus",
+]
+
+
+def merge_static_chicken_cache(record, static_row):
+    if not static_row:
+        return record
+
+    for field in STATIC_CHICKEN_CACHE_FIELDS:
+        if field not in static_row:
+            continue
+
+        static_value = static_row.get(field)
+        if static_value is None or static_value == "":
+            continue
+
+        record[field] = static_value
+
+    return record
+
+
+def has_cached_recessive_ready_data(record):
+    return bool(
+        record.get("gene_profile_loaded")
+        or record.get("recessive_build")
+        or any(
+            str(record.get(field) or "").strip()
+            for field in [
+                "beak_h1", "beak_h2", "beak_h3",
+                "comb_h1", "comb_h2", "comb_h3",
+                "eyes_h1", "eyes_h2", "eyes_h3",
+                "feet_h1", "feet_h2", "feet_h3",
+                "wings_h1", "wings_h2", "wings_h3",
+                "tail_h1", "tail_h2", "tail_h3",
+                "body_h1", "body_h2", "body_h3",
+            ]
+        )
+    )
 
 ITEM_IMAGE_URLS = {
     "Soulknot": "https://app.chickensaga.com/images/crafting/SOULKNOT.webp",
@@ -102,7 +282,13 @@ def sync_wallet_data(wallet):
     raw_items = fetch_all_owned_chickens(wallet, CONTRACTS)
     parsed_records = [parse_chicken_record(wallet, item) for item in raw_items]
 
+    static_lookup = get_static_chickens_by_token_ids([row.get("token_id") for row in parsed_records])
+    cached_recessive_candidates = []
+
     for record in parsed_records:
+        token_id = str(record.get("token_id") or "").strip()
+        merge_static_chicken_cache(record, static_lookup.get(token_id))
+
         primary_build_data = classify_primary_build(record)
         record.update({
             "primary_build": primary_build_data.get("primary_build"),
@@ -110,9 +296,26 @@ def sync_wallet_data(wallet):
             "primary_build_match_total": primary_build_data.get("primary_build_match_total"),
             "ultimate_type": primary_build_data.get("ultimate_type"),
         })
+
         upsert_chicken(record)
 
+        if has_cached_recessive_ready_data(record):
+            cached_recessive_candidates.append(dict(record))
+
+    if cached_recessive_candidates:
+        try:
+            enriched_records = enrich_chicken_records(cached_recessive_candidates)
+            for enriched in enriched_records or []:
+                upsert_chicken(enriched)
+        except Exception:
+            pass
+
     chickens = get_chickens_by_wallet(wallet)
+
+    preload_cached_family_roots_for_wallet(
+        chickens=chickens,
+        wallet_address=wallet,
+    )
 
     initialize_simple_family_roots_for_wallet(
         chickens=chickens,
@@ -966,12 +1169,14 @@ def index():
 
 @app.route(OWNER_WHITELIST_ROUTE, methods=["GET", "POST"])
 def owner_grant_access_page():
+    action = request.values.get("action", "grant_access").strip()
     wallet = request.values.get("wallet_address", "").strip().lower()
     wallet_password = request.values.get("wallet_password", "").strip()
     owner_password = request.values.get("owner_password", "").strip()
     duration_days = request.values.get("duration_days", "").strip()
     error = None
     success = None
+    sync_results = []
 
     if request.method == "POST":
         parsed_days = safe_int(duration_days)
@@ -980,28 +1185,43 @@ def owner_grant_access_page():
             error = "Owner admin password is not configured on the server."
         elif owner_password != OWNER_ADMIN_PASSWORD:
             error = "Invalid owner password."
-        elif not wallet:
-            error = "Enter a wallet address."
-        elif not is_valid_wallet(wallet):
-            error = "Enter a valid 0x wallet address."
-        elif wallet_password.lower() != wallet[-8:]:
-            error = "Wallet password must match the last 8 characters of the wallet address."
-        elif parsed_days is None or parsed_days <= 0:
-            error = "Duration must be a whole number greater than 0."
-        else:
+        elif action == "sync_static_cache":
             try:
-                grant_manual_access(
-                    wallet=wallet,
-                    notes=f"Owner manual grant for {parsed_days} day(s)",
-                    duration_days=parsed_days,
-                )
-                expiry_display = get_wallet_access_expiry_display(wallet)
-                success = f"Access granted to {wallet} for {parsed_days} day(s). Active until {expiry_display}."
-                wallet_password = ""
-                duration_days = ""
+                sync_results = sync_static_export_tables_to_main_db()
+                if sync_results:
+                    table_summary = ", ".join(
+                        f"{row['table']} ({row['row_count']} rows)"
+                        for row in sync_results
+                    )
+                    success = f"Static cache sync completed: {table_summary}."
+                else:
+                    success = "Static cache sync completed, but no tables were copied."
                 owner_password = ""
             except Exception as exc:
-                error = f"Failed to grant access: {exc}"
+                error = f"Failed to sync static cache DB: {exc}"
+        else:
+            if not wallet:
+                error = "Enter a wallet address."
+            elif not is_valid_wallet(wallet):
+                error = "Enter a valid 0x wallet address."
+            elif wallet_password.lower() != wallet[-8:]:
+                error = "Wallet password must match the last 8 characters of the wallet address."
+            elif parsed_days is None or parsed_days <= 0:
+                error = "Duration must be a whole number greater than 0."
+            else:
+                try:
+                    grant_manual_access(
+                        wallet=wallet,
+                        notes=f"Owner manual grant for {parsed_days} day(s)",
+                        duration_days=parsed_days,
+                    )
+                    expiry_display = get_wallet_access_expiry_display(wallet)
+                    success = f"Access granted to {wallet} for {parsed_days} day(s). Active until {expiry_display}."
+                    wallet_password = ""
+                    duration_days = ""
+                    owner_password = ""
+                except Exception as exc:
+                    error = f"Failed to grant access: {exc}"
 
     return render_template(
         "admin_whitelist.html",
@@ -1011,6 +1231,7 @@ def owner_grant_access_page():
         owner_password=owner_password,
         error=error,
         success=success,
+        sync_results=sync_results,
     )
 
 
@@ -1131,7 +1352,7 @@ def match_ip_page():
                         and row.get("evaluation", {}).get("is_breed_count_recommended")
                         and pair_has_usable_ip_items(source, row.get("candidate"))
                     ]
-
+                    
                     if matches:
                         top_match = matches[0]
                         ranked_sources.append({
