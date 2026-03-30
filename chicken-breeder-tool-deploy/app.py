@@ -58,6 +58,29 @@ init_wallet_access_db()
 OWNER_ADMIN_PASSWORD = os.environ.get("OWNER_ADMIN_PASSWORD", "").strip()
 OWNER_WHITELIST_ROUTE = "/owner/grant-access"
 
+ITEM_IMAGE_URLS = {
+    "Soulknot": "https://app.chickensaga.com/images/crafting/SOULKNOT.webp",
+    "Gregor's Gift": "https://app.chickensaga.com/images/crafting/GREGOR%27S%20GIFT.webp",
+    "Mendel's Memento": "https://app.chickensaga.com/images/crafting/MENDEL%27S%20MEMENTO.webp",
+    "Quentin's Talon": "https://app.chickensaga.com/images/crafting/QUENTIN%27S%20TALON.webp",
+    "Dragon's Whip": "https://app.chickensaga.com/images/crafting/DRAGON%27S%20WHIP.webp",
+    "Chibidei's Curse": "https://app.chickensaga.com/images/crafting/CHIBIDEI%27S%20CURSE.webp",
+    "All-seeing Seed": "https://app.chickensaga.com/images/crafting/ALL-SEEING%20SEED.webp",
+    "Chim Lac's Curio": "https://app.chickensaga.com/images/crafting/CHIM%20LAC%27S%20CURIO.webp",
+    "Suave Scissors": "https://app.chickensaga.com/images/crafting/SUAVE%20SCISSORS.webp",
+    "Simurgh's Sovereign": "https://app.chickensaga.com/images/crafting/SIMURGH%27S%20SOVEREIGN.webp",
+    "St. Elmo's Fire": "https://app.chickensaga.com/images/crafting/ST%20ELMO%27S%20FIRE.webp",
+    "Cocktail's Beak": "https://app.chickensaga.com/images/crafting/DIP%27S%20BEAK.webp",
+    "Pos2 Pellet": "https://app.chickensaga.com/images/crafting/POS2%27S%20PELLET.webp",
+    "Fetzzz Feet": "https://app.chickensaga.com/images/crafting/FETZZZ%20FEET.webp",
+    "Vananderen's Vitality": "https://app.chickensaga.com/images/crafting/VANANDEREN%27S%20VITALITY.webp",
+    "Pinong's Bird": "https://app.chickensaga.com/images/crafting/PINONG%27S%20BIRD.webp",
+    "Ouchie's Ornament": "https://app.chickensaga.com/images/crafting/OUCHIE%27S%20ORNAMENT.webp",
+    "Lockedin State": "https://app.chickensaga.com/images/crafting/LOCKEDIN%20STATE.webp",
+}
+
+def get_item_image_url(item_name):
+    return ITEM_IMAGE_URLS.get(str(item_name or "").strip(), "")
 
 def is_breedable(chicken):
     return (not chicken.get("is_egg")) and str(chicken.get("state") or "").strip().lower() == "normal"
@@ -672,6 +695,7 @@ def inject_breeding_item_helpers():
         "get_gene_item_candidates": get_gene_item_candidates,
         "get_ultimate_item_candidates": get_ultimate_item_candidates,
         "resolve_pair_item_recommendations": resolve_pair_item_recommendations,
+        "get_item_image_url": get_item_image_url,
     }
 
 
@@ -1163,6 +1187,14 @@ def match_ip_page():
                     settings=MATCH_SETTINGS,
                 )
 
+                if auto_match:
+                    potential_matches = [
+                        row for row in potential_matches
+                        if row.get("evaluation", {}).get("is_ip_recommended")
+                        and row.get("evaluation", {}).get("is_breed_count_recommended")
+                        and pair_has_usable_ip_items(selected_chicken, row.get("candidate"))
+                    ]
+
         except Exception as exc:
             error = f"Failed to load IP breeding matches: {exc}"
 
@@ -1499,7 +1531,7 @@ def match_ultimate_page():
                     None,
                 )
 
-            if auto_match:
+            if auto_match and not selected_token_id:
                 selected_chicken, potential_matches = pick_best_ultimate_auto_match(breedable_chickens)
                 if selected_chicken:
                     selected_token_id = str(selected_chicken.get("token_id") or "")
