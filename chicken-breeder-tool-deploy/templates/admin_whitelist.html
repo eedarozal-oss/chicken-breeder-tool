@@ -86,6 +86,59 @@
                 </div>
             </form>
         </div>
+
+        <div class="panel" style="max-width: 720px; margin: 20px auto 0 auto;">
+            <h2>Sync Static Cache Tables</h2>
+            <p class="page-description" style="margin-bottom: 14px;">
+                Copy all user tables from <strong>{{ static_export_db_path }}</strong> into the main data DB so they are available to the app flow.
+            </p>
+
+            <form method="POST" class="filter-form">
+                <input type="hidden" name="action" value="sync_static_cache">
+
+                <div class="filter-grid" style="grid-template-columns: 1fr;">
+                    <div>
+                        <label for="sync_owner_password"><strong>Owner Password</strong></label>
+                        <input
+                            type="password"
+                            id="sync_owner_password"
+                            name="owner_password"
+                            value="{{ owner_password or '' }}"
+                            autocomplete="off"
+                            required
+                        >
+                    </div>
+
+                    <div class="filter-actions-group">
+                        <button type="submit">Sync Static Cache to data.db</button>
+                    </div>
+                </div>
+            </form>
+
+            {% if sync_results %}
+                <div class="panel" style="margin-top: 16px; margin-bottom: 0;">
+                    <h3>Last Sync Result</h3>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Table</th>
+                                    <th>Rows Copied</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in sync_results %}
+                                    <tr>
+                                        <td>{{ row.table }}</td>
+                                        <td>{{ row.row_count }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
     </div>
 </body>
 </html>
