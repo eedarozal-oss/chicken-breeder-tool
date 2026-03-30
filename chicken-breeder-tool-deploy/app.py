@@ -1131,13 +1131,6 @@ def match_ip_page():
                         and row.get("evaluation", {}).get("is_breed_count_recommended")
                         and pair_has_usable_ip_items(source, row.get("candidate"))
                     ]
-                    
-                    matches = [
-                        row for row in matches
-                        if row.get("evaluation", {}).get("is_ip_recommended")
-                        and row.get("evaluation", {}).get("is_breed_count_recommended")
-                        and pair_has_usable_ip_items(source, row.get("candidate"))
-                    ]
 
                     if matches:
                         top_match = matches[0]
@@ -1209,6 +1202,11 @@ def match_ip_page():
         ip_diff=ip_diff,
         ninuno_100_only=ninuno_100_only,
         auto_match=auto_match,
+        auto_open_template_id=(
+            ""
+            if skip_auto_open
+            else (f"compare-ip-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else "")
+        ),
         error=error,
     )
 
