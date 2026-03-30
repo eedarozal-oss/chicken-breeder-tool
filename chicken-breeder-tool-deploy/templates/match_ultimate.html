@@ -16,7 +16,12 @@
                 </p>
             </div>
             <div class="topbar-actions">
-                <a class="link-btn secondary-link-btn" href="{{ url_for('match_ultimate_page', wallet_address=wallet, auto_match=1) }}">Auto-Match</a>
+                <a
+					class="link-btn secondary-link-btn"
+					href="{{ url_for('match_ultimate_page', wallet_address=wallet, selected_token_id=selected_token_id or None, auto_match=1) }}"
+				>
+					Auto-Match
+				</a>
                 <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
             </div>
         </div>
@@ -95,16 +100,25 @@
         <div class="match-layout">
             <div class="panel" id="selected-chicken">
                 {% if selected_chicken %}
-                    <h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
+                    <div class="selected-chicken-header">
+						<h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
+						<a
+							class="selected-chicken-clear-btn"
+							href="{{ url_for('match_ultimate_page', wallet_address=wallet) }}"
+							title="Clear selected chicken"
+						>
+							×
+						</a>
+					</div>
 
-        <div class="selected-chicken-media-wrap">
-    		<img
-        		src="{{ selected_chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ selected_chicken.token_id ~ '.png') }}"
-        		alt="Chicken {{ selected_chicken.token_id }}"
-        		class="selected-chicken-image face-right"
-      	  		loading="lazy"
-    		>
-	</div>
+					<div class="selected-chicken-media-wrap">
+						<img
+							src="{{ selected_chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ selected_chicken.token_id ~ '.png') }}"
+							alt="Chicken {{ selected_chicken.token_id }}"
+							class="selected-chicken-image face-right"
+							loading="lazy"
+						>
+					</div>
 
                     <div class="selected-chicken-summary-grid">
                         <div><strong>Ultimate Type:</strong> {{ selected_chicken.ultimate_type_display or "" }}</div>
@@ -171,6 +185,15 @@
                         <div><strong>Innate Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
                         <div><strong>Innate Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
                     </div>
+					
+					<div class="selected-chicken-actions">
+						<a
+							class="link-btn selected-auto-match-btn"
+							href="{{ url_for('match_ultimate_page', wallet_address=wallet, selected_token_id=selected_chicken.token_id, auto_match=1) }}"
+						>
+							Auto Match
+						</a>
+					</div>
                 {% else %}
                     <h2 class="selected-chicken-title">Selected Chicken</h2>
                     <p>Select a chicken from the available list.</p>
@@ -371,11 +394,19 @@
                         <div><strong>Innate Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
                     </div>
 
-                    <div class="compare-item-box">
-                        <div class="compare-item-label">Recommended Item</div>
-                        <div class="compare-item-name">{{ selected_item.name }}</div>
-                        <div class="compare-item-reason">{{ selected_item.reason }}</div>
-                    </div>
+					<div class="compare-item-box">
+						<div class="compare-item-label">Recommended Item</div>
+						{% set item_image = get_item_image_url(selected_item.name) %}
+						<div class="compare-item-inline">
+							{% if item_image %}
+								<img src="{{ item_image }}" alt="{{ selected_item.name }}" class="compare-item-image">
+							{% endif %}
+							<div class="compare-item-text">
+								<div class="compare-item-name">{{ selected_item.name }}</div>
+								<div class="compare-item-reason">{{ selected_item.reason }}</div>
+							</div>
+						</div>
+					</div>
                 </div>
 
                 <div class="compare-card">
@@ -412,11 +443,19 @@
                         <div><strong>Innate Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
                     </div>
 
-                    <div class="compare-item-box">
-                        <div class="compare-item-label">Recommended Item</div>
-                        <div class="compare-item-name">{{ candidate_item.name }}</div>
-                        <div class="compare-item-reason">{{ candidate_item.reason }}</div>
-                    </div>
+					<div class="compare-item-box">
+						<div class="compare-item-label">Recommended Item</div>
+						{% set item_image = get_item_image_url(candidate_item.name) %}
+						<div class="compare-item-inline">
+							{% if item_image %}
+								<img src="{{ item_image }}" alt="{{ candidate_item.name }}" class="compare-item-image">
+							{% endif %}
+							<div class="compare-item-text">
+								<div class="compare-item-name">{{ candidate_item.name }}</div>
+								<div class="compare-item-reason">{{ candidate_item.reason }}</div>
+							</div>
+						</div>
+					</div>
                 </div>
             </div>
         </template>

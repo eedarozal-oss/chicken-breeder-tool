@@ -15,24 +15,26 @@
                 class="welcome-hero-image"
             >
 
-            <form method="POST" class="welcome-wallet-form">
-                <input
-                    type="text"
-                    name="wallet_address"
-                    placeholder="Enter wallet address"
-                    value="{{ wallet or '' }}"
-                    required
-                >
-                <button type="submit">Load Wallet</button>
+			<form method="POST" class="welcome-wallet-form">
+				<div class="wallet-input-shell">
+					<input
+						type="text"
+						name="wallet_address"
+						placeholder="Enter wallet address"
+						value="{{ wallet or '' }}"
+						required
+					>
+					<button type="submit">Load Wallet</button>
+				</div>
 
-		{% if success %}
-   	    		<div class="welcome-success">{{ success }}</div>
-		{% endif %}
-        
-		{% if error %}
-            		<div class="welcome-error">{{ error }}</div>
-        	{% endif %}
-            </form>
+				{% if success %}
+					<div class="welcome-success">{{ success }}</div>
+				{% endif %}
+
+				{% if error %}
+					<div class="welcome-error">{{ error }}</div>
+				{% endif %}
+			</form>
         </div>
     </div>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
