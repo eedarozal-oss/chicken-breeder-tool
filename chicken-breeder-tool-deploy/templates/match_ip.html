@@ -94,27 +94,22 @@
                 <div class="table-wrap limited-table ip-available-table">
                     <table>
                         <thead>
-                            <tr>
-                                <th></th>
-                                <th>Chicken ID</th>
-                                <th>IP</th>
-                                <th>Instinct</th>
-				<th>Generation</th>
-                                <th>Breed Count</th>
-                                <th>Ninuno %</th>
-                            </tr>
+							<tr>
+								<th>Chicken ID</th>
+								<th>IP</th>
+								<th>Instinct</th>
+								<th>Generation</th>
+								<th>Breed Count</th>
+								<th>Ninuno %</th>
+							</tr>
                         </thead>
                         <tbody>
                             {% for chicken in breedable_chickens %}
-                            <tr>
-                                <td class="action-cell">
-                                    <a
-                                        class="link-btn compact-action-btn"
-                                        href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=chicken.token_id, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0) }}#selected-chicken"
-                                    >
-                                        Select
-                                    </a>
-                                </td>
+							<tr
+								class="clickable-row"
+								data-href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=chicken.token_id, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0) }}#selected-chicken"
+								tabindex="0"
+							>
                                 <td>
                                     <div class="chicken-id-card compact-id-card">
                                         <img
@@ -256,29 +251,32 @@
                         <div class="table-wrap">
                             <table>
                                 <thead>
-                                    <tr>
-                                        <th></th>
-                                        <th>Chicken ID</th>
-                                        <th>IP</th>
-                                        <th>IP Diff</th>
-                                        <th>Breed Count</th>
-                                        <th>Ninuno %</th>
-                                        <th>Warnings</th>
-                                        <th>View Stat</th>
-                                    </tr>
+									<tr>
+										<th></th>
+										<th>Chicken ID</th>
+										<th>IP</th>
+										<th>IP Diff</th>
+										<th>Breed Count</th>
+										<th>Ninuno %</th>
+										<th>Warnings</th>
+									</tr>
                                 </thead>
                                 <tbody>
                                     {% for row in potential_matches %}
-                                    <tr>
+                                    <tr
+										class="clickable-row"
+										data-target="ip-details-{{ row.candidate.token_id }}"
+										tabindex="0"
+									>
                                         <td class="action-cell">
-    						<button
-        							type="button"
-        							class="open-compare-btn"
-       							data-template-id="compare-ip-{{ row.candidate.token_id }}"
-   						 	>
-      						  	Match
-    						</button>
-					</td>
+											<button
+													type="button"
+													class="open-compare-btn"
+												data-template-id="compare-ip-{{ row.candidate.token_id }}"
+											>
+												Match
+											</button>
+										</td>
                                         <td>
                                             <div class="chicken-id-card compact-id-card">
                                                 <img
@@ -331,19 +329,9 @@
                                                 OK
                                             {% endif %}
                                         </td>
-                                        <td>
-                                            <button
-                                                type="button"
-                                                class="toggle-details-btn"
-                                                data-target="ip-details-{{ row.candidate.token_id }}"
-						data-open-label="View Stat"
-                                            >
-                                                View Stat
-                                            </button>
-                                        </td>
                                     </tr>
                                     <tr id="ip-details-{{ row.candidate.token_id }}" class="details-row hidden">
-                                        <td colspan="8">
+                                        <td colspan="7">
                                             <div class="details-card">
                                                 <h3>Chicken {{ row.candidate.token_id }} Full Innate Stats</h3>
                                                 <div class="stats-grid">
@@ -485,6 +473,23 @@
     {% endfor %}
 </div>
 {% endif %}
+	<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		document.querySelectorAll(".clickable-row[data-href]").forEach(function (row) {
+			row.addEventListener("click", function (event) {
+				if (event.target.closest("a, button, input, select, textarea, label, form")) return;
+				window.location.href = row.dataset.href;
+			});
+
+			row.addEventListener("keydown", function (event) {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					window.location.href = row.dataset.href;
+				}
+			});
+		});
+	});
+	</script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

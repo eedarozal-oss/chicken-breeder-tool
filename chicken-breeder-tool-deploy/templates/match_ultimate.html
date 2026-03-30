@@ -36,29 +36,24 @@
                 <div class="table-wrap limited-table ip-available-table">
                     <table>
                         <thead>
-                            <tr>
-                                <th></th>
-                                <th>Chicken ID</th>
-                                <th>Ultimate Type</th>
-                                <th>Build</th>
-                                <th>Build Match</th>
-                                <th>IP</th>
-                                <th>Generation</th>
-                                <th>Breed Count</th>
-                                <th>Ninuno %</th>
-                            </tr>
+							<tr>
+								<th>Chicken ID</th>
+								<th>Ultimate Type</th>
+								<th>Build</th>
+								<th>Build Match</th>
+								<th>IP</th>
+								<th>Generation</th>
+								<th>Breed Count</th>
+								<th>Ninuno %</th>
+							</tr>
                         </thead>
                         <tbody>
                             {% for chicken in breedable_chickens %}
-                            <tr>
-                                <td class="action-cell">
-                                    <a
-                                        class="link-btn compact-action-btn"
-                                        href="{{ url_for('match_ultimate_page', wallet_address=wallet, selected_token_id=chicken.token_id) }}#selected-chicken"
-                                    >
-                                        Select
-                                    </a>
-                                </td>
+							<tr
+								class="clickable-row"
+								data-href="{{ url_for('match_ultimate_page', wallet_address=wallet, selected_token_id=chicken.token_id) }}#selected-chicken"
+								tabindex="0"
+							>
                                 <td>
                                     <div class="chicken-id-card compact-id-card">
                                         <img
@@ -208,22 +203,25 @@
                         <div class="table-wrap">
                             <table>
                                 <thead>
-                                    <tr>
-                                        <th></th>
-                                        <th>Chicken ID</th>
-                                        <th>Ultimate Type</th>
-                                        <th>Build</th>
-                                        <th>Build Match</th>
-                                        <th>Build Complement</th>
-                                        <th>IP</th>
-                                        <th>Breed Count</th>
-                                        <th>Ninuno %</th>
-                                        <th></th>
-                                    </tr>
+									<tr>
+										<th></th>
+										<th>Chicken ID</th>
+										<th>Ultimate Type</th>
+										<th>Build</th>
+										<th>Build Match</th>
+										<th>Build Complement</th>
+										<th>IP</th>
+										<th>Breed Count</th>
+										<th>Ninuno %</th>
+									</tr>
                                 </thead>
                                 <tbody>
                                     {% for row in potential_matches %}
-                                    <tr>
+                                    <tr
+										class="clickable-row"
+										data-target="ultimate-details-{{ row.candidate.token_id }}"
+										tabindex="0"
+									>
                                         <td class="action-cell">
                                             <button
                                                 type="button"
@@ -281,46 +279,38 @@
 												</span>
 											{% endif %}
 										</td>
-                                        <td class="action-cell">
-                                            <button
-                                                type="button"
-                                                class="toggle-details-btn"
-                                                data-target="ultimate-details-{{ row.candidate.token_id }}"
-                                                data-open-label="View Details"
-                                            >
-                                                View Details
-                                            </button>
-                                        </td>
                                     </tr>
                                     <tr id="ultimate-details-{{ row.candidate.token_id }}" class="details-row hidden">
-                                        <td colspan="10">
-                                            <div class="details-card">
-                                                <h3>Chicken {{ row.candidate.token_id }} Details</h3>
+										<td colspan="9">
+											<div class="details-card">
+												<h3 class="details-card-title">Chicken {{ row.candidate.token_id }} Details</h3>
 
-                                                <div class="stats-grid">
-                                                    <div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
-                                                    <div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
-                                                    <div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
-                                                    <div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
-                                                    <div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
-                                                    <div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
-                                                    <div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
-                                                    <div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
-                                                </div>
+												<div class="details-section-title">Traits:</div>
+												<div class="stats-grid">
+													<div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
+													<div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
+													<div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
+													<div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
+													<div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
+													<div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
+													<div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
+													<div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
+												</div>
 
-                                                <hr>
+												<hr>
 
-                                                <div class="stats-grid">
-                                                    <div><strong>Innate Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
-                                                    <div><strong>Innate Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
-                                                    <div><strong>Innate Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
-                                                    <div><strong>Innate Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
-                                                    <div><strong>Innate Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
-                                                    <div><strong>Innate Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
-                                                    <div><strong>Innate Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
-                                                </div>
-                                            </div>
-                                        </td>
+												<div class="details-section-title">Stats:</div>
+												<div class="stats-grid">
+													<div><strong>Innate Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
+													<div><strong>Innate Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
+													<div><strong>Innate Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
+													<div><strong>Innate Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
+													<div><strong>Innate Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
+													<div><strong>Innate Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
+													<div><strong>Innate Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
+												</div>
+											</div>
+										</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -462,7 +452,23 @@
         {% endfor %}
     </div>
     {% endif %}
+	<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		document.querySelectorAll(".clickable-row[data-href]").forEach(function (row) {
+			row.addEventListener("click", function (event) {
+				if (event.target.closest("a, button, input, select, textarea, label, form")) return;
+				window.location.href = row.dataset.href;
+			});
 
+			row.addEventListener("keydown", function (event) {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					window.location.href = row.dataset.href;
+				}
+			});
+		});
+	});
+	</script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
