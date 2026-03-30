@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const compareModalBody = document.getElementById("compare-modal-body");
     const compareOpenButtons = document.querySelectorAll(".open-compare-btn");
     const compareCloseButtons = document.querySelectorAll("[data-close-compare]");
+    const autoOpenTemplateId = (document.body?.dataset?.autoOpenTemplateId || "").trim();
 
     function hideAllDetails() {
         document.querySelectorAll(".details-row").forEach((row) => {
@@ -125,17 +126,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const shouldAutoMatch = (urlParams.get("auto_match") || "").trim().toLowerCase();
-
-    if (["1", "true", "yes", "on"].includes(shouldAutoMatch)) {
-        const firstCompareButton = document.querySelector(".open-compare-btn");
-
-        if (firstCompareButton) {
-            const templateId = firstCompareButton.getAttribute("data-template-id");
-            if (templateId) {
-                openCompareModal(templateId);
-            }
-        }
+    if (autoOpenTemplateId) {
+        openCompareModal(autoOpenTemplateId);
     }
 });
