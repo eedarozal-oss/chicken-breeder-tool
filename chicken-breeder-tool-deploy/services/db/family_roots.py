@@ -63,6 +63,215 @@ def clear_family_roots_for_token(wallet_address: str, token_id: str):
         conn.commit()
 
 
+def get_cached_ninuno_roots_by_token_ids(token_ids):
+    token_ids = [str(token_id).strip() for token_id in (token_ids or []) if str(token_id).strip()]
+    if not token_ids:
+        return {}
+
+    placeholders = ",".join(["?"] * len(token_ids))
+
+    with get_connection() as conn:
+        roots_table_exists = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'chicken_ninuno_roots'
+            """
+        ).fetchone()
+
+        if not roots_table_exists:
+            return {}
+
+        static_table_exists = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'chicken_static'
+            """
+        ).fetchone()
+
+        if static_table_exists:
+            rows = conn.execute(
+                f"""
+                SELECT
+                    nr.token_id,
+                    nr.root_token_id,
+                    nr.is_complete,
+                    COALESCE(cs.is_dead, 0) AS root_is_dead
+                FROM chicken_ninuno_roots nr
+                LEFT JOIN chicken_static cs
+                    ON cs.token_id = nr.root_token_id
+                WHERE nr.token_id IN ({placeholders})
+                ORDER BY CAST(nr.token_id AS INTEGER), CAST(nr.root_token_id AS INTEGER)
+                """,
+                token_ids,
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"""
+                SELECT
+                    nr.token_id,
+                    nr.root_token_id,
+                    nr.is_complete,
+                    0 AS root_is_dead
+                FROM chicken_ninuno_roots nr
+                WHERE nr.token_id IN ({placeholders})
+                ORDER BY CAST(nr.token_id AS INTEGER), CAST(nr.root_token_id AS INTEGER)
+                """,
+                token_ids,
+            ).fetchall()
+
+    grouped = {}
+    for row in rows:
+        token_id = str(row["token_id"] or "").strip()
+        if not token_id:
+            continue
+        grouped.setdefault(token_id, []).append(dict(row))
+
+    return grouped
+
+def build_family_root_summary_from_items(token_id, root_items, owned_token_ids):
+    alive_roots = []
+    dead_roots = []
+    pending_root_check_count = 0
+    root_check_target_count = 0
+
+    owned_token_ids = {str(token_id) for token_id in (owned_token_ids or set())}
+
+    for item in root_items or []:
+        root_id = str(item.get("root_token_id") or "").strip()
+        status = str(item.get("root_check_status") or "").strip().lower()
+        is_dead_root = int(item.get("is_dead_root") or 0)
+
+        if not root_id:
+            continue
+
+        if status in {"alive_checked", "pending"}:
+            root_check_target_count += 1
+
+        if status == "dead_checked" or is_dead_root:
+            dead_roots.append(root_id)
+            continue
+
+        if status == "pending":
+            pending_root_check_count += 1
+
+        alive_roots.append(root_id)
+
+    owned_roots = [root for root in alive_roots if root in owned_token_ids]
+
+    total_root_count = len(alive_roots)
+    owned_root_count = len(owned_roots)
+
+    ownership_percent = 0.0
+    if total_root_count > 0:
+        ownership_percent = round((owned_root_count / total_root_count) * 100, 2)
+
+    return {
+        "token_id": str(token_id),
+        "owned_root_count": owned_root_count,
+        "total_root_count": total_root_count,
+        "ownership_percent": ownership_percent,
+        "is_complete": 1 if pending_root_check_count == 0 else 0,
+        "roots": alive_roots,
+        "dead_roots": dead_roots,
+        "root_check_target_count": root_check_target_count,
+        "pending_root_check_count": pending_root_check_count,
+    }
+
+def preload_cached_family_roots_for_wallet(chickens, wallet_address):
+    chickens = chickens or []
+    owned_token_ids = {
+        str(row.get("token_id") or "").strip()
+        for row in chickens
+        if str(row.get("token_id") or "").strip()
+    }
+    breedable = [
+        row for row in chickens
+        if not row.get("is_egg") and str(row.get("state") or "").strip().lower() == "normal"
+    ]
+    token_ids = [
+        str(row.get("token_id") or "").strip()
+        for row in breedable
+        if str(row.get("token_id") or "").strip()
+    ]
+
+    cached_lookup = get_cached_ninuno_roots_by_token_ids(token_ids)
+    if not cached_lookup:
+        return {"loaded": 0, "tokens": []}
+
+    now_utc = datetime.now(timezone.utc).isoformat()
+    loaded_tokens = []
+
+    for token_id in token_ids:
+        cached_rows = cached_lookup.get(token_id) or []
+        if not cached_rows:
+            continue
+
+        root_ids = []
+        root_status_map = {}
+        token_is_complete = True
+
+        for row in cached_rows:
+            root_id = str(row.get("root_token_id") or "").strip()
+            if not root_id:
+                continue
+
+            if root_id not in root_ids:
+                root_ids.append(root_id)
+
+            row_is_complete = int(row.get("is_complete") or 0)
+            if row_is_complete != 1:
+                token_is_complete = False
+
+            if root_id in owned_token_ids:
+                root_status_map[root_id] = {
+                    "root_check_status": "skipped",
+                    "is_dead_root": False,
+                    "last_checked_at": now_utc,
+                }
+            elif int(row.get("root_is_dead") or 0):
+                root_status_map[root_id] = {
+                    "root_check_status": "dead_checked",
+                    "is_dead_root": True,
+                    "last_checked_at": now_utc,
+                }
+            else:
+                root_status_map[root_id] = {
+                    "root_check_status": "alive_checked",
+                    "is_dead_root": False,
+                    "last_checked_at": now_utc,
+                }
+
+        if not root_ids:
+            continue
+
+        insert_family_root_items(
+            wallet_address=wallet_address,
+            token_id=token_id,
+            roots=root_ids,
+            owned_root_ids=owned_token_ids,
+            root_status_map=root_status_map,
+        )
+
+        stored_items = get_family_root_items(wallet_address, token_id)
+        summary = build_family_root_summary_from_items(
+            token_id=token_id,
+            root_items=stored_items,
+            owned_token_ids=owned_token_ids,
+        )
+
+        if not token_is_complete:
+            summary["is_complete"] = 0
+
+        upsert_family_root_summary(wallet_address, summary)
+        loaded_tokens.append(token_id)
+
+    return {
+        "loaded": len(loaded_tokens),
+        "tokens": loaded_tokens,
+    }
+
 def upsert_family_root_summary(wallet_address: str, summary: dict):
     now_utc = datetime.now(timezone.utc).isoformat()
 
@@ -168,7 +377,6 @@ def insert_family_root_items(
             root_rows,
         )
         conn.commit()
-
 
 def get_family_root_items(wallet_address: str, token_id: str):
     with get_connection() as conn:

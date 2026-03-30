@@ -388,3 +388,34 @@ def get_chickens_by_wallet(wallet_address: str):
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def get_static_chickens_by_token_ids(token_ids):
+    token_ids = [str(token_id).strip() for token_id in (token_ids or []) if str(token_id).strip()]
+    if not token_ids:
+        return {}
+
+    placeholders = ",".join(["?"] * len(token_ids))
+
+    with get_connection() as conn:
+        table_exists = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'chicken_static'
+            """
+        ).fetchone()
+
+        if not table_exists:
+            return {}
+
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM chicken_static
+            WHERE token_id IN ({placeholders})
+            """,
+            token_ids,
+        ).fetchall()
+
+    return {str(row["token_id"]): dict(row) for row in rows}
