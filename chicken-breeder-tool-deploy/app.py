@@ -41,6 +41,8 @@ from services.wallet_access import (
     is_authorized_wallet,
     get_wallet_access_expiry_display,
     grant_manual_access,
+    get_wallet_access_rows,
+    format_wallet_access_rows,
 )
 
 app = Flask(__name__)
@@ -202,6 +204,47 @@ STATIC_CHICKEN_CACHE_FIELDS = [
     "recessive_build_repeat_bonus",
 ]
 
+def get_required_static_cache_tables():
+    return ["chicken_static"]
+
+def get_missing_static_cache_tables():
+    required_tables = get_required_static_cache_tables()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        existing_rows = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+            """
+        ).fetchall()
+
+    existing_names = {str(row[0]).strip().lower() for row in existing_rows}
+    return [
+        table_name
+        for table_name in required_tables
+        if table_name.strip().lower() not in existing_names
+    ]
+
+
+def ensure_static_cache_tables_loaded():
+    missing_tables = get_missing_static_cache_tables()
+
+    if not missing_tables:
+        return {
+            "loaded": False,
+            "synced_tables": [],
+            "missing_tables": [],
+        }
+
+    sync_results = sync_static_export_tables_to_main_db()
+
+    return {
+        "loaded": True,
+        "synced_tables": sync_results,
+        "missing_tables": missing_tables,
+    }
 
 def merge_static_chicken_cache(record, static_row):
     if not static_row:
@@ -279,6 +322,8 @@ def require_authorized_wallet(wallet):
 
 
 def sync_wallet_data(wallet):
+    ensure_static_cache_tables_loaded()
+
     raw_items = fetch_all_owned_chickens(wallet, CONTRACTS)
     parsed_records = [parse_chicken_record(wallet, item) for item in raw_items]
 
@@ -425,6 +470,41 @@ def get_effective_ip_stat(chicken, stat_name):
 
     return 0
 
+def get_weakest_ip_stat_info(chicken):
+    stat_labels = {
+        "attack": "Attack",
+        "defense": "Defense",
+        "hp": "Health",
+        "speed": "Speed",
+        "evasion": "Evasion",
+        "ferocity": "Ferocity",
+        "cockrage": "Cockrage",
+    }
+
+    weakest_stat_name = None
+    weakest_stat_value = None
+
+    for stat_name in IP_STAT_PRIORITY:
+        stat_value = get_effective_ip_stat(chicken, stat_name)
+
+        if weakest_stat_value is None or stat_value < weakest_stat_value:
+            weakest_stat_name = stat_name
+            weakest_stat_value = stat_value
+
+    if weakest_stat_name is None or weakest_stat_value is None:
+        return {
+            "name": "",
+            "label": "",
+            "value": None,
+            "display": "",
+        }
+
+    return {
+        "name": weakest_stat_name,
+        "label": stat_labels[weakest_stat_name],
+        "value": weakest_stat_value,
+        "display": f"{stat_labels[weakest_stat_name]}: {weakest_stat_value}",
+    }
 
 def build_ip_complement_profile(selected_chicken, candidate):
     score = 0
@@ -1122,6 +1202,237 @@ def pick_best_ultimate_auto_match(breedable_chickens):
 
     return best_selected, best_matches
 
+def sort_key_text(value):
+    return str(value or "").strip().lower()
+
+
+def sort_key_int(value, default=0):
+    parsed = safe_int(value, default)
+    return parsed if parsed is not None else default
+
+
+def sort_key_build_match(value):
+    raw = str(value or "").strip()
+    if "/" in raw:
+        left, _, right = raw.partition("/")
+        return (
+            safe_int(left, 0) or 0,
+            safe_int(right, 0) or 0,
+        )
+    return (0, 0)
+
+
+def get_gene_build_source_rank(value):
+    source = str(value or "").strip().lower()
+    if source == "primary":
+        return 0
+    if source == "recessive":
+        return 1
+    return 9
+
+
+def get_ultimate_type_rank(value):
+    text = str(value or "").strip().lower()
+    if text == "both":
+        return 0
+    if text == "gene only":
+        return 1
+    if text == "ip only":
+        return 2
+    return 9
+
+
+def sort_ip_available_chickens(rows, sort_by="ip", sort_dir="desc"):
+    reverse = (sort_dir == "desc")
+
+    if sort_by == "breed_count":
+        rows.sort(
+            key=lambda row: (
+                sort_key_int(row.get("breed_count"), 999999),
+                sort_key_int(row.get("generation_num"), 999999),
+                -sort_key_int(row.get("ip"), 0),
+                sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    if sort_by == "generation":
+        rows.sort(
+            key=lambda row: (
+                sort_key_int(row.get("generation_num"), 999999),
+                sort_key_int(row.get("breed_count"), 999999),
+                -sort_key_int(row.get("ip"), 0),
+                sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    rows.sort(
+        key=lambda row: (
+            sort_key_int(row.get("ip"), 0),
+            -sort_key_int(row.get("breed_count"), 999999),
+            -sort_key_int(row.get("generation_num"), 999999),
+            -sort_key_int(row.get("token_id"), 999999999),
+        ),
+        reverse=reverse,
+    )
+
+
+def sort_gene_available_chickens(rows, sort_by="build_source", sort_dir="asc"):
+    reverse = (sort_dir == "desc")
+
+    if sort_by == "build_match":
+        rows.sort(
+            key=lambda row: (
+                sort_key_build_match(row.get("build_match_display")),
+                -sort_key_int(row.get("generation_num"), 999999),
+                -sort_key_int(row.get("breed_count"), 999999),
+                sort_key_int(row.get("ip"), 0),
+                -sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    if sort_by == "generation":
+        rows.sort(
+            key=lambda row: (
+                sort_key_int(row.get("generation_num"), 999999),
+                sort_key_int(row.get("breed_count"), 999999),
+                -sort_key_int(row.get("ip"), 0),
+                get_gene_build_source_rank(row.get("build_source_display")),
+                sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    if sort_by == "breed_count":
+        rows.sort(
+            key=lambda row: (
+                sort_key_int(row.get("breed_count"), 999999),
+                sort_key_int(row.get("generation_num"), 999999),
+                -sort_key_int(row.get("ip"), 0),
+                get_gene_build_source_rank(row.get("build_source_display")),
+                sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    if sort_by == "ip":
+        rows.sort(
+            key=lambda row: (
+                sort_key_int(row.get("ip"), 0),
+                -sort_key_int(row.get("generation_num"), 999999),
+                -sort_key_int(row.get("breed_count"), 999999),
+                -get_gene_build_source_rank(row.get("build_source_display")),
+                -sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    rows.sort(
+        key=lambda row: (
+            get_gene_build_source_rank(row.get("build_source_display")),
+            sort_key_build_match(row.get("build_match_display")),
+            -sort_key_int(row.get("generation_num"), 999999),
+            -sort_key_int(row.get("breed_count"), 999999),
+            sort_key_int(row.get("ip"), 0),
+            -sort_key_int(row.get("token_id"), 999999999),
+        ),
+        reverse=reverse,
+    )
+
+
+def sort_ultimate_available_chickens(rows, sort_by="ultimate_type", sort_dir="asc"):
+    reverse = (sort_dir == "desc")
+
+    if sort_by == "build":
+        rows.sort(
+            key=lambda row: (
+                sort_key_text(row.get("ultimate_build_display")),
+                sort_key_build_match(row.get("ultimate_build_match_display")),
+                sort_key_int(row.get("ip"), 0),
+                -sort_key_int(row.get("generation_num"), 999999),
+                -sort_key_int(row.get("breed_count"), 999999),
+                -sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    if sort_by == "build_match":
+        rows.sort(
+            key=lambda row: (
+                sort_key_build_match(row.get("ultimate_build_match_display")),
+                sort_key_int(row.get("ip"), 0),
+                -sort_key_int(row.get("generation_num"), 999999),
+                -sort_key_int(row.get("breed_count"), 999999),
+                -sort_key_text(row.get("ultimate_build_display")),
+                -sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    if sort_by == "ip":
+        rows.sort(
+            key=lambda row: (
+                sort_key_int(row.get("ip"), 0),
+                sort_key_build_match(row.get("ultimate_build_match_display")),
+                -sort_key_int(row.get("generation_num"), 999999),
+                -sort_key_int(row.get("breed_count"), 999999),
+                -get_ultimate_type_rank(row.get("ultimate_type_display")),
+                -sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    if sort_by == "generation":
+        rows.sort(
+            key=lambda row: (
+                sort_key_int(row.get("generation_num"), 999999),
+                sort_key_int(row.get("breed_count"), 999999),
+                -sort_key_int(row.get("ip"), 0),
+                get_ultimate_type_rank(row.get("ultimate_type_display")),
+                sort_key_text(row.get("ultimate_build_display")),
+                sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    if sort_by == "breed_count":
+        rows.sort(
+            key=lambda row: (
+                sort_key_int(row.get("breed_count"), 999999),
+                sort_key_int(row.get("generation_num"), 999999),
+                -sort_key_int(row.get("ip"), 0),
+                get_ultimate_type_rank(row.get("ultimate_type_display")),
+                sort_key_text(row.get("ultimate_build_display")),
+                sort_key_int(row.get("token_id"), 999999999),
+            ),
+            reverse=reverse,
+        )
+        return
+
+    rows.sort(
+        key=lambda row: (
+            get_ultimate_type_rank(row.get("ultimate_type_display")),
+            sort_key_text(row.get("ultimate_build_display")),
+            sort_key_build_match(row.get("ultimate_build_match_display")),
+            -sort_key_int(row.get("ip"), 0),
+            sort_key_int(row.get("generation_num"), 999999),
+            sort_key_int(row.get("breed_count"), 999999),
+            sort_key_int(row.get("token_id"), 999999999),
+        ),
+        reverse=reverse,
+    )
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -1177,6 +1488,7 @@ def owner_grant_access_page():
     error = None
     success = None
     sync_results = []
+    access_rows = []
 
     if request.method == "POST":
         parsed_days = safe_int(duration_days)
@@ -1223,6 +1535,8 @@ def owner_grant_access_page():
                 except Exception as exc:
                     error = f"Failed to grant access: {exc}"
 
+    access_rows = format_wallet_access_rows(get_wallet_access_rows(limit=300))
+
     return render_template(
         "admin_whitelist.html",
         wallet=wallet,
@@ -1232,6 +1546,7 @@ def owner_grant_access_page():
         error=error,
         success=success,
         sync_results=sync_results,
+        access_rows=access_rows,
     )
 
 
@@ -1302,7 +1617,16 @@ def match_ip_page():
     selected_chicken = None
     potential_matches = []
     error = None
+    selected_weakest_stat_column_label = "Selected Weakest Stat"
+    ip_sort_by = str(request.args.get("sort_by") or "ip").strip().lower()
+    ip_sort_dir = str(request.args.get("sort_dir") or "desc").strip().lower()
 
+    if ip_sort_by not in {"ip", "breed_count", "generation"}:
+        ip_sort_by = "ip"
+
+    if ip_sort_dir not in {"asc", "desc"}:
+        ip_sort_dir = "desc"
+    
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
@@ -1321,7 +1645,16 @@ def match_ip_page():
                     if row.get("is_complete")
                     and float(row.get("ownership_percent") or 0) == 100.0
                 ]
-
+                
+            for chicken in breedable_chickens:
+                weakest_info = get_weakest_ip_stat_info(chicken)
+                chicken["weakest_stat_name"] = weakest_info["name"]
+                chicken["weakest_stat_label"] = weakest_info["label"]
+                chicken["weakest_stat_value"] = weakest_info["value"]
+                chicken["weakest_stat_display"] = weakest_info["display"]
+            
+            sort_ip_available_chickens(breedable_chickens, sort_by=ip_sort_by, sort_dir=ip_sort_dir)
+            
             if auto_match and not selected_token_id:
                 ranked_sources = []
 
@@ -1380,6 +1713,21 @@ def match_ip_page():
                     None,
                 )
 
+            selected_weakest_stat_name = ""
+            selected_weakest_stat_label = "Selected Weakest Stat"
+
+            if selected_chicken:
+                weakest_info = get_weakest_ip_stat_info(selected_chicken)
+                selected_chicken["weakest_stat_name"] = weakest_info["name"]
+                selected_chicken["weakest_stat_label"] = weakest_info["label"]
+                selected_chicken["weakest_stat_value"] = weakest_info["value"]
+                selected_chicken["weakest_stat_display"] = weakest_info["display"]
+                selected_weakest_stat_name = weakest_info["name"]
+                selected_weakest_stat_label = weakest_info["label"]
+
+                if weakest_info["display"]:
+                    selected_weakest_stat_column_label = f"Selected Weakest Stat ({weakest_info['display']})"
+
             if selected_chicken:
                 candidate_pool = [
                     row for row in breedable_chickens
@@ -1408,7 +1756,15 @@ def match_ip_page():
                         and row.get("evaluation", {}).get("is_breed_count_recommended")
                         and pair_has_usable_ip_items(selected_chicken, row.get("candidate"))
                     ]
-
+                if selected_weakest_stat_name:
+                    for row in potential_matches:
+                        candidate = row.get("candidate") or {}
+                        candidate_stat_value = get_effective_ip_stat(candidate, selected_weakest_stat_name)
+                        row["selected_weakest_stat_display"] = f"{selected_weakest_stat_label}: {candidate_stat_value}"
+                else:
+                    for row in potential_matches:
+                        row["selected_weakest_stat_display"] = ""
+                        
         except Exception as exc:
             error = f"Failed to load IP breeding matches: {exc}"
 
@@ -1422,6 +1778,9 @@ def match_ip_page():
         min_ip=min_ip,
         ip_diff=ip_diff,
         ninuno_100_only=ninuno_100_only,
+        sort_by=ip_sort_by,
+        sort_dir=ip_sort_dir,
+        selected_weakest_stat_column_label=selected_weakest_stat_column_label,
         auto_match=auto_match,
         auto_open_template_id=(
             ""
@@ -1429,6 +1788,7 @@ def match_ip_page():
             else (f"compare-ip-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches else "")
         ),
         error=error,
+        
     )
 
 
@@ -1541,6 +1901,15 @@ def match_gene_page():
     gene_enrichment_remaining = 0
     skip_auto_open = str(request.args.get("skip_auto_open") or "").strip().lower() in {"1", "true", "on", "yes"}
 
+    gene_sort_by = str(request.args.get("sort_by") or "build_source").strip().lower()
+    gene_sort_dir = str(request.args.get("sort_dir") or "asc").strip().lower()
+
+    if gene_sort_by not in {"build_source", "build_match", "generation", "breed_count", "ip"}:
+        gene_sort_by = "build_source"
+
+    if gene_sort_dir not in {"asc", "desc"}:
+        gene_sort_dir = "asc"
+    
     if not require_authorized_wallet(wallet):
         return redirect(url_for("index"))
 
@@ -1584,7 +1953,9 @@ def match_gene_page():
                     if row.get("is_complete")
                     and float(row.get("ownership_percent") or 0) == 100.0
                 ]
-
+                
+            sort_gene_available_chickens(breedable_chickens, sort_by=gene_sort_by, sort_dir=gene_sort_dir)
+            
             if auto_match and not selected_token_id and build_type:
                 ranked_sources = []
 
@@ -1706,6 +2077,8 @@ def match_gene_page():
     potential_matches=potential_matches,
     build_type=build_type,
     ninuno_100_only=ninuno_100_only,
+    sort_by=gene_sort_by,
+    sort_dir=gene_sort_dir,
     auto_match=auto_match,
     auto_open_template_id=(
         ""
@@ -1732,7 +2105,17 @@ def match_ultimate_page():
     selected_chicken = None
     potential_matches = []
     error = None
+    
+    ultimate_sort_by = str(request.args.get("sort_by") or "ultimate_type").strip().lower()
+    ultimate_sort_dir = str(request.args.get("sort_dir") or "asc").strip().lower()
 
+    if ultimate_sort_by not in {"ultimate_type", "build", "build_match", "ip", "generation", "breed_count"}:
+        ultimate_sort_by = "ultimate_type"
+
+    if ultimate_sort_dir not in {"asc", "desc"}:
+        ultimate_sort_dir = "asc"
+
+    
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
@@ -1744,6 +2127,12 @@ def match_ultimate_page():
                 if is_ultimate_eligible(row)
             ]
 
+            sort_ultimate_available_chickens(
+                breedable_chickens,
+                sort_by=ultimate_sort_by,
+                sort_dir=ultimate_sort_dir,
+            )
+            
             if selected_token_id:
                 selected_chicken = next(
                     (row for row in breedable_chickens if str(row["token_id"]) == selected_token_id),
@@ -1780,6 +2169,8 @@ def match_ultimate_page():
         selected_token_id=selected_token_id,
         selected_chicken=selected_chicken,
         breedable_chickens=breedable_chickens,
+        sort_by=ultimate_sort_by,
+        sort_dir=ultimate_sort_dir,
         potential_matches=potential_matches,
         auto_open_template_id=(
             ""
