@@ -1216,12 +1216,6 @@ body.welcome-page {
     flex-wrap: wrap;
 }
 
-.ip-filter-grid {
-    grid-template-columns: 220px 220px 260px auto;
-    gap: 18px;
-    align-items: end;
-}
-
 .ip-filter-grid .ninuno-filter-box,
 .gene-filter-grid .ninuno-filter-box {
     display: flex;
@@ -1264,12 +1258,6 @@ body.welcome-page {
 .gene-filter-grid .filter-actions-group button {
     min-width: 148px;
     height: 46px;
-}
-
-.gene-filter-grid {
-    grid-template-columns: 220px 260px auto;
-    gap: 18px;
-    align-items: end;
 }
 
 .selected-chicken-header {
@@ -2153,4 +2141,388 @@ body.welcome-page {
     .inventory-table-wrap {
         padding: 12px;
     }
+}
+
+
+/* ===== Phase 4 corrected empty-state polish ===== */
+.empty-state-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    min-height: 118px;
+    padding: 18px 20px;
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at top left, rgba(94, 166, 255, 0.08), transparent 34%),
+        linear-gradient(180deg, rgba(16, 31, 52, 0.78) 0%, rgba(8, 17, 30, 0.78) 100%);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.empty-state-card-wide {
+    min-height: 132px;
+    justify-content: center;
+}
+
+.empty-state-card-inline {
+    min-height: 138px;
+    justify-content: center;
+}
+
+.empty-state-kicker {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    color: var(--text-soft);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.empty-state-card h3 {
+    margin: 0;
+    font-size: clamp(20px, 1.7vw, 24px);
+    line-height: 1.14;
+    color: var(--heading);
+}
+
+.empty-state-card p {
+    margin: 0;
+    max-width: 520px;
+    color: var(--text-soft);
+    line-height: 1.6;
+}
+
+.breeding-page-gene .empty-state-card {
+    background:
+        radial-gradient(circle at top left, rgba(62, 198, 167, 0.09), transparent 34%),
+        linear-gradient(180deg, rgba(16, 31, 52, 0.78) 0%, rgba(8, 17, 30, 0.78) 100%);
+}
+
+.breeding-page-ip .empty-state-card {
+    background:
+        radial-gradient(circle at top left, rgba(94, 166, 255, 0.08), transparent 34%),
+        linear-gradient(180deg, rgba(16, 31, 52, 0.78) 0%, rgba(8, 17, 30, 0.78) 100%);
+}
+
+.breeding-page-ultimate .empty-state-card {
+    background:
+        radial-gradient(circle at top left, rgba(177, 124, 255, 0.09), transparent 34%),
+        linear-gradient(180deg, rgba(16, 31, 52, 0.78) 0%, rgba(8, 17, 30, 0.78) 100%);
+}
+
+#selected-chicken > .empty-state-card {
+    min-height: 176px;
+}
+
+.breeding-page-ultimate .match-layout {
+    align-items: start;
+}
+
+.breeding-page-ultimate .match-layout > .breeding-section {
+    margin-top: 0;
+}
+
+@media (max-width: 980px) {
+    .empty-state-card,
+    .empty-state-card-inline,
+    .empty-state-card-wide,
+    #selected-chicken > .empty-state-card {
+        min-height: auto;
+    }
+}
+
+.breeding-page-ultimate .match-layout > .breeding-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.breeding-page-ultimate .match-layout > .breeding-section .breeding-section-header {
+    min-height: 110px;
+}
+
+.breeding-page-ultimate .match-layout > .breeding-section .breeding-panel {
+    flex: 1;
+}
+/* ===== Phase 4-B consistency and cleanup pass ===== */
+.topbar-actions .link-btn,
+.topbar-actions-area .link-btn,
+.filter-actions-group .link-btn,
+.filter-actions-group button,
+.landing-hero-actions .link-btn,
+.selected-chicken-actions .link-btn,
+.breeding-section-title-row .link-btn {
+    min-height: 46px;
+}
+
+.breeding-section-header {
+    gap: 18px;
+}
+
+.breeding-section-note {
+    max-width: 520px;
+}
+
+.breeding-section-header h2,
+.breeding-section-title-row h2 {
+    letter-spacing: -0.02em;
+}
+
+.breeding-page .breeding-panel > h2,
+.breeding-page .panel > h2 {
+    margin-bottom: 16px;
+}
+
+.breeding-page .match-layout > .panel,
+.breeding-page .match-layout > .breeding-section > .panel {
+    min-height: 100%;
+}
+
+.breeding-page .selected-chicken-summary-grid {
+    margin-bottom: 2px;
+}
+
+.breeding-page .selected-chicken-group-box + .selected-chicken-group-box {
+    margin-top: 12px;
+}
+
+.breeding-page .details-card .selected-chicken-group-box:first-of-type,
+.compare-card .selected-chicken-group-box:first-of-type {
+    margin-top: 0;
+}
+
+.empty-state-card {
+    gap: 8px;
+}
+
+.empty-state-card-inline,
+.empty-state-card-wide {
+    width: 100%;
+}
+
+.empty-state-card p {
+    max-width: 560px;
+}
+
+.welcome-info-strip {
+    background: rgba(10, 24, 42, 0.78);
+    color: #d8e9ff;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
+.welcome-wallet-form .welcome-success,
+.welcome-wallet-form .welcome-error {
+    backdrop-filter: blur(10px);
+}
+
+.breeding-page-ip .breeding-section-header h2,
+.breeding-page-gene .breeding-section-header h2,
+.breeding-page-ultimate .breeding-section-header h2 {
+    max-width: 720px;
+}
+
+.breeding-page-ultimate .breeding-section-title-row {
+    row-gap: 10px;
+}
+
+.breeding-page-ultimate .breeding-section-title-row .link-btn {
+    min-width: 136px;
+}
+
+.breeding-page-ultimate .breeding-section-note,
+.breeding-page-gene .breeding-section-note,
+.breeding-page-ip .breeding-section-note {
+    font-size: 14px;
+}
+
+.breeding-page-gene .gene-status-banner {
+    margin-top: -4px;
+}
+
+.compare-card .selected-chicken-group-box-title,
+.compare-card .compare-section-title,
+.details-card .details-section-title {
+    margin-bottom: 10px;
+}
+
+.compare-card .selected-chicken-group-box {
+    padding: 12px;
+}
+
+.compare-card .stats-grid > div,
+.details-card .stats-grid > div {
+    min-height: 48px;
+}
+
+@media (max-width: 1200px) {
+    .breeding-section-note {
+        max-width: none;
+    }
+}
+
+@media (max-width: 980px) {
+    .topbar-actions,
+    .topbar-actions-area {
+        align-items: stretch;
+    }
+
+    .topbar-actions .link-btn,
+    .topbar-actions-area .link-btn {
+        width: fit-content;
+    }
+
+    .breeding-page .match-layout > .breeding-section {
+        margin-top: 0;
+    }
+}
+
+@media (max-width: 700px) {
+    .breeding-section-title-row {
+        align-items: stretch;
+    }
+
+    .breeding-section-title-row .link-btn {
+        width: 100%;
+    }
+
+    .topbar-actions .link-btn,
+    .topbar-actions-area .link-btn {
+        width: 100%;
+    }
+
+    .breeding-hero-highlights {
+        margin-top: 24px;
+    }
+}
+
+@media (max-width: 560px) {
+    .empty-state-card {
+        padding: 16px;
+    }
+
+    .empty-state-card h3 {
+        font-size: 20px;
+    }
+
+    .breeding-section-header h2,
+    .breeding-section-title-row h2 {
+        font-size: 24px;
+    }
+}
+
+
+.ip-filter-grid {
+    display: inline-grid;
+    grid-template-columns: 240px 240px 260px auto;
+    gap: 10px;
+    align-items: end;
+    justify-content: start;
+}
+
+.gene-filter-grid {
+    display: inline-grid;
+    grid-template-columns: 240px 260px auto;
+    gap: 10px;
+    align-items: end;
+    justify-content: start;
+}
+
+.available-list-toolbar {
+    margin: 0 0 16px;
+    padding: 16px 18px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.available-sort-form {
+    display: block;
+}
+
+.available-sort-controls {
+    display: grid;
+    grid-template-columns: minmax(220px, 260px) minmax(220px, 260px) auto;
+    gap: 16px;
+    align-items: end;
+}
+
+.available-sort-controls label {
+    display: block;
+    margin-bottom: 8px;
+    color: #dbe8fb;
+    font-size: 13px;
+    letter-spacing: 0.01em;
+}
+
+.available-sort-controls select {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    border-radius: 12px;
+    font-size: 14px;
+    color: var(--text-main);
+    background: rgba(8, 17, 30, 0.88);
+    outline: none;
+}
+
+.available-sort-actions {
+    display: flex;
+    gap: 12px;
+    align-items: end;
+    flex-wrap: wrap;
+}
+
+.available-sort-actions .link-btn,
+.available-sort-actions button {
+    min-width: 148px;
+    height: 46px;
+}
+
+@media (max-width: 900px) {
+    .available-sort-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .available-sort-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .available-sort-actions .link-btn,
+    .available-sort-actions button {
+        width: 100%;
+    }
+}
+
+.compare-dialog-small {
+    width: min(560px, calc(100vw - 32px));
+    max-height: none;
+}
+
+#auto-match-empty-modal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#auto-match-empty-modal .compare-dialog-small {
+    margin: 0 auto;
+}
+
+#auto-match-empty-modal .selected-chicken-clear-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+    border-radius: 999px;
+    flex: 0 0 36px;
 }
