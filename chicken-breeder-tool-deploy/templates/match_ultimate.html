@@ -7,30 +7,64 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-auto-open-template-id="{{ auto_open_template_id or '' }}">
-    <div class="container">
-        <div class="topbar">
-            <div class="page-header">
-                <h1>Ultimate Breeding</h1>
-                <p class="page-description">
-                    Compare ultimate builds, review complementary pairings, and find the best match for your selected chicken.
-                </p>
+    <div class="container breeding-page breeding-page-ultimate">
+        <section class="breeding-hero breeding-hero-ultimate">
+            <div class="panel breeding-hero-main">
+                <div class="topbar">
+                    <div class="page-header">
+                        <h1>Ultimate Breeding</h1>
+                        <p class="page-description">
+                            Compare ultimate builds, review complementary pairings, and find the best match for your selected chicken.
+                        </p>
+
+                        <div class="breeding-hero-highlights">
+                            <span class="breeding-hero-highlight">Hybrid Build Check</span>
+                            <span class="breeding-hero-highlight">Stat + Trait Review</span>
+                            <span class="breeding-hero-highlight">Auto Match Ready</span>
+                        </div>
+                    </div>
+                    <div class="topbar-actions">
+                        <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+                    </div>
+                </div>
             </div>
-            <div class="topbar-actions">
-                <a
-					class="link-btn secondary-link-btn"
-					href="{{ url_for('match_ultimate_page', wallet_address=wallet, selected_token_id=selected_token_id or None, auto_match=1) }}"
-				>
-					Auto-Match
-				</a>
-                <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+            <div class="panel breeding-hero-side">
+                <div class="breeding-hero-side-card">
+                    <div class="breeding-hero-side-label">Mode</div>
+                    <div class="breeding-hero-side-value">Ultimate</div>
+                    <div class="breeding-hero-side-note">Review eligible chickens, spotlight one candidate, and compare the best overall matches.</div>
+                </div>
+                <div class="breeding-hero-steps">
+                    <div class="breeding-hero-steps-title">Workflow</div>
+                    <ol class="breeding-hero-steps-list">
+                        <li>Review eligible chickens</li>
+                        <li>Choose one candidate</li>
+                        <li>Compare best overall matches</li>
+                    </ol>
+                </div>
             </div>
-        </div>
+        </section>
 
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
-        <div class="panel">
-            <h2>Available Chickens</h2>
+        <section class="breeding-section">
+        <div class="breeding-section-header">
+            <div>
+                <div class="breeding-section-kicker">Step 1</div>
+				<div class="breeding-section-title-row">
+					<h2>Available Chickens</h2>
+					<a
+						class="link-btn"
+						href="{{ url_for('match_ultimate_page', wallet_address=wallet, selected_token_id=selected_token_id or None, auto_match=1) }}"
+					>
+						Auto-Match
+					</a>
+				</div>
+            </div>
+            <p class="breeding-section-note">Review all chickens currently eligible for Ultimate breeding and pick one to evaluate.</p>
+        </div>
+        <div class="panel breeding-panel">
 
             {% if breedable_chickens %}
                 <div class="table-wrap limited-table ip-available-table">
@@ -91,11 +125,23 @@
                 <p>No ultimate-eligible chickens found.</p>
             {% endif %}
         </div>
+    </section>
 
-        <div class="match-layout">
-            <div class="panel" id="selected-chicken">
-                {% if selected_chicken %}
-                    <div class="selected-chicken-header">
+		<div class="match-layout">
+			<section class="breeding-section">
+				<div class="breeding-section-header breeding-section-header-inline">
+					<div>
+						<div class="breeding-section-kicker">Step 2</div>
+						<h2>Selected Chicken</h2>
+						<p class="breeding-section-note breeding-section-note-inline">
+							Spotlight one candidate and review before comparing.
+						</p>
+					</div>
+				</div>
+
+				<div class="panel breeding-panel" id="selected-chicken">
+				{% if selected_chicken %}
+					<div class="selected-chicken-header">
 						<h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
 						<a
 							class="selected-chicken-clear-btn"
@@ -115,12 +161,12 @@
 						>
 					</div>
 
-                    <div class="selected-chicken-summary-grid">
-                        <div><strong>Ultimate Type:</strong> {{ selected_chicken.ultimate_type_display or "" }}</div>
-                        <div><strong>IP:</strong> {{ selected_chicken.ip if selected_chicken.ip is not none else "" }}</div>
-                        <div><strong>Build:</strong> {{ selected_chicken.ultimate_build_display or "" }}</div>
-                        <div><strong>Build Match:</strong> {{ selected_chicken.ultimate_build_match_display or "" }}</div>
-                        <div><strong>Breed Count:</strong> {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}</div>
+					<div class="selected-chicken-summary-grid">
+						<div><strong>Ultimate Type:</strong> {{ selected_chicken.ultimate_type_display or "" }}</div>
+						<div><strong>IP:</strong> {{ selected_chicken.ip if selected_chicken.ip is not none else "" }}</div>
+						<div><strong>Build:</strong> {{ selected_chicken.ultimate_build_display or "" }}</div>
+						<div><strong>Build Match:</strong> {{ selected_chicken.ultimate_build_match_display or "" }}</div>
+						<div><strong>Breed Count:</strong> {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}</div>
 						<div id="ninuno-{{ selected_chicken.token_id }}">
 							<strong>Ninuno %:</strong>
 							{% if selected_chicken.total_root_count %}
@@ -154,33 +200,35 @@
 								</span>
 							{% endif %}
 						</div>
-                    </div>
+					</div>
 
-                    <hr>
+					<hr>
+					<div class="selected-chicken-group-box">
+						<div class="selected-chicken-group-box-title">Traits</div>
+						<div class="selected-chicken-details-grid">
+							<div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
+							<div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
+							<div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
+							<div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
+							<div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
+							<div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
+							<div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
+							<div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
+						</div>
+					</div>
+					<div class="selected-chicken-group-box">
+						<div class="selected-chicken-group-box-title">Innate Stats</div>
 
-                    <div class="selected-chicken-details-grid">
-                        <div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
-                        <div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
-                        <div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
-                        <div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
-                        <div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
-                        <div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
-                        <div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
-                        <div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
-                    </div>
-
-                    <hr>
-
-                    <div class="selected-chicken-details-grid">
-                        <div><strong>Innate Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
-                        <div><strong>Innate Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
-                        <div><strong>Innate Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
-                        <div><strong>Innate Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
-                        <div><strong>Innate Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
-                        <div><strong>Innate Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
-                        <div><strong>Innate Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
-                    </div>
-					
+						<div class="selected-chicken-details-grid">
+							<div><strong>Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
+							<div><strong>Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
+							<div><strong>Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
+							<div><strong>Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
+							<div><strong>Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
+							<div><strong>Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
+							<div><strong>Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
+						</div>
+					</div>
 					<div class="selected-chicken-actions">
 						<a
 							class="link-btn selected-auto-match-btn"
@@ -189,74 +237,93 @@
 							Auto Match
 						</a>
 					</div>
-                {% else %}
-                    <h2 class="selected-chicken-title">Selected Chicken</h2>
-                    <p>Select a chicken from the available list.</p>
-                {% endif %}
-            </div>
+					{% else %}
+						<h2 class="selected-chicken-title">Selected Chicken</h2>
+						<p>Select a chicken from the available list.</p>
+					{% endif %}
+				</div>
+			</section>
+			<section class="breeding-section">
+				<div class="breeding-section-header">
+					<div>
+						<div class="breeding-section-kicker">Step 3</div>
+						<h2>Potential Ultimate Matches</h2>
+					</div>
+					<p class="breeding-section-note">Compare build fit and best overall matches.</p>
+				</div>
+				<div class="panel breeding-panel">
 
-            <div class="panel">
-                <h2>Potential Ultimate Matches</h2>
-
-                {% if selected_chicken %}
-                    {% if potential_matches %}
-                        <div class="table-wrap">
-                            <table>
-                                <thead>
-									<tr>
-										<th></th>
-										<th>Chicken ID</th>
-										<th>Ultimate Type</th>
-										<th>Build</th>
-										<th>Build Match</th>
-										<th>Build Complement</th>
-										<th>IP</th>
-										<th>Breed Count</th>
-										<th>Ninuno %</th>
-									</tr>
-                                </thead>
-                                <tbody>
-                                    {% for row in potential_matches %}
-                                    <tr
-										class="clickable-row"
-										data-target="ultimate-details-{{ row.candidate.token_id }}"
-										tabindex="0"
-									>
-                                        <td class="action-cell">
-                                            <button
-                                                type="button"
-                                                class="open-compare-btn"
-                                                data-template-id="compare-ultimate-{{ row.candidate.token_id }}"
-                                            >
-                                                Match
-                                            </button>
-                                        </td>
-                                        <td>
-                                            <div class="chicken-id-card compact-id-card">
-                                                <img
-                                                    src="{{ row.candidate.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.candidate.token_id ~ '.png') }}"
-                                                    alt="Chicken {{ row.candidate.token_id }}"
-                                                    class="chicken-id-card-image compact-id-image"
-                                                >
-                                                <div class="chicken-id-card-text">#{{ row.candidate.token_id }}</div>
-                                            </div>
-                                        </td>
-                                        <td>{{ row.ultimate_type_display or "" }}</td>
-                                        <td>{{ row.ultimate_build_display or "" }}</td>
-                                        <td>{{ row.candidate.ultimate_build_match_display or "" }}</td>
-                                        <td>{{ row.build_complement if row.build_complement is not none else "" }}</td>
-                                        <td>{{ row.candidate.ip if row.candidate.ip is not none else "" }}</td>
-                                        <td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
-										<td id="ninuno-{{ row.candidate.token_id }}">
-											{% if row.candidate.total_root_count %}
-												{{ row.candidate.ownership_percent }}%
-												{% if not row.candidate.is_complete and row.candidate.root_check_target_count %}
-													<span>(Partial {{ row.candidate.pending_root_check_count }}/{{ row.candidate.root_check_target_count }})</span>
-												{% elif not row.candidate.is_complete %}
-													<span>(Partial)</span>
-												{% endif %}
-												{% if not row.candidate.is_complete %}
+					{% if selected_chicken %}
+						{% if potential_matches %}
+							<div class="table-wrap">
+								<table>
+									<thead>
+										<tr>
+											<th></th>
+											<th>Chicken ID</th>
+											<th>Ultimate Type</th>
+											<th>Build</th>
+											<th>Build Match</th>
+											<th>Build Complement</th>
+											<th>IP</th>
+											<th>Breed Count</th>
+											<th>Ninuno %</th>
+										</tr>
+									</thead>
+									<tbody>
+										{% for row in potential_matches %}
+										<tr
+											class="clickable-row"
+											data-target="ultimate-details-{{ row.candidate.token_id }}"
+											tabindex="0"
+										>
+											<td class="action-cell">
+												<button
+													type="button"
+													class="open-compare-btn"
+													data-template-id="compare-ultimate-{{ row.candidate.token_id }}"
+												>
+													Match
+												</button>
+											</td>
+											<td>
+												<div class="chicken-id-card compact-id-card">
+													<img
+														src="{{ row.candidate.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.candidate.token_id ~ '.png') }}"
+														alt="Chicken {{ row.candidate.token_id }}"
+														class="chicken-id-card-image compact-id-image"
+													>
+													<div class="chicken-id-card-text">#{{ row.candidate.token_id }}</div>
+												</div>
+											</td>
+											<td>{{ row.ultimate_type_display or "" }}</td>
+											<td>{{ row.ultimate_build_display or "" }}</td>
+											<td>{{ row.candidate.ultimate_build_match_display or "" }}</td>
+											<td>{{ row.build_complement if row.build_complement is not none else "" }}</td>
+											<td>{{ row.candidate.ip if row.candidate.ip is not none else "" }}</td>
+											<td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
+											<td id="ninuno-{{ row.candidate.token_id }}">
+												{% if row.candidate.total_root_count %}
+													{{ row.candidate.ownership_percent }}%
+													{% if not row.candidate.is_complete and row.candidate.root_check_target_count %}
+														<span>(Partial {{ row.candidate.pending_root_check_count }}/{{ row.candidate.root_check_target_count }})</span>
+													{% elif not row.candidate.is_complete %}
+														<span>(Partial)</span>
+													{% endif %}
+													{% if not row.candidate.is_complete %}
+														<span class="recalculate-inline">
+															<form method="POST" action="{{ url_for('complete_ninuno') }}">
+																<input type="hidden" name="wallet_address" value="{{ wallet }}">
+																<input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
+																<input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
+																<input type="hidden" name="anchor_id" value="ninuno-{{ row.candidate.token_id }}">
+																<button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
+															</form>
+														</span>
+													{% endif %}
+												{% else %}
 													<span class="recalculate-inline">
+														<span>Recalculate</span>
 														<form method="POST" action="{{ url_for('complete_ninuno') }}">
 															<input type="hidden" name="wallet_address" value="{{ wallet }}">
 															<input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
@@ -266,65 +333,54 @@
 														</form>
 													</span>
 												{% endif %}
-											{% else %}
-												<span class="recalculate-inline">
-													<span>Recalculate</span>
-													<form method="POST" action="{{ url_for('complete_ninuno') }}">
-														<input type="hidden" name="wallet_address" value="{{ wallet }}">
-														<input type="hidden" name="token_id" value="{{ row.candidate.token_id }}">
-														<input type="hidden" name="selected_token_id" value="{{ selected_chicken.token_id }}">
-														<input type="hidden" name="anchor_id" value="ninuno-{{ row.candidate.token_id }}">
-														<button type="submit" class="icon-btn" title="Refresh Ninuno">↻</button>
-													</form>
-												</span>
-											{% endif %}
-										</td>
-                                    </tr>
-                                    <tr id="ultimate-details-{{ row.candidate.token_id }}" class="details-row hidden">
-										<td colspan="9">
-											<div class="details-card">
-												<h3 class="details-card-title">Chicken {{ row.candidate.token_id }} Details</h3>
+											</td>
+										</tr>
+										<tr id="ultimate-details-{{ row.candidate.token_id }}" class="details-row hidden">
+											<td colspan="9">
+												<div class="details-card">
+													<h3 class="details-card-title">Chicken {{ row.candidate.token_id }} Details</h3>
 
-												<div class="details-section-title">Traits:</div>
-												<div class="stats-grid">
-													<div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
-													<div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
-													<div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
-													<div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
-													<div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
-													<div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
-													<div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
-													<div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
+													<div class="details-section-title">Traits:</div>
+													<div class="stats-grid">
+														<div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
+														<div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
+														<div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
+														<div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
+														<div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
+														<div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
+														<div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
+														<div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
+													</div>
+
+													<hr>
+
+													<div class="details-section-title">Stats:</div>
+													<div class="stats-grid">
+														<div><strong>Innate Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
+														<div><strong>Innate Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
+														<div><strong>Innate Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
+														<div><strong>Innate Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
+														<div><strong>Innate Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
+														<div><strong>Innate Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
+														<div><strong>Innate Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
+													</div>
 												</div>
-
-												<hr>
-
-												<div class="details-section-title">Stats:</div>
-												<div class="stats-grid">
-													<div><strong>Innate Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
-													<div><strong>Innate Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
-													<div><strong>Innate Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
-													<div><strong>Innate Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
-													<div><strong>Innate Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
-													<div><strong>Innate Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
-													<div><strong>Innate Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
-												</div>
-											</div>
-										</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p>No ultimate matches found for the selected chicken.</p>
-                    {% endif %}
-                {% else %}
-                    <p>Select a chicken first to see ultimate breeding matches.</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
+											</td>
+										</tr>
+										{% endfor %}
+									</tbody>
+								</table>
+							</div>
+						{% else %}
+							<p>No ultimate matches found for the selected chicken.</p>
+						{% endif %}
+					{% else %}
+						<p>Select a chicken first to see ultimate breeding matches.</p>
+					{% endif %}
+				</div>
+			</section>
+		</div>
+	</div>
 
     {% if selected_chicken and potential_matches %}
     <div id="compare-modal" class="compare-modal hidden">

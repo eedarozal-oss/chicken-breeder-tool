@@ -7,25 +7,61 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-auto-open-template-id="{{ auto_open_template_id or '' }}">
-    <div class="container">
-        <div class="topbar">
-		<div class="page-header">
-    			<h1>IP Breeding</h1>
-    			<p class="page-description">
-        			Compare IP-focused pairs, review instinct and lineage, and check the best breeding match for your selected chicken.
-    			</p>
-		</div>
-            <div class="topbar-actions">
-                <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+    <div class="container breeding-page breeding-page-ip">
+        <section class="breeding-hero breeding-hero-ip">
+            <div class="panel breeding-hero-main">
+                <div class="topbar">
+                    <div class="page-header">
+                        <h1>IP Breeding</h1>
+                        <p class="page-description">
+                            Compare IP-focused pairs, review instinct and lineage, and check the best breeding match for your selected chicken.
+                        </p>
+
+                        <div class="breeding-hero-highlights">
+                            <span class="breeding-hero-highlight">IP Thresholds</span>
+                            <span class="breeding-hero-highlight">100% Ninuno</span>
+                            <span class="breeding-hero-highlight">Auto Match Ready</span>
+                        </div>
+                    </div>
+                    <div class="topbar-actions">
+                        <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+                    </div>
+                </div>
             </div>
-        </div>
+
+            <div class="panel breeding-hero-side">
+                <div class="breeding-hero-side-card">
+                    <div class="breeding-hero-side-label">Mode</div>
+                    <div class="breeding-hero-side-value">IP</div>
+                    <div class="breeding-hero-side-note">Set your IP rules first, then compare the strongest pairings for the selected parent.</div>
+                </div>
+
+                <div class="breeding-hero-steps">
+                    <div class="breeding-hero-steps-title">Workflow</div>
+                    <ol class="breeding-hero-steps-list" aria-label="IP breeding workflow">
+                        <li><span>Configure IP filters</span></li>
+                        <li><span>Select a chicken</span></li>
+                        <li><span>Compare best matches</span></li>
+                    </ol>
+                </div>
+            </div>
+        </section>
 
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
 
         {% if wallet and not error %}
-            <div class="settings-box">
+            <section class="breeding-section">
+                <div class="breeding-section-header">
+                    <div>
+                        <div class="breeding-section-kicker">Step 1</div>
+                        <h2>Configure filters</h2>
+                    </div>
+                    <p class="breeding-section-note">Set the minimum IP, keep pair differences controlled, and narrow the list with the Ninuno filter.</p>
+                </div>
+
+            <div class="settings-box breeding-settings-box">
                <form method="GET" action="{{ url_for('match_ip_page') }}" class="filter-form">
     <input type="hidden" name="wallet_address" value="{{ wallet }}">
     {% if selected_token_id %}
@@ -85,9 +121,19 @@
     </div>
 </form>            
 </div>
+            </section>
         {% endif %}
 
-        <div class="panel">
+        <section class="breeding-section">
+            <div class="breeding-section-header">
+                <div>
+                    <div class="breeding-section-kicker">Step 2</div>
+                    <h2>Choose a chicken</h2>
+                </div>
+                <p class="breeding-section-note">Review the available parents first, then click a row to load that chicken into the selected panel below.</p>
+            </div>
+
+        <div class="panel breeding-panel">
             <h2>Available Chickens</h2>
 
             {% if breedable_chickens %}
@@ -145,9 +191,19 @@
                 <p>No available chickens found for IP breeding.</p>
             {% endif %}
         </div>
+        </section>
+
+        <section class="breeding-section">
+            <div class="breeding-section-header">
+                <div>
+                    <div class="breeding-section-kicker">Step 3</div>
+                    <h2>Review best matches</h2>
+                </div>
+                <p class="breeding-section-note">Use the selected parent on the left and compare the best IP-based pairings on the right.</p>
+            </div>
 
         <div class="match-layout">
-            <div class="panel" id="selected-chicken">
+            <div class="panel breeding-panel" id="selected-chicken">
     {% if selected_chicken %}
         <div class="selected-chicken-header">
 			<h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
@@ -170,10 +226,10 @@
 	</div>
 
         <div class="selected-chicken-summary-grid">
-            <div>
+            <!--<div>
                 <strong>IP:</strong>
                 {{ selected_chicken.ip if selected_chicken.ip is not none else "" }}
-            </div>
+            </div>-->
 
 			<div id="ninuno-{{ selected_chicken.token_id }}">
 				<strong>Ninuno %:</strong>
@@ -213,22 +269,22 @@
                 <strong>Breed Count:</strong>
                 {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}
             </div>
-
-            <div></div>
         </div>
 
-        <hr>
+        <div class="selected-chicken-group-box">
+			<div class="selected-chicken-group-box-title">Innate Stats</div>
 
-        <div class="selected-chicken-details-grid">
-            <div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
-            <div><strong>Innate Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
-            <div><strong>Innate Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
-            <div><strong>Innate Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
-            <div><strong>Innate Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
-            <div><strong>Innate Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
-            <div><strong>Innate Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
-            <div><strong>Innate Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
-        </div>
+			<div class="selected-chicken-details-grid">
+				<div><strong>IP:</strong> {{ selected_chicken.ip or "" }}</div>
+				<div><strong>Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
+				<div><strong>Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
+				<div><strong>Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
+				<div><strong>Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
+				<div><strong>Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
+				<div><strong>Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
+				<div><strong>Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
+			</div>
+		</div>	
 		
 		<div class="selected-chicken-actions">
 			<a
@@ -243,7 +299,7 @@
         <p>Select a chicken from the available list.</p>
     {% endif %}
 </div>
-            <div class="panel">
+            <div class="panel breeding-panel">
                 <h2>Potential IP Matches</h2>
 
                 {% if selected_chicken %}
@@ -360,6 +416,7 @@
             </div>
         </div>
     </div>
+        </section>
 	{% if selected_chicken and potential_matches %}
 <div id="compare-modal" class="compare-modal hidden">
     <div class="compare-backdrop" data-close-compare></div>

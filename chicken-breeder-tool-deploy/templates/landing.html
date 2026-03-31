@@ -5,142 +5,116 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Apex Breeder</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        .mode-card {
-            position: relative;
-            overflow: hidden;
-            min-height: 420px;
-            background-size: 100%;
-            background-position: center center;
-            background-repeat: no-repeat;
-            color: #ffffff;
-            isolation: isolate;
-        }
-
-        .mode-card::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(90deg, rgba(7, 10, 18, 0.25) 0%, rgba(7, 10, 18, 0.16) 38%, rgba(7, 10, 18, 0.04) 100%);
-            z-index: 0;
-        }
-
-        .mode-card-content {
-            position: relative;
-            z-index: 1;
-            max-width: 62%;
-        }
-
-        .mode-card h2,
-        .mode-card p,
-        .mode-card-kicker {
-            position: relative;
-            z-index: 1;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-        }
-
-        .mode-card-bg-ip {
-            background-image:
-                linear-gradient(90deg, rgba(34, 17, 10, 0.58) 0%, rgba(34, 17, 10, 0.18) 100%),
-                url("{{ url_for('static', filename='images/mode1.png') }}");
-        }
-
-        .mode-card-bg-gene {
-            background-image:
-                linear-gradient(90deg, rgba(6, 19, 25, 0.58) 0%, rgba(6, 19, 25, 0.18) 100%),
-                url("{{ url_for('static', filename='images/mode2.png') }}");
-        }
-
-        .mode-card-bg-ultimate {
-            background-image:
-                linear-gradient(90deg, rgba(22, 12, 36, 0.58) 0%, rgba(22, 12, 36, 0.18) 100%),
-                url("{{ url_for('static', filename='images/mode3.png') }}");
-        }
-
-        @media (max-width: 1100px) {
-            .mode-card {
-                min-height: 360px;
-            }
-
-            .mode-card-content {
-                max-width: 72%;
-            }
-        }
-
-        @media (max-width: 720px) {
-            .mode-card {
-                min-height: 320px;
-            }
-
-            .mode-card::before {
-                background: linear-gradient(180deg, rgba(7, 10, 18, 0.82) 0%, rgba(7, 10, 18, 0.55) 50%, rgba(7, 10, 18, 0.28) 100%);
-            }
-
-            .mode-card-content {
-                max-width: 100%;
-            }
-        }
-    </style>
 </head>
 <body>
     <div class="container">
-<div class="topbar">
-    <div class="page-header">
-        <h1>Apex Breeder</h1>
-        <p class="page-description">Choose a breeding mode or review your available chickens.</p>
-    </div>
+        <div class="topbar">
+            <div class="page-header">
+                <h1>Apex Breeder</h1>
+                <p class="page-description">Choose a breeding mode or review your available chickens.</p>
+            </div>
 
-    <div class="topbar-actions-area">
-        <div class="topbar-actions topbar-actions-wrap">
-            <div class="wallet-chip">Wallet: {{ wallet }}</div>
-            <a class="link-btn secondary-link-btn" href="{{ url_for('index') }}">Change Wallet</a>
+            <div class="topbar-actions-area">
+                <div class="topbar-actions topbar-actions-wrap">
+                    <div class="wallet-chip">Wallet: {{ wallet }}</div>
+                    <a class="link-btn secondary-link-btn" href="{{ url_for('index') }}">Change Wallet</a>
+                </div>
+
+                {% if access_expiry %}
+                    <div class="access-status">Access is active until {{ access_expiry }}.</div>
+                {% endif %}
+            </div>
         </div>
-
-        {% if access_expiry %}
-            <div class="access-status">Access is active until {{ access_expiry }}.</div>
-        {% endif %}
-    </div>
-</div>
 
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
 
-        <div class="panel landing-summary-panel">
-            <div class="landing-count-block">
-                <div class="landing-count-label">Available Chickens for Breeding</div>
-                <div class="landing-count-value">{{ breedable_count }}</div>
+        <section class="landing-hero landing-hero-refined">
+            <div class="panel landing-hero-panel landing-hero-main">
+                <div class="landing-hero-kicker">Wallet Loaded</div>
+                <h2>Plan pairings faster across IP, Gene, and Ultimate breeding.</h2>
+                <p>
+                    Review your breedable chickens, jump into the right mode, and compare better matches without checking every chicken one by one.
+                </p>
+
+                <div class="landing-hero-actions">
+                    <a class="link-btn" href="{{ url_for('available_chickens_page', wallet_address=wallet) }}">View Full List</a>
+                    <a class="link-btn secondary-link-btn" href="#mode-section">Choose Mode</a>
+                </div>
             </div>
-            <div class="landing-summary-actions">
-                <a class="link-btn" href="{{ url_for('available_chickens_page', wallet_address=wallet) }}">View Full List</a>
+
+            <div class="panel landing-status-panel landing-status-panel-refined">
+                <div class="landing-status-card">
+                    <div class="landing-count-label">Breedable Chickens</div>
+                    <div class="landing-count-value">{{ breedable_count }}</div>
+                    <div class="landing-count-note">Ready for matching and breeding analysis.</div>
+                </div>
+
+                <div class="landing-workflow-block">
+                    <div class="landing-workflow-title">Workflow</div>
+                    <ul class="landing-workflow-list" aria-label="App flow summary">
+                        <li><span class="landing-workflow-dot"></span><span>Load wallet</span></li>
+                        <li><span class="landing-workflow-dot"></span><span>Choose breeding mode</span></li>
+                        <li><span class="landing-workflow-dot"></span><span>Match better</span></li>
+                    </ul>
+                </div>
             </div>
-        </div>
+        </section>
 
-        <div class="mode-grid">
-            <a class="mode-card mode-card-ip mode-card-bg-ip" href="{{ url_for('match_ip_page', wallet_address=wallet) }}">
-                <div class="mode-card-content">
-                    <div class="mode-card-kicker">Mode 1</div>
-                    <h2>IP Breeding</h2>
-                    <p>Find strong pairings based on IP value, generation rules, and breed count filters.</p>
+        <section class="landing-mode-section" id="mode-section">
+            <div class="landing-section-header">
+                <div>
+                    <div class="landing-section-kicker">Modes</div>
+                    <h2>Choose your breeding workflow</h2>
                 </div>
-            </a>
+                <p class="landing-section-note">Each mode keeps the current matching logic and filters you already use.</p>
+            </div>
 
-            <a class="mode-card mode-card-gene mode-card-bg-gene" href="{{ url_for('match_gene_page', wallet_address=wallet) }}">
-                <div class="mode-card-content">
-                    <div class="mode-card-kicker">Mode 2</div>
-                    <h2>Gene Breeding</h2>
-                    <p>Match chickens by build, visible traits, and recessive potential to improve your breeding plan.</p>
-                </div>
-            </a>
+            <div class="mode-grid mode-grid-refined">
+                <a class="mode-card mode-card-ip mode-card-refined" style="background-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.68) 100%), url('{{ url_for('static', filename='images/mode1.png') }}');" href="{{ url_for('match_ip_page', wallet_address=wallet) }}">
+                    <div class="mode-card-content">
+                        <div class="mode-card-kicker">Mode 1</div>
+                        <h2>IP Breeding</h2>
+                        <p>Find strong pairings based on IP value, generation rules, breed count control, and Ninuno filters.</p>
+                        <div class="mode-card-tags" aria-hidden="true">
+                            <span class="mode-card-tag">IP</span>
+                            <span class="mode-card-tag">Generation</span>
+                            <span class="mode-card-tag">Breed Count</span>
+                        </div>
+                        <div class="mode-card-meta">Open IP workflow <span class="mode-card-arrow">→</span></div>
+                    </div>
+                </a>
 
-            <a class="mode-card mode-card-ultimate mode-card-bg-ultimate" href="{{ url_for('match_ultimate_page', wallet_address=wallet) }}">
-                <div class="mode-card-content">
-                    <div class="mode-card-kicker">Mode 3</div>
-                    <h2>Ultimate Breeding</h2>
-                    <p>Combine IP and Gene analysis to chase the best overall pair and stronger ultimate matches.</p>
-                </div>
-            </a>
-        </div>
+                <a class="mode-card mode-card-gene mode-card-refined" style="background-image: linear-gradient(180deg, rgba(4, 34, 29, 0.22), rgba(4, 34, 29, 0.68) 100%), url('{{ url_for('static', filename='images/mode2.png') }}');" href="{{ url_for('match_gene_page', wallet_address=wallet) }}">
+                    <div class="mode-card-content">
+                        <div class="mode-card-kicker">Mode 2</div>
+                        <h2>Gene Breeding</h2>
+                        <p>Match chickens by build, visible traits, and recessive potential to improve your breeding plan.</p>
+                        <div class="mode-card-tags" aria-hidden="true">
+                            <span class="mode-card-tag">Build</span>
+                            <span class="mode-card-tag">Traits</span>
+                            <span class="mode-card-tag">Recessive</span>
+                        </div>
+                        <div class="mode-card-meta">Open Gene workflow <span class="mode-card-arrow">→</span></div>
+                    </div>
+                </a>
+
+                <a class="mode-card mode-card-ultimate mode-card-refined" style="background-image: linear-gradient(180deg, rgba(32, 10, 56, 0.22), rgba(32, 10, 56, 0.68) 100%), url('{{ url_for('static', filename='images/mode3.png') }}');" href="{{ url_for('match_ultimate_page', wallet_address=wallet) }}">
+                    <div class="mode-card-content">
+                        <div class="mode-card-kicker">Mode 3</div>
+                        <h2>Ultimate Breeding</h2>
+                        <p>Combine IP and Gene analysis to chase the best overall pair and stronger ultimate matches.</p>
+                        <div class="mode-card-tags" aria-hidden="true">
+                            <span class="mode-card-tag">Hybrid</span>
+                            <span class="mode-card-tag">Build</span>
+                            <span class="mode-card-tag">Stats</span>
+                        </div>
+                        <div class="mode-card-meta">Open Ultimate workflow <span class="mode-card-arrow">→</span></div>
+                    </div>
+                </a>
+            </div>
+        </section>
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>

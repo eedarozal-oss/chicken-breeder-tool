@@ -7,36 +7,72 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-auto-open-template-id="{{ auto_open_template_id or '' }}">
-    <div class="container">
-        <div class="topbar">
-            <div class="page-header">
-                <h1>Gene Breeding</h1>
-                <p class="page-description">
-                    Match primary and recessive trait builds, compare missing traits, and find the best breeding pair for your selected chicken.
-                </p>
-            </div>
-            <div class="topbar-actions">
-                <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
-            </div>
-        </div>
+    <div class="container breeding-page breeding-page-gene">
+        <section class="breeding-hero breeding-hero-gene">
+			<div class="breeding-hero-left">
+				<div class="panel breeding-hero-main">
+					<div class="topbar">
+						<div class="page-header">
+							<h1>Gene Breeding</h1>
+							<p class="page-description">
+								Match primary and recessive trait builds, compare missing traits, and find the best breeding pair for your selected chicken.
+							</p>
+
+							<div class="breeding-hero-highlights">
+								<span class="breeding-hero-highlight">Primary + Recessive</span>
+								<span class="breeding-hero-highlight">100% Ninuno</span>
+								<span class="breeding-hero-highlight">Auto Match Ready</span>
+							</div>
+						</div>
+						<div class="topbar-actions">
+							<a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+						</div>
+					</div>
+				</div>
+				
+					{% if wallet and not error %}
+						<div
+							id="gene-batch-status"
+							class="info-message gene-status-banner"
+							data-wallet="{{ wallet }}"
+							data-selected-token-id="{{ selected_token_id or '' }}"
+							data-running="1"
+							>
+							Recessive gene data will load in the background.
+						</div>
+					{% endif %}
+			</div>
+            <aside class="panel breeding-hero-side breeding-hero-side-gene">
+                <div class="breeding-hero-side-card">
+                    <div class="breeding-hero-side-label">Mode</div>
+                    <div class="breeding-hero-side-value">Gene</div>
+                    <div class="breeding-hero-side-note">Configure build filters, select a chicken, and compare best pairings.</div>
+                </div>
+                <div class="breeding-hero-steps">
+                    <div class="breeding-hero-steps-title">Workflow</div>
+                    <ol class="breeding-hero-steps-list">
+                        <li>Choose target build</li>
+                        <li>Select a candidate chicken</li>
+                        <li>Review the best trait pairings</li>
+                    </ol>
+                </div>
+            </aside>
+        </section>
 
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
-	{% if wallet and not error %}
-    	<div
-        	id="gene-batch-status"
-        	class="info-message"
-        	data-wallet="{{ wallet }}"
-        	data-selected-token-id="{{ selected_token_id or '' }}"
-        	data-running="1"
-    		>
-        	Recessive gene data will load in the background.
-    	</div>
-	{% endif %}
 
         {% if wallet and not error %}
-            <div class="settings-box">
+            <section class="breeding-section">
+                <div class="breeding-section-header">
+                    <div>
+                        <div class="breeding-section-kicker">Step 1</div>
+                        <h2>Configure build filters</h2>
+                    </div>
+                    <p class="breeding-section-note">Choose a target build, optionally limit to 100% Ninuno chickens, then run manual or auto matching.</p>
+                </div>
+            <div class="settings-box breeding-settings-box">
                 <form method="GET" action="{{ url_for('match_gene_page') }}" class="filter-form">
     <input type="hidden" name="wallet_address" value="{{ wallet }}">
     {% if selected_token_id %}
@@ -83,10 +119,18 @@
 </div>
                 </form>
             </div>
+            </section>
         {% endif %}
 
-        <div class="panel">
-            <h2>Available Chickens</h2>
+        <section class="breeding-section">
+            <div class="breeding-section-header">
+                <div>
+                    <div class="breeding-section-kicker">Step 2</div>
+                    <h2>Choose an available chicken</h2>
+                </div>
+                <p class="breeding-section-note">The list below already reflects your current build and Ninuno filters. Click any row to load it into the comparison workspace.</p>
+            </div>
+        <div class="panel breeding-panel">
 			{% if build_type %}
 				<div class="build-type-guide">
 					{% if build_type == "damager" %}
@@ -163,7 +207,16 @@
                 <p>Select a build to see available chickens for gene breeding.</p>
             {% endif %}
         </div>
+        </section>
 
+        <section class="breeding-section">
+            <div class="breeding-section-header">
+                <div>
+                    <div class="breeding-section-kicker">Step 3</div>
+                    <h2>Review selected chicken and best matches</h2>
+                </div>
+                <p class="breeding-section-note">Compare the selected chicken against compatible pairings, then expand details or open the match preview for a deeper check.</p>
+            </div>
         <div class="match-layout">
             <div class="panel" id="selected-chicken">
                 {% if selected_chicken %}
@@ -237,29 +290,30 @@
 							{% endif %}
 						</div>
                     </div>
+					<div class="selected-chicken-group-box">
+						<div class="selected-chicken-group-box-title">Traits</div>
+						<div class="selected-chicken-details-grid">
 
-                    <hr>
+							<div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
 
-                    <div class="selected-chicken-details-grid">
-                        <div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
-
-                        {% if selected_chicken.build_source_display == "Recessive" %}
-                            <div><strong>Beak:</strong> {{ selected_chicken.beak_h1 or "" }}</div>
-                            <div><strong>Comb:</strong> {{ selected_chicken.comb_h1 or "" }}</div>
-                            <div><strong>Eyes:</strong> {{ selected_chicken.eyes_h1 or "" }}</div>
-                            <div><strong>Feet:</strong> {{ selected_chicken.feet_h1 or "" }}</div>
-                            <div><strong>Wings:</strong> {{ selected_chicken.wings_h1 or "" }}</div>
-                            <div><strong>Tail:</strong> {{ selected_chicken.tail_h1 or "" }}</div>
-                            <div><strong>Body:</strong> {{ selected_chicken.body_h1 or "" }}</div>
-                        {% else %}
-                            <div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
-                            <div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
-                            <div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
-                            <div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
-                            <div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
-                            <div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
-                            <div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
-                        {% endif %}
+							{% if selected_chicken.build_source_display == "Recessive" %}
+								<div><strong>Beak:</strong> {{ selected_chicken.beak_h1 or "" }}</div>
+								<div><strong>Comb:</strong> {{ selected_chicken.comb_h1 or "" }}</div>
+								<div><strong>Eyes:</strong> {{ selected_chicken.eyes_h1 or "" }}</div>
+								<div><strong>Feet:</strong> {{ selected_chicken.feet_h1 or "" }}</div>
+								<div><strong>Wings:</strong> {{ selected_chicken.wings_h1 or "" }}</div>
+								<div><strong>Tail:</strong> {{ selected_chicken.tail_h1 or "" }}</div>
+								<div><strong>Body:</strong> {{ selected_chicken.body_h1 or "" }}</div>
+							{% else %}
+								<div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
+								<div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
+								<div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
+								<div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
+								<div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
+								<div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
+								<div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
+							{% endif %}
+						</div>
                     </div>
 					
 					<div class="selected-chicken-actions">
@@ -398,6 +452,7 @@
                 {% endif %}
             </div>
         </div>
+        </section>
     </div>
 
     {% if selected_chicken and potential_matches %}

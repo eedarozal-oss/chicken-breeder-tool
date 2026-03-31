@@ -7,73 +7,110 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <div class="topbar">
-            <div class="page-header">
-                <h1>Available Chickens for Breeding</h1>
-                <p class="page-description">Only chickens eligible for breeding are shown here.</p>
+    <div class="container breeding-page breeding-page-inventory">
+        <section class="breeding-hero breeding-hero-inventory">
+            <div class="panel breeding-hero-main">
+                <div class="topbar">
+                    <div class="page-header">
+                        <h1>Available Chickens</h1>
+                        <p class="page-description">Review all chickens currently eligible for breeding in your loaded wallet.</p>
+
+                        <div class="breeding-hero-highlights">
+                            <span class="breeding-hero-highlight">Breedable Only</span>
+                            <span class="breeding-hero-highlight">Wallet Ready</span>
+                            <span class="breeding-hero-highlight">Ninuno Visible</span>
+                        </div>
+                    </div>
+                    <div class="topbar-actions">
+                        <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+                    </div>
+                </div>
             </div>
-            <div class="topbar-actions topbar-actions-wrap">
-                <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
+
+            <div class="panel breeding-hero-side">
+                <div class="breeding-hero-side-card">
+                    <div class="breeding-hero-side-label">Overview</div>
+                    <div class="breeding-hero-side-value">{{ breedable_chickens|length }}</div>
+                    <div class="breeding-hero-side-note">Breedable chickens currently available in your loaded wallet.</div>
+                </div>
+
+                <div class="breeding-hero-steps">
+                    <div class="breeding-hero-steps-title">Workflow</div>
+                    <ol class="breeding-hero-steps-list" aria-label="Available chickens workflow">
+                        <li>Review breedable chickens</li>
+                        <li>Check core details</li>
+                        <li>Return and choose a mode</li>
+                    </ol>
+                </div>
             </div>
-        </div>
+        </section>
 
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
 
-        <div class="panel">
-            <div class="available-list-summary">
-                <div class="available-list-count">
-                    <span class="available-list-count-label">Total Breedable Chickens</span>
-                    <strong class="available-list-count-value">{{ breedable_chickens|length }}</strong>
+        <section class="breeding-section">
+            <div class="breeding-section-header">
+                <div>
+                    <div class="breeding-section-kicker">Inventory</div>
+                    <h2>Breedable Chicken List</h2>
                 </div>
+                <p class="breeding-section-note">Use this page to review your eligible chickens before moving into IP, Gene, or Ultimate matching.</p>
             </div>
 
-            {% if breedable_chickens %}
-                <div class="table-wrap">
-                    <table class="available-chickens-table">
-                        <thead>
-                            <tr>
-                                <th>Chicken ID</th>
-                                <th>IP</th>
-                                <th>Gen</th>
-                                <th>Breed Count</th>
-                                <th>Ninuno %</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for chicken in breedable_chickens %}
-                            <tr>
-                                <td>
-                                    <div class="chicken-id-card">
-                                        <img
-                                            src="{{ chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ chicken.token_id ~ '.png') }}"
-                                            alt="Chicken {{ chicken.token_id }}"
-                                            class="chicken-id-card-image"
-                                        >
-                                        <div class="chicken-id-card-text">#{{ chicken.token_id }}</div>
-                                    </div>
-                                </td>
-                                <td>{{ chicken.ip if chicken.ip is not none else '' }}</td>
-                                <td>{{ chicken.generation_text or '' }}</td>
-                                <td>{{ chicken.breed_count if chicken.breed_count is not none else '' }}</td>
-                                <td>
-                                    {% if chicken.is_complete %}
-                                        {{ chicken.ownership_percent }}%
-                                    {% else %}
-                                        Recalculate
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+            <div class="panel breeding-panel">
+                <div class="available-list-summary available-list-summary-refined">
+                    <div class="available-list-count">
+                        <span class="available-list-count-label">Total Breedable Chickens</span>
+                        <strong class="available-list-count-value">{{ breedable_chickens|length }}</strong>
+                    </div>
                 </div>
-            {% else %}
-                <p>No chickens available for breeding were found.</p>
-            {% endif %}
-        </div>
+
+                {% if breedable_chickens %}
+                    <div class="table-wrap inventory-table-wrap">
+                        <table class="available-chickens-table inventory-table">
+                            <thead>
+                                <tr>
+                                    <th>Chicken ID</th>
+                                    <th>IP</th>
+                                    <th>Gen</th>
+                                    <th>Breed Count</th>
+                                    <th>Ninuno %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for chicken in breedable_chickens %}
+                                <tr>
+                                    <td>
+                                        <div class="chicken-id-card">
+                                            <img
+                                                src="{{ chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ chicken.token_id ~ '.png') }}"
+                                                alt="Chicken {{ chicken.token_id }}"
+                                                class="chicken-id-card-image"
+                                            >
+                                            <div class="chicken-id-card-text">#{{ chicken.token_id }}</div>
+                                        </div>
+                                    </td>
+                                    <td>{{ chicken.ip if chicken.ip is not none else '' }}</td>
+                                    <td>{{ chicken.generation_text or '' }}</td>
+                                    <td>{{ chicken.breed_count if chicken.breed_count is not none else '' }}</td>
+                                    <td>
+                                        {% if chicken.is_complete %}
+                                            {{ chicken.ownership_percent }}%
+                                        {% else %}
+                                            Recalculate
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="inventory-empty-state">No chickens available for breeding were found.</div>
+                {% endif %}
+            </div>
+        </section>
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
