@@ -312,3 +312,80 @@ def get_wallet_access_expiry_display(wallet: str):
         return expires_at.strftime("%B %d, %Y %I:%M %p UTC")
     except Exception:
         return expires_at_raw
+
+def get_wallet_access_rows(limit=200):
+    conn = get_conn()
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            wallet_address,
+            source,
+            granted_at,
+            expires_at,
+            status,
+            notes
+        FROM wallet_access
+        ORDER BY expires_at DESC, granted_at DESC, wallet_address ASC
+        LIMIT ?
+    """, (int(limit),))
+
+    rows = [dict(row) for row in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def format_wallet_access_rows(rows):
+    now = datetime.now(timezone.utc)
+    formatted = []
+
+    for row in rows or []:
+        granted_at_raw = row.get("granted_at")
+        expires_at_raw = row.get("expires_at")
+        source = str(row.get("source") or "").strip().lower()
+        status = str(row.get("status") or "").strip().lower()
+
+        try:
+            granted_at_dt = datetime.fromisoformat(granted_at_raw) if granted_at_raw else None
+        except Exception:
+            granted_at_dt = None
+
+        try:
+            expires_at_dt = datetime.fromisoformat(expires_at_raw) if expires_at_raw else None
+        except Exception:
+            expires_at_dt = None
+
+        if source == "manual":
+            grant_type = "Manual"
+        elif source == "payment":
+            grant_type = "Payment"
+        else:
+            grant_type = source.title() if source else ""
+
+        if expires_at_dt:
+            expiry_display = expires_at_dt.strftime("%B %d, %Y %I:%M %p UTC")
+            if status == "active" and expires_at_dt > now:
+                status_display = "Active"
+                total_seconds = (expires_at_dt - now).total_seconds()
+                days_remaining = max(0, int(total_seconds // 86400))
+            else:
+                status_display = "Expired" if status == "active" else status.title() if status else "Expired"
+                days_remaining = 0
+        else:
+            expiry_display = ""
+            status_display = status.title() if status else ""
+            days_remaining = 0
+
+        granted_display = granted_at_dt.strftime("%B %d, %Y %I:%M %p UTC") if granted_at_dt else ""
+
+        formatted.append({
+            **row,
+            "grant_type_display": grant_type,
+            "granted_at_display": granted_display,
+            "expires_at_display": expiry_display,
+            "status_display": status_display,
+            "days_remaining": days_remaining,
+        })
+
+    return formatted
