@@ -15,22 +15,34 @@
                 class="welcome-hero-image"
             >
 
-			<form method="POST" class="welcome-wallet-form">
-                <div class="landing-hero-kicker"></div>
+			<form method="POST" class="welcome-wallet-form" id="wallet-load-form">
 				<div class="wallet-input-shell">
 					<input
 						type="text"
+						id="wallet_address"
 						name="wallet_address"
 						placeholder="Enter wallet address"
 						value="{{ wallet or '' }}"
 						required
+						autocomplete="off"
 					>
-					<button type="submit">Load Wallet</button>
+					<button type="submit" id="wallet-load-button">Load Wallet</button>
 				</div>
 
-                {% if not success and not error %}
-                    <div class="welcome-success" style="background: rgba(10, 24, 42, 0.78); color: #d8e9ff;">Load your wallet to access IP, Gene, and Ultimate breeding tools.</div>
-                {% endif %}
+				{% if not success and not error %}
+					<div class="welcome-success welcome-info-strip" id="wallet-info-strip">
+						Load your wallet to access IP, Gene, and Ultimate breeding tools.
+					</div>
+				{% endif %}
+
+				<div
+					id="wallet-load-status"
+					class="welcome-success"
+					style="display: none;"
+					aria-live="polite"
+				>
+					Validating wallet access...
+				</div>
 
 				{% if success %}
 					<div class="welcome-success">{{ success }}</div>
@@ -43,6 +55,56 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
+	<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		const form = document.getElementById("wallet-load-form");
+		const button = document.getElementById("wallet-load-button");
+		const statusBox = document.getElementById("wallet-load-status");
+		const infoStrip = document.getElementById("wallet-info-strip");
+		const walletInput = document.getElementById("wallet_address");
+
+		if (!form || !button || !statusBox || !walletInput) return;
+
+		form.addEventListener("submit", function () {
+			const walletValue = walletInput.value.trim();
+			if (!walletValue) return;
+
+			if (infoStrip) {
+				infoStrip.style.display = "none";
+			}
+
+			button.disabled = true;
+			button.textContent = "Loading...";
+
+			statusBox.style.display = "block";
+			statusBox.className = "welcome-success";
+			statusBox.textContent = "Validating wallet access...";
+
+			const steps = [
+				"Checking static cache data...",
+				"Loading wallet chickens...",
+				"Preparing breeding data...",
+				"Finalizing wallet session..."
+			];
+
+			let stepIndex = 0;
+
+			const timer = setInterval(function () {
+				if (stepIndex >= steps.length) {
+					clearInterval(timer);
+					return;
+				}
+
+				statusBox.textContent = steps[stepIndex];
+				stepIndex += 1;
+			}, 1400);
+
+			window.addEventListener("beforeunload", function () {
+				clearInterval(timer);
+			}, { once: true });
+		});
+	});
+	</script>
 	{% if redirect_url %}
 		<script>
     			setTimeout(function () {

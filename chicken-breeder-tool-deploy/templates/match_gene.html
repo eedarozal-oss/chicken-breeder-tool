@@ -105,15 +105,8 @@
             <span>Show only 100% Ninuno</span>
         </div>
     </div>
-
     <div class="filter-actions-group">
         <button type="submit">Apply Filters</button>
-		<a
-			class="link-btn"
-			href="{{ url_for('match_gene_page', wallet_address=wallet, selected_token_id=selected_token_id or None, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0, auto_match=1) }}"
-		>
-			Auto Match
-		</a>
 	<button type="button" id="toggle-gene-batch" class="link-btn secondary-link-btn">Stop Recessive Check</button>
     </div>
 </div>
@@ -130,6 +123,50 @@
                 </div>
                 <p class="breeding-section-note">The list below already reflects your current build and Ninuno filters. Click any row to load it into the comparison workspace.</p>
             </div>
+			{% if breedable_chickens %}
+				<div class="available-list-toolbar">
+					<form method="GET" action="{{ url_for('match_gene_page') }}" class="available-sort-form">
+						<input type="hidden" name="wallet_address" value="{{ wallet }}">
+						<input type="hidden" name="build_type" value="{{ build_type }}">
+						<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+						{% if selected_token_id %}
+							<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">
+						{% endif %}
+
+						<div class="available-sort-controls">
+							<div>
+								<label for="sort_by"><strong>Sort Available By</strong></label>
+								<select id="sort_by" name="sort_by">
+									<option value="" {% if not sort_by %}selected{% endif %}>Default Order</option>
+									<option value="build_source" {% if sort_by == "build_source" %}selected{% endif %}>Build Source</option>
+									<option value="build_match" {% if sort_by == "build_match" %}selected{% endif %}>Build Match</option>
+									<option value="generation" {% if sort_by == "generation" %}selected{% endif %}>Generation</option>
+									<option value="breed_count" {% if sort_by == "breed_count" %}selected{% endif %}>Breed Count</option>
+									<option value="ip" {% if sort_by == "ip" %}selected{% endif %}>IP</option>
+								</select>
+							</div>
+
+							<div>
+								<label for="sort_dir"><strong>Direction</strong></label>
+								<select id="sort_dir" name="sort_dir">
+									<option value="asc" {% if sort_dir == "asc" %}selected{% endif %}>Ascending</option>
+									<option value="desc" {% if sort_dir == "desc" %}selected{% endif %}>Descending</option>
+								</select>
+							</div>
+
+							<div class="available-sort-actions">
+								<button type="submit">Apply Sort</button>
+								<a
+									class="link-btn"
+									href="{{ url_for('match_gene_page', wallet_address=wallet, selected_token_id=selected_token_id or None, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir, auto_match=1) }}"
+								>
+									Auto Match
+								</a>
+							</div>
+						</div>
+					</form>
+				</div>
+			{% endif %}
         <div class="panel breeding-panel">
 			{% if build_type %}
 				<div class="build-type-guide">
@@ -165,7 +202,7 @@
                             {% for chicken in breedable_chickens %}
 							<tr
 								class="clickable-row"
-								data-href="{{ url_for('match_gene_page', wallet_address=wallet, selected_token_id=chicken.token_id, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0) }}#selected-chicken"
+								data-href="{{ url_for('match_gene_page', wallet_address=wallet, selected_token_id=chicken.token_id, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir) }}#selected-chicken"
 								tabindex="0"
 							>
                                 <td>
@@ -204,7 +241,11 @@
             {% elif build_type %}
                 <p>No chickens found for this build.</p>
             {% else %}
-                <p>Select a build to see available chickens for gene breeding.</p>
+                <div class="empty-state-card empty-state-card-wide">
+                <div class="empty-state-kicker">Choose a build</div>
+                <h3>Select a build to see available chickens.</h3>
+                <p>Pick your target build first to load the compatible gene candidates in this workspace.</p>
+            </div>
             {% endif %}
         </div>
         </section>
@@ -224,7 +265,7 @@
 						<h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
 						<a
 							class="selected-chicken-clear-btn"
-							href="{{ url_for('match_gene_page', wallet_address=wallet, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0) }}"
+							href="{{ url_for('match_gene_page', wallet_address=wallet, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir) }}"
 							title="Clear selected chicken"
 						>
 							×
@@ -245,17 +286,15 @@
                             <strong>Build Source:</strong>
                             {{ selected_chicken.build_source_display or "" }}
                         </div>
-
+						<div><strong>Build Match:</strong>
+                            {{ selected_chicken.build_match_display or "" }}
+                        </div>
                         <div>
                             <strong>Breed Count:</strong>
                             {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}
                         </div>
 
-                        <div>
-                            <strong>Build Match:</strong>
-                            {{ selected_chicken.build_match_display or "" }}
-                        </div>
-
+                        
 						<div id="ninuno-{{ selected_chicken.token_id }}">
 							<strong>Ninuno %:</strong>
 							{% if selected_chicken.total_root_count %}
@@ -319,14 +358,17 @@
 					<div class="selected-chicken-actions">
 						<a
 							class="link-btn selected-auto-match-btn"
-							href="{{ url_for('match_gene_page', wallet_address=wallet, selected_token_id=selected_chicken.token_id, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0, auto_match=1) }}"
+							href="{{ url_for('match_gene_page', wallet_address=wallet, selected_token_id=selected_chicken.token_id, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir, auto_match=1) }}"
 						>
 							Auto Match
 						</a>
 					</div>
                 {% else %}
-                    <h2 class="selected-chicken-title">Selected Chicken</h2>
-                    <p>Select a chicken from the available list.</p>
+                    <div class="empty-state-card">
+                        <div class="empty-state-kicker">No selection</div>
+                        <h3>Selected Chicken</h3>
+                        <p>Choose a chicken from the filtered list above to review its build source and visible traits.</p>
+                    </div>
                 {% endif %}
             </div>
 
@@ -445,10 +487,18 @@
                             </table>
                         </div>
 					{% else %}
-                        <p>No gene matches found for the selected chicken.</p>
+                        <div class="empty-state-card empty-state-card-inline">
+                            <div class="empty-state-kicker">No matches found</div>
+                            <h3>Potential Gene Matches</h3>
+                            <p>No gene matches were found for this selected chicken under the current build and Ninuno conditions.</p>
+                        </div>
                     {% endif %}
                 {% else %}
-                    <p>Select a chicken first to see gene breeding matches.</p>
+                    <div class="empty-state-card empty-state-card-inline">
+                    <div class="empty-state-kicker">Waiting for selection</div>
+                    <h3>Potential Gene Matches</h3>
+                    <p>Select a chicken first to load the strongest trait-based pairings.</p>
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -489,30 +539,30 @@
                             <div class="compare-image-placeholder">No Image</div>
                         {% endif %}
                     </div>
+					<div class="selected-chicken-group-box">
+						<div class="selected-chicken-group-box-title">Traits</div>
+						<div class="stats-grid">
+							<div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
 
-                    <div class="compare-section-title">Traits</div>
-                    <div class="stats-grid">
-                        <div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
-
-                        {% if selected_chicken.build_source_display == "Recessive" %}
-                            <div><strong>Beak:</strong> {{ selected_chicken.beak_h1 or "" }}</div>
-                            <div><strong>Comb:</strong> {{ selected_chicken.comb_h1 or "" }}</div>
-                            <div><strong>Eyes:</strong> {{ selected_chicken.eyes_h1 or "" }}</div>
-                            <div><strong>Feet:</strong> {{ selected_chicken.feet_h1 or "" }}</div>
-                            <div><strong>Wings:</strong> {{ selected_chicken.wings_h1 or "" }}</div>
-                            <div><strong>Tail:</strong> {{ selected_chicken.tail_h1 or "" }}</div>
-                            <div><strong>Body:</strong> {{ selected_chicken.body_h1 or "" }}</div>
-                        {% else %}
-                            <div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
-                            <div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
-                            <div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
-                            <div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
-                            <div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
-                            <div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
-                            <div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
-                        {% endif %}
-                    </div>
-
+							{% if selected_chicken.build_source_display == "Recessive" %}
+								<div><strong>Beak:</strong> {{ selected_chicken.beak_h1 or "" }}</div>
+								<div><strong>Comb:</strong> {{ selected_chicken.comb_h1 or "" }}</div>
+								<div><strong>Eyes:</strong> {{ selected_chicken.eyes_h1 or "" }}</div>
+								<div><strong>Feet:</strong> {{ selected_chicken.feet_h1 or "" }}</div>
+								<div><strong>Wings:</strong> {{ selected_chicken.wings_h1 or "" }}</div>
+								<div><strong>Tail:</strong> {{ selected_chicken.tail_h1 or "" }}</div>
+								<div><strong>Body:</strong> {{ selected_chicken.body_h1 or "" }}</div>
+							{% else %}
+								<div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
+								<div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
+								<div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
+								<div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
+								<div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
+								<div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
+								<div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
+							{% endif %}
+						</div>
+					</div>
 					<div class="compare-item-box">
 						<div class="compare-item-label">Recommended Item</div>
 						{% set item_image = get_item_image_url(selected_item.name) %}
@@ -538,30 +588,30 @@
                             <div class="compare-image-placeholder">No Image</div>
                         {% endif %}
                     </div>
+					<div class="selected-chicken-group-box">
+						<div class="selected-chicken-group-box-title">Traits</div>
+						<div class="stats-grid">
+							<div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
 
-                    <div class="compare-section-title">Traits</div>
-                    <div class="stats-grid">
-                        <div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
-
-                        {% if row.candidate.build_source_display == "Recessive" %}
-                            <div><strong>Beak:</strong> {{ row.candidate.beak_h1 or "" }}</div>
-                            <div><strong>Comb:</strong> {{ row.candidate.comb_h1 or "" }}</div>
-                            <div><strong>Eyes:</strong> {{ row.candidate.eyes_h1 or "" }}</div>
-                            <div><strong>Feet:</strong> {{ row.candidate.feet_h1 or "" }}</div>
-                            <div><strong>Wings:</strong> {{ row.candidate.wings_h1 or "" }}</div>
-                            <div><strong>Tail:</strong> {{ row.candidate.tail_h1 or "" }}</div>
-                            <div><strong>Body:</strong> {{ row.candidate.body_h1 or "" }}</div>
-                        {% else %}
-                            <div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
-                            <div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
-                            <div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
-                            <div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
-                            <div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
-                            <div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
-                            <div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
-                        {% endif %}
-                    </div>
-
+							{% if row.candidate.build_source_display == "Recessive" %}
+								<div><strong>Beak:</strong> {{ row.candidate.beak_h1 or "" }}</div>
+								<div><strong>Comb:</strong> {{ row.candidate.comb_h1 or "" }}</div>
+								<div><strong>Eyes:</strong> {{ row.candidate.eyes_h1 or "" }}</div>
+								<div><strong>Feet:</strong> {{ row.candidate.feet_h1 or "" }}</div>
+								<div><strong>Wings:</strong> {{ row.candidate.wings_h1 or "" }}</div>
+								<div><strong>Tail:</strong> {{ row.candidate.tail_h1 or "" }}</div>
+								<div><strong>Body:</strong> {{ row.candidate.body_h1 or "" }}</div>
+							{% else %}
+								<div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
+								<div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
+								<div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
+								<div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
+								<div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
+								<div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
+								<div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
+							{% endif %}
+						</div>
+					</div>
 					<div class="compare-item-box">
 						<div class="compare-item-label">Recommended Item</div>
 						{% set item_image = get_item_image_url(candidate_item.name) %}
@@ -581,6 +631,34 @@
         {% endfor %}
     </div>
     {% endif %}
+	{% if auto_match and not potential_matches %}
+	<div id="auto-match-empty-modal" class="compare-modal">
+		<div class="compare-backdrop" data-close-auto-match-empty></div>
+		<div class="compare-dialog compare-dialog-small">
+			<div class="compare-header">
+				<div class="compare-header-main">
+					<h3>No Auto-Match Found</h3>
+					<div class="match-disclaimer">
+						{% if selected_chicken %}
+							No gene matches were found for the selected chicken under the current build and filters.
+						{% else %}
+							No gene matches were found for the current build and filters.
+						{% endif %}
+					</div>
+				</div>
+				<button
+					type="button"
+					class="selected-chicken-clear-btn"
+					data-close-auto-match-empty
+					aria-label="Close"
+					title="Close"
+				>
+					×
+				</button>
+			</div>
+		</div>
+	</div>
+	{% endif %}
 	<script>
 	document.addEventListener("DOMContentLoaded", function () {
 		const statusBox = document.getElementById("gene-batch-status");
@@ -685,6 +763,23 @@
 					window.location.href = row.dataset.href;
 				}
 			});
+		});
+	});
+	</script>
+	<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		const emptyModal = document.getElementById("auto-match-empty-modal");
+		if (!emptyModal) return;
+
+		document.body.classList.add("modal-open");
+
+		function closeEmptyModal() {
+			emptyModal.remove();
+			document.body.classList.remove("modal-open");
+		}
+
+		emptyModal.querySelectorAll("[data-close-auto-match-empty]").forEach(function (node) {
+			node.addEventListener("click", closeEmptyModal);
 		});
 	});
 	</script>

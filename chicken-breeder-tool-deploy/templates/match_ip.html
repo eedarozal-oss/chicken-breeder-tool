@@ -111,12 +111,6 @@
 
 		<div class="filter-actions-group">
     			<button type="submit">Apply Filters</button>
-				<a
-					class="link-btn"
-					href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=selected_token_id or None, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, auto_match=1) }}"
-				>
-					Auto Match
-				</a>
 		</div>
     </div>
 </form>            
@@ -135,7 +129,50 @@
 
         <div class="panel breeding-panel">
             <h2>Available Chickens</h2>
+			{% if breedable_chickens %}
+				<div class="available-list-toolbar">
+					<form method="GET" action="{{ url_for('match_ip_page') }}" class="available-sort-form">
+						<input type="hidden" name="wallet_address" value="{{ wallet }}">
+						<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
+						<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
+						<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+						{% if selected_token_id %}
+							<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">
+						{% endif %}
 
+						<div class="available-sort-controls">
+							<div>
+								<label for="sort_by"><strong>Sort Available By</strong></label>
+								<select id="sort_by" name="sort_by">
+									<option value="" {% if not sort_by %}selected{% endif %}>Default Order</option>
+									<option value="ip" {% if sort_by == "ip" %}selected{% endif %}>IP</option>
+									<option value="breed_count" {% if sort_by == "breed_count" %}selected{% endif %}>Breed Count</option>
+									<option value="generation" {% if sort_by == "generation" %}selected{% endif %}>Generation</option>
+								</select>
+							</div>
+
+							<div>
+								<label for="sort_dir"><strong>Direction</strong></label>
+								<select id="sort_dir" name="sort_dir">
+									<option value="desc" {% if sort_dir == "desc" %}selected{% endif %}>Descending</option>
+									<option value="asc" {% if sort_dir == "asc" %}selected{% endif %}>Ascending</option>
+								</select>
+							</div>
+
+							<div class="available-sort-actions">
+								<button type="submit">Apply Sort</button>
+								<a
+									class="link-btn"
+									href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=selected_token_id or None, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir, auto_match=1) }}"
+								>
+									Auto Match
+								</a>
+							</div>
+						</div>
+					</form>
+				</div>
+			{% endif %}
+			
             {% if breedable_chickens %}
                 <div class="table-wrap limited-table ip-available-table">
                     <table>
@@ -143,7 +180,7 @@
 							<tr>
 								<th>Chicken ID</th>
 								<th>IP</th>
-								<th>Instinct</th>
+								<th>Weakest Stat</th>
 								<th>Generation</th>
 								<th>Breed Count</th>
 								<th>Ninuno %</th>
@@ -153,7 +190,7 @@
                             {% for chicken in breedable_chickens %}
 							<tr
 								class="clickable-row"
-								data-href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=chicken.token_id, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0) }}#selected-chicken"
+								data-href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=chicken.token_id, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir) }}#selected-chicken"
 								tabindex="0"
 							>
                                 <td>
@@ -167,7 +204,7 @@
                                     </div>
                                 </td>
                                 <td>{{ chicken.ip if chicken.ip is not none else "" }}</td>
-                                <td>{{ chicken.instinct or "" }}</td>
+                                <td>{{ chicken.weakest_stat_display or "" }}</td>
                                 <td>{{ chicken.generation_text or "" }}</td>
                                 <td>{{ chicken.breed_count if chicken.breed_count is not none else "" }}</td>
                                 <td>
@@ -188,7 +225,11 @@
                     </table>
                 </div>
             {% else %}
-                <p>No available chickens found for IP breeding.</p>
+                <div class="empty-state-card empty-state-card-wide">
+                <div class="empty-state-kicker">No parents ready</div>
+                <h3>No available chickens found for IP breeding.</h3>
+                <p>Try lowering the minimum IP or clearing the Ninuno filter to widen the available pool.</p>
+            </div>
             {% endif %}
         </div>
         </section>
@@ -209,7 +250,7 @@
 			<h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
 			<a
 				class="selected-chicken-clear-btn"
-				href="{{ url_for('match_ip_page', wallet_address=wallet, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0) }}"
+				href="{{ url_for('match_ip_page', wallet_address=wallet, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir) }}"
 				title="Clear selected chicken"
 			>
 				×
@@ -226,11 +267,10 @@
 	</div>
 
         <div class="selected-chicken-summary-grid">
-            <!--<div>
-                <strong>IP:</strong>
-                {{ selected_chicken.ip if selected_chicken.ip is not none else "" }}
-            </div>-->
-
+            <div>
+                <strong>Breed Count:</strong>
+                {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}
+            </div>
 			<div id="ninuno-{{ selected_chicken.token_id }}">
 				<strong>Ninuno %:</strong>
 				{% if selected_chicken.total_root_count %}
@@ -264,11 +304,6 @@
 					</span>
 				{% endif %}
 			</div>
-
-            <div>
-                <strong>Breed Count:</strong>
-                {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}
-            </div>
         </div>
 
         <div class="selected-chicken-group-box">
@@ -289,14 +324,17 @@
 		<div class="selected-chicken-actions">
 			<a
 				class="link-btn selected-auto-match-btn"
-				href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=selected_chicken.token_id, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, auto_match=1) }}"
+				href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=selected_chicken.token_id, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir, auto_match=1) }}"
 			>
 				Auto Match
 			</a>
 		</div>
     {% else %}
-        <h2 class="selected-chicken-title">Selected Chicken</h2>
-        <p>Select a chicken from the available list.</p>
+        <div class="empty-state-card">
+            <div class="empty-state-kicker">No selection</div>
+            <h3>Selected Chicken</h3>
+            <p>Pick a chicken from the available list to load its stats and pairing view here.</p>
+        </div>
     {% endif %}
 </div>
             <div class="panel breeding-panel">
@@ -310,7 +348,7 @@
 									<tr>
 										<th></th>
 										<th>Chicken ID</th>
-										<th>IP</th>
+										<th>{{ selected_weakest_stat_column_label or "Selected Weakest Stat" }}</th>
 										<th>IP Diff</th>
 										<th>Breed Count</th>
 										<th>Ninuno %</th>
@@ -343,7 +381,7 @@
                                                 <div class="chicken-id-card-text">#{{ row.candidate.token_id }}</div>
                                             </div>
                                         </td>
-                                        <td>{{ row.candidate.ip if row.candidate.ip is not none else "" }}</td>
+                                        <td>{{ row.selected_weakest_stat_display or "" }}</td>
                                         <td>{{ row.evaluation.ip_difference if row.evaluation.ip_difference is not none else "" }}</td>
                                         <td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
 										<td id="ninuno-{{ row.candidate.token_id }}">
@@ -387,18 +425,18 @@
                                         </td>
                                     </tr>
                                     <tr id="ip-details-{{ row.candidate.token_id }}" class="details-row hidden">
-                                        <td colspan="7">
+                                        <td colspan="6">
                                             <div class="details-card">
                                                 <h3>Chicken {{ row.candidate.token_id }} Full Innate Stats</h3>
                                                 <div class="stats-grid">
-                                                    <div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
-                                                    <div><strong>Innate Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
-                                                    <div><strong>Innate Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
-                                                    <div><strong>Innate Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
-                                                    <div><strong>Innate Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
-						    <div><strong>Innate Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
-						         <div><strong>Innate Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
-						    <div><strong>Innate Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
+                                                    <div><strong>IP:</strong> {{ row.candidate.ip or "" }}</div>
+                                                    <div><strong>Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
+                                                    <div><strong>Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
+                                                    <div><strong>Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
+                                                    <div><strong>Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
+						    <div><strong>Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
+						         <div><strong>Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
+						    <div><strong>Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
                                                 </div>
                                             </div>
                                         </td>
@@ -408,10 +446,18 @@
                             </table>
                         </div>
                     {% else %}
-                        <p>No IP matches found for the selected chicken.</p>
+                        <div class="empty-state-card empty-state-card-inline">
+                            <div class="empty-state-kicker">No matches found</div>
+                            <h3>Potential IP Matches</h3>
+                            <p>No IP matches passed your current rules for the selected chicken. Try widening your filter settings.</p>
+                        </div>
                     {% endif %}
                 {% else %}
-                    <p>Select a chicken first to see IP breeding matches.</p>
+                    <div class="empty-state-card empty-state-card-inline">
+                    <div class="empty-state-kicker">Waiting for selection</div>
+                    <h3>Potential IP Matches</h3>
+                    <p>Select a chicken first to load the best IP-based pairings here.</p>
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -448,18 +494,19 @@
                     <div class="compare-image-wrap">
                         <img src="{{ selected_chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ selected_chicken.token_id ~ '.png') }}" alt="Chicken {{ selected_chicken.token_id }}" class="compare-image">
                     </div>
-
-                    <div class="stats-grid">
-                        <div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
-                        <div><strong>Innate Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
-                        <div><strong>Innate Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
-                        <div><strong>Innate Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
-                        <div><strong>Innate Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
-<div><strong>Innate Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
-<div><strong>Innate Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
-<div><strong>Innate Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
-                    </div>
-
+					<div class="selected-chicken-group-box">
+						<div class="selected-chicken-group-box-title">Innate Stats</div>
+						<div class="stats-grid">
+							<div><strong>IP:</strong> {{ selected_chicken.ip or "" }}</div>
+							<div><strong>Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
+							<div><strong>Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
+							<div><strong>Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
+							<div><strong>Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
+							<div><strong>Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
+							<div><strong>Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
+							<div><strong>Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
+						</div>
+					</div>
 					<div class="compare-item-box">
 						<div class="compare-item-label">Recommended Item</div>
 						{% if selected_item %}
@@ -490,18 +537,19 @@
                     <div class="compare-image-wrap">
                         <img src="{{ row.candidate.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.candidate.token_id ~ '.png') }}" alt="Chicken {{ row.candidate.token_id }}" class="compare-image">
                     </div>
-
-                    <div class="stats-grid">
-                        <div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
-                        <div><strong>Innate Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
-                        <div><strong>Innate Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
-                        <div><strong>Innate Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
-                        <div><strong>Innate Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
-<div><strong>Innate Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
-<div><strong>Innate Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
-<div><strong>Innate Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
-                    </div>
-
+					<div class="selected-chicken-group-box">
+						<div class="selected-chicken-group-box-title">Innate Stats</div>
+						<div class="stats-grid">
+							<div><strong>IP:</strong> {{ row.candidate.ip or "" }}</div>
+							<div><strong>Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
+							<div><strong>Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
+							<div><strong>Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
+							<div><strong>Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
+							<div><strong>Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
+							<div><strong>Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
+							<div><strong>Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
+						</div>
+					</div>
 					<div class="compare-item-box">
 						<div class="compare-item-label">Recommended Item</div>
 						{% if candidate_item %}
@@ -530,6 +578,34 @@
     {% endfor %}
 </div>
 {% endif %}
+	{% if auto_match and not potential_matches %}
+	<div id="auto-match-empty-modal" class="compare-modal">
+		<div class="compare-backdrop" data-close-auto-match-empty></div>
+		<div class="compare-dialog compare-dialog-small">
+			<div class="compare-header">
+				<div class="compare-header-main">
+					<h3>No Auto-Match Found</h3>
+					<div class="match-disclaimer">
+						{% if selected_chicken %}
+							No IP matches were found for the selected chicken under the current filters.
+						{% else %}
+							No IP matches were found for the current filters.
+						{% endif %}
+					</div>
+				</div>
+				<button
+					type="button"
+					class="selected-chicken-clear-btn"
+					data-close-auto-match-empty
+					aria-label="Close"
+					title="Close"
+				>
+					×
+				</button>
+			</div>
+		</div>
+	</div>
+	{% endif %}
 	<script>
 	document.addEventListener("DOMContentLoaded", function () {
 		document.querySelectorAll(".clickable-row[data-href]").forEach(function (row) {
@@ -544,6 +620,23 @@
 					window.location.href = row.dataset.href;
 				}
 			});
+		});
+	});
+	</script>
+	<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		const emptyModal = document.getElementById("auto-match-empty-modal");
+		if (!emptyModal) return;
+
+		document.body.classList.add("modal-open");
+
+		function closeEmptyModal() {
+			emptyModal.remove();
+			document.body.classList.remove("modal-open");
+		}
+
+		emptyModal.querySelectorAll("[data-close-auto-match-empty]").forEach(function (node) {
+			node.addEventListener("click", closeEmptyModal);
 		});
 	});
 	</script>

@@ -86,7 +86,47 @@
                 </div>
             </form>
         </div>
+		<div class="panel" style="max-width: 1100px; margin: 20px auto 0 auto;">
+            <h2>Wallet Access List</h2>
+            <p class="page-description" style="margin-bottom: 14px;">
+                Current wallet access records for the web app.
+            </p>
 
+            {% if access_rows %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Wallet</th>
+                                <th>Grant Type</th>
+                                <th>Granted At</th>
+                                <th>Access Until</th>
+                                <th>Status</th>
+                                <th>Days Remaining</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in access_rows %}
+                                <tr>
+                                    <td style="word-break: break-all;">{{ row.wallet_address }}</td>
+                                    <td>{{ row.grant_type_display }}</td>
+                                    <td>{{ row.granted_at_display }}</td>
+                                    <td>{{ row.expires_at_display }}</td>
+                                    <td>{{ row.status_display }}</td>
+                                    <td>{{ row.days_remaining }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state-card empty-state-card-wide">
+                    <div class="empty-state-kicker">No access records</div>
+                    <h3>No wallet access entries found.</h3>
+                    <p>Granted wallets will appear here after the first successful access record is saved.</p>
+                </div>
+            {% endif %}
+        </div>
         <div class="panel" style="max-width: 720px; margin: 20px auto 0 auto;">
             <h2>Sync Static Cache Tables</h2>
             <p class="page-description" style="margin-bottom: 14px;">
