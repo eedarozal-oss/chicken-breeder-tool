@@ -46,7 +46,7 @@ from services.wallet_access import (
 )
 
 app = Flask(__name__)
-app.secret_key = "replace-this-with-a-real-secret-key"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-fallback-secret")
 
 CONTRACTS = [
     "0xee9436518030616bc315665678738a4348463df4",
