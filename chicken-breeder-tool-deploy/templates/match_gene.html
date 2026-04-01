@@ -6,7 +6,10 @@
     <title>Gene Breeding</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body data-auto-open-template-id="{{ auto_open_template_id or '' }}">
+<body
+    data-auto-open-template-id="{{ auto_open_template_id or '' }}"
+    data-auto-match-result-open="{{ 1 if auto_open_multi_match else 0 }}"
+>
     <div class="container breeding-page breeding-page-gene">
         <section class="breeding-hero breeding-hero-gene">
 			<div class="breeding-hero-left">
@@ -156,12 +159,7 @@
 
 							<div class="available-sort-actions">
 								<button type="submit">Apply Sort</button>
-								<a
-									class="link-btn"
-									href="{{ url_for('match_gene_page', wallet_address=wallet, selected_token_id=selected_token_id or None, build_type=build_type, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir, auto_match=1) }}"
-								>
-									Auto Match
-								</a>
+								<button type="button" class="link-btn open-auto-match-config-btn">Auto Match</button>
 							</div>
 						</div>
 					</form>
@@ -505,7 +503,164 @@
         </section>
     </div>
 
-    {% if selected_chicken and potential_matches %}
+    <div id="auto-match-config-modal" class="compare-modal hidden">
+    <div class="compare-backdrop" data-close-auto-match-config></div>
+    <div class="compare-dialog auto-match-config-dialog">
+        <div class="compare-header">
+            <div class="compare-header-main">
+                <h3>Auto Match Setup</h3>
+                <div class="match-disclaimer">
+					Match chickens from the filtered list on this page. In Mode, choose Single to find one best pair, or Multiple to build several non-repeating pairs.
+                </div>
+            </div>
+            <!--<button type="button" data-close-auto-match-config>Close</button>-->
+				<button
+					type="button"
+					class="selected-chicken-clear-btn"
+					data-close-auto-match-config
+					aria-label="Close"
+					title="Close"
+				>
+					×
+				</button>
+        </div>
+        <div class="compare-body">
+            <form method="GET" action="{{ url_for('match_gene_page') }}" class="filter-form auto-match-config-form">
+                <input type="hidden" name="wallet_address" value="{{ wallet }}">
+                <input type="hidden" name="build_type" value="{{ build_type }}">
+                <input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+                <input type="hidden" name="sort_by" value="{{ sort_by }}">
+                <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+                <input type="hidden" name="auto_match" value="1">
+                <input type="hidden" name="auto_match_source" value="available">
+				<div class="auto-match-config-grid">
+					<div class="auto-match-field">
+						<label><strong>Mode</strong></label>
+						<select name="auto_match_mode">
+							<option value="single" {% if auto_match_mode == 'single' %}selected{% endif %}>Single</option>
+							<option value="multiple" {% if auto_match_mode == 'multiple' %}selected{% endif %}>Multiple</option>
+						</select>
+					</div>
+
+					<div class="auto-match-field">
+						<label><strong>Minimum Build Count</strong></label>
+						<input type="number" name="popup_min_build_count" min="0" value="{{ popup_min_build_count if popup_min_build_count is not none else '' }}">
+					</div>
+
+					<div class="auto-match-field">
+						<label><strong>Breed Count Difference</strong></label>
+						<input type="number" name="popup_breed_diff" min="0" value="{{ popup_breed_diff if popup_breed_diff is not none else '' }}">
+					</div>
+					
+					<div class="auto-match-field">
+						<label><strong>Ninuno</strong></label>
+						<select name="popup_ninuno">
+							<option value="all" {% if popup_ninuno == 'all' %}selected{% endif %}>All</option>
+							<option value="gt0" {% if popup_ninuno == 'gt0' %}selected{% endif %}>Above 0%</option>
+							<option value="100" {% if popup_ninuno == '100' %}selected{% endif %}>100% Only</option>
+						</select>
+					</div>
+
+					<div class="auto-match-field multi-match-count-wrap">
+						<label><strong>Number of Matches</strong></label>
+						<input type="number" name="popup_match_count" min="1" max="{{ available_pair_max }}" value="{{ popup_match_count if popup_match_count is not none else 1 }}">
+						<div class="note">Max from current pool: {{ available_pair_max }}</div>
+					</div>
+					
+					<div class="auto-match-field auto-match-checkbox-field">
+						<label><strong>Same Instinct</strong></label>
+						<div class="ninuno-filter-inline">
+							<input type="checkbox" name="popup_same_instinct" value="1" {% if popup_same_instinct %}checked{% endif %}>
+							<span>Require same instinct</span>
+						</div>
+					</div>
+
+					<div class="auto-match-field auto-match-submit-field">
+						<button type="submit">Run Auto Match</button>
+					</div>
+				</div>
+            </form>
+        </div>
+    </div>
+</div>
+{% if multi_match_rows %}
+<div id="auto-match-result-modal" class="compare-modal hidden">
+    <div class="compare-backdrop" data-close-auto-match-result></div>
+    <div class="compare-dialog multi-match-dialog">
+        <div class="compare-header">
+            <div class="compare-header-main">
+                <h3>Multiple Gene Matches</h3>
+                <div class="match-disclaimer">
+                    This gene match guide is for reference only. It highlights promising pairings based on current trait matching, but breeding outcomes are not guaranteed.
+                </div>
+                {% if multi_match_note %}
+                    <div class="match-disclaimer multi-match-note">{{ multi_match_note }}</div>
+                {% endif %}
+            </div>
+			<button
+				type="button"
+				class="selected-chicken-clear-btn"
+				data-close-auto-match-result
+				aria-label="Close"
+				title="Close"
+			>
+				×
+			</button>
+        </div>
+        <div class="compare-body">
+            {% for row in multi_match_rows %}
+            <div class="multi-match-row">
+                <div class="multi-match-side multi-match-side-boxed">
+                    <h4>Chicken #{{ row.left.token_id }}</h4>
+                    <div class="multi-match-details-grid">
+                        <div><strong>Instinct</strong><span>{{ row.left.instinct or '' }}</span></div>
+                        <div><strong>Build Count</strong><span>{{ row.left.build_match_display or '' }}</span></div>
+                        <div><strong>Breed Count</strong><span>{{ row.left.breed_count if row.left.breed_count is not none else '' }}</span></div>
+                        <div><strong>Ninuno</strong><span>{{ row.left.ownership_percent or 0 }}%</span></div>
+                    </div>
+                    <div class="multi-match-item-bar">
+                        <div class="multi-match-item-text-single">
+                            Recommended item: {{ row.left_item.name if row.left_item else 'No item recommended' }}
+                        </div>
+                        {% set left_item_image = get_item_image_url(row.left_item.name) if row.left_item else '' %}
+                        {% if left_item_image %}
+                            <img src="{{ left_item_image }}" alt="{{ row.left_item.name }}" class="multi-match-item-image">
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="multi-match-center">
+                    <div class="multi-match-images-row">
+                        <img src="{{ row.left.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.left.token_id ~ '.png') }}" class="multi-match-image face-right" alt="Chicken {{ row.left.token_id }}">
+                        <div class="multi-match-vs">PAIR {{ loop.index }}</div>
+                        <img src="{{ row.right.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.right.token_id ~ '.png') }}" class="multi-match-image" alt="Chicken {{ row.right.token_id }}">
+                    </div>
+                </div>
+                <div class="multi-match-side multi-match-side-boxed">
+                    <h4>Chicken #{{ row.right.token_id }}</h4>
+                    <div class="multi-match-details-grid">
+                        <div><strong>Instinct</strong><span>{{ row.right.instinct or '' }}</span></div>
+                        <div><strong>Build Count</strong><span>{{ row.right.build_match_display or '' }}</span></div>
+                        <div><strong>Breed Count</strong><span>{{ row.right.breed_count if row.right.breed_count is not none else '' }}</span></div>
+                        <div><strong>Ninuno</strong><span>{{ row.right.ownership_percent or 0 }}%</span></div>
+                    </div>
+                    <div class="multi-match-item-bar">
+                        {% set right_item_image = get_item_image_url(row.right_item.name) if row.right_item else '' %}
+                        {% if right_item_image %}
+                            <img src="{{ right_item_image }}" alt="{{ row.right_item.name }}" class="multi-match-item-image">
+                        {% endif %}
+                        <div class="multi-match-item-text-single">
+                            Recommended item: {{ row.right_item.name if row.right_item else 'No item recommended' }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if selected_chicken and potential_matches %}
     <div id="compare-modal" class="compare-modal hidden">
         <div class="compare-backdrop" data-close-compare></div>
         <div class="compare-dialog">
@@ -516,7 +671,15 @@
 							This gene match guide is for reference only. It highlights promising pairings based on current trait matching, but breeding outcomes are not guaranteed.
 						</div>
 					</div>
-					<button type="button" data-close-compare>Close</button>
+					<button
+						type="button"
+						class="selected-chicken-clear-btn"
+						data-close-compare
+						aria-label="Close"
+						title="Close"
+					>
+						×
+					</button>
 				</div>
             <div id="compare-modal-body" class="compare-body"></div>
         </div>
@@ -631,7 +794,7 @@
         {% endfor %}
     </div>
     {% endif %}
-	{% if auto_match and not potential_matches %}
+{% if auto_match_single_empty %}
 	<div id="auto-match-empty-modal" class="compare-modal">
 		<div class="compare-backdrop" data-close-auto-match-empty></div>
 		<div class="compare-dialog compare-dialog-small">
@@ -659,6 +822,32 @@
 		</div>
 	</div>
 	{% endif %}
+	
+	{% if auto_match and auto_match_mode == "multiple" and not multi_match_rows %}
+	<div id="auto-match-empty-modal" class="compare-modal">
+		<div class="compare-backdrop" data-close-auto-match-empty></div>
+		<div class="compare-dialog compare-dialog-small">
+			<div class="compare-header">
+				<div class="compare-header-main">
+					<h3>No Auto-Match Found</h3>
+					<div class="match-disclaimer">
+						No gene match pairs were found for the current build and filters.
+					</div>
+				</div>
+				<button
+					type="button"
+					class="selected-chicken-clear-btn"
+					data-close-auto-match-empty
+					aria-label="Close"
+					title="Close"
+				>
+					×
+				</button>
+			</div>
+		</div>
+	</div>
+{% endif %}
+	
 	<script>
 	document.addEventListener("DOMContentLoaded", function () {
 		const statusBox = document.getElementById("gene-batch-status");
