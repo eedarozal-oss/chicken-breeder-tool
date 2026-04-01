@@ -65,7 +65,7 @@ init_wallet_access_db()
 OWNER_ADMIN_PASSWORD = os.environ.get("OWNER_ADMIN_PASSWORD", "").strip()
 OWNER_WHITELIST_ROUTE = "/owner/grant-access"
 
-STATIC_EXPORT_DB_PATH = DB_PATH.parent / "chicken_static_export.db"
+STATIC_EXPORT_DB_PATH = Path(__file__).resolve().parent / "cache" / "chicken_static_export.db"
 
 def quote_sqlite_identifier(name):
     return '"' + str(name).replace('"', '""') + '"'
