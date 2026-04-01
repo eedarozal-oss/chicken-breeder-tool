@@ -237,6 +237,13 @@ def ensure_static_cache_tables_loaded():
             "missing_tables": [],
         }
 
+    if not STATIC_EXPORT_DB_PATH.exists():
+        return {
+            "loaded": False,
+            "synced_tables": [],
+            "missing_tables": missing_tables,
+        }
+
     sync_results = sync_static_export_tables_to_main_db()
 
     return {
