@@ -122,6 +122,14 @@ def build_ultimate_candidate_row(selected, candidate):
         "ultimate_type_display": get_ultimate_type_display(candidate),
         "ultimate_build_display": get_ultimate_build_display(candidate),
         "build_complement": count_build_complement(selected, candidate),
+        "selected_ultimate_type": get_ultimate_type(selected),
+        "candidate_ultimate_type": get_ultimate_type(candidate),
+        "selected_build": get_primary_build(selected),
+        "candidate_build": get_primary_build(candidate),
+        "selected_build_match_count": safe_int(selected.get("primary_build_match_count"), default=0),
+        "selected_build_match_total": safe_int(selected.get("primary_build_match_total"), default=0),
+        "candidate_build_match_count": safe_int(candidate.get("primary_build_match_count"), default=0),
+        "candidate_build_match_total": safe_int(candidate.get("primary_build_match_total"), default=0),
     }
 
 

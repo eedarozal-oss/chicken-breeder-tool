@@ -4,6 +4,9 @@ from services.db.chickens import (
     get_chicken_by_token,
     get_chickens_by_wallet,
     get_static_chickens_by_token_ids,
+    get_wallet_last_synced_at,
+    upsert_wallet_last_synced_at,
+    delete_wallet_chickens_not_in_tokens,
 )
 from services.db.family_roots import (
     clear_family_roots_for_wallet,
@@ -30,4 +33,7 @@ __all__ = [
     "preload_cached_family_roots_for_wallet",
     "upsert_family_root_summary",
     "insert_family_root_items",
+    "get_wallet_last_synced_at",
+    "upsert_wallet_last_synced_at",
+    "delete_wallet_chickens_not_in_tokens",
 ]

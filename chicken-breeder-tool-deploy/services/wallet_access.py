@@ -1,9 +1,8 @@
-import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import requests
 
-DB_PATH = "breeder.db"
+from services.db.connection import get_connection
 
 TARGET_WALLET = "0x9933199fa3d96d7696d2b2a4cfba48d99e47a079"
 MIN_AMOUNT_WEI = 100000000000000000  # 0.1 RON
@@ -12,14 +11,15 @@ SKYNET_TXS_URL = "https://skynet-api.roninchain.com/ronin/explorer/v2/accounts/{
 
 
 def get_conn():
-    return sqlite3.connect(DB_PATH)
+    return get_connection()
 
 
 def init_wallet_access_db():
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS wallet_access (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             wallet_address TEXT NOT NULL,
@@ -32,18 +32,23 @@ def init_wallet_access_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_wallet_access_wallet
         ON wallet_access(wallet_address)
-    """)
+        """
+    )
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_access_reference
         ON wallet_access(reference)
         WHERE reference IS NOT NULL AND reference != 'manual'
-    """)
+        """
+    )
 
     conn.commit()
     conn.close()
@@ -60,14 +65,17 @@ def has_active_access_in_db(wallet: str) -> bool:
 
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         SELECT 1
         FROM wallet_access
         WHERE wallet_address = ?
           AND status = 'active'
           AND expires_at > ?
         LIMIT 1
-    """, (wallet, now_iso))
+        """,
+        (wallet, now_iso),
+    )
     row = cur.fetchone()
     conn.close()
 
@@ -80,7 +88,8 @@ def has_active_manual_access_in_db(wallet: str) -> bool:
 
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         SELECT 1
         FROM wallet_access
         WHERE wallet_address = ?
@@ -88,7 +97,9 @@ def has_active_manual_access_in_db(wallet: str) -> bool:
           AND status = 'active'
           AND expires_at > ?
         LIMIT 1
-    """, (wallet, now_iso))
+        """,
+        (wallet, now_iso),
+    )
     row = cur.fetchone()
     conn.close()
 
@@ -101,12 +112,15 @@ def access_reference_exists(reference: str) -> bool:
 
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         SELECT 1
         FROM wallet_access
         WHERE reference = ?
         LIMIT 1
-    """, (reference,))
+        """,
+        (reference,),
+    )
     row = cur.fetchone()
     conn.close()
 
@@ -118,38 +132,51 @@ def deactivate_old_payment_access(wallet: str):
 
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         UPDATE wallet_access
         SET status = 'inactive',
             updated_at = CURRENT_TIMESTAMP
         WHERE wallet_address = ?
           AND source = 'payment'
           AND status = 'active'
-    """, (wallet,))
+        """,
+        (wallet,),
+    )
     conn.commit()
     conn.close()
 
 
-def save_access_record(wallet: str, source: str, reference: str, granted_at: datetime, notes: str = "", duration_days: int = ACCESS_DAYS):
+def save_access_record(
+    wallet: str,
+    source: str,
+    reference: str,
+    granted_at: datetime,
+    notes: str = "",
+    duration_days: int = ACCESS_DAYS,
+):
     wallet = wallet.strip().lower()
     duration_days = max(1, int(duration_days or ACCESS_DAYS))
     expires_at = granted_at + timedelta(days=duration_days)
 
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         INSERT OR IGNORE INTO wallet_access (
             wallet_address, source, reference, granted_at, expires_at, status, notes
         )
         VALUES (?, ?, ?, ?, ?, 'active', ?)
-    """, (
-        wallet,
-        source,
-        reference,
-        granted_at.isoformat(),
-        expires_at.isoformat(),
-        notes,
-    ))
+        """,
+        (
+            wallet,
+            source,
+            reference,
+            granted_at.isoformat(),
+            expires_at.isoformat(),
+            notes,
+        ),
+    )
     conn.commit()
     conn.close()
 
@@ -159,14 +186,17 @@ def get_latest_active_access_expiry(wallet: str):
 
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         SELECT expires_at
         FROM wallet_access
         WHERE wallet_address = ?
           AND status = 'active'
         ORDER BY expires_at DESC
         LIMIT 1
-    """, (wallet,))
+        """,
+        (wallet,),
+    )
     row = cur.fetchone()
     conn.close()
 
@@ -220,16 +250,12 @@ def find_latest_qualifying_payment(wallet: str):
 
         if tx_time < cutoff:
             continue
-
         if tx_from != wallet:
             continue
-
         if tx_to != TARGET_WALLET:
             continue
-
         if tx_status != 1:
             continue
-
         if tx_value_wei < MIN_AMOUNT_WEI:
             continue
 
@@ -279,11 +305,13 @@ def has_wallet_access(wallet: str) -> bool:
 
 def set_authorized_wallet(wallet: str):
     from flask import session
+
     session["authorized_wallet"] = wallet.strip().lower()
 
 
 def is_authorized_wallet(wallet: str) -> bool:
     from flask import session
+
     return session.get("authorized_wallet", "").strip().lower() == (wallet or "").strip().lower()
 
 
@@ -292,14 +320,17 @@ def get_wallet_access_expiry_display(wallet: str):
 
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         SELECT expires_at
         FROM wallet_access
         WHERE wallet_address = ?
           AND status = 'active'
         ORDER BY expires_at DESC
         LIMIT 1
-    """, (wallet,))
+        """,
+        (wallet,),
+    )
     row = cur.fetchone()
     conn.close()
 
@@ -313,12 +344,13 @@ def get_wallet_access_expiry_display(wallet: str):
     except Exception:
         return expires_at_raw
 
+
 def get_wallet_access_rows(limit=200):
     conn = get_conn()
-    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT
             wallet_address,
             source,
@@ -329,7 +361,9 @@ def get_wallet_access_rows(limit=200):
         FROM wallet_access
         ORDER BY expires_at DESC, granted_at DESC, wallet_address ASC
         LIMIT ?
-    """, (int(limit),))
+        """,
+        (int(limit),),
+    )
 
     rows = [dict(row) for row in cur.fetchall()]
     conn.close()
@@ -379,13 +413,15 @@ def format_wallet_access_rows(rows):
 
         granted_display = granted_at_dt.strftime("%B %d, %Y %I:%M %p UTC") if granted_at_dt else ""
 
-        formatted.append({
-            **row,
-            "grant_type_display": grant_type,
-            "granted_at_display": granted_display,
-            "expires_at_display": expiry_display,
-            "status_display": status_display,
-            "days_remaining": days_remaining,
-        })
+        formatted.append(
+            {
+                **row,
+                "grant_type_display": grant_type,
+                "granted_at_display": granted_display,
+                "expires_at_display": expiry_display,
+                "status_display": status_display,
+                "days_remaining": days_remaining,
+            }
+        )
 
     return formatted
