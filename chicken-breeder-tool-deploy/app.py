@@ -435,7 +435,6 @@ def sync_wallet_data(wallet):
     delete_wallet_chickens_not_in_tokens(wallet, current_token_ids)
 
     static_lookup = get_static_chickens_by_token_ids([row.get("token_id") for row in parsed_records])
-    cached_recessive_candidates = []
 
     for record in parsed_records:
         token_id = str(record.get("token_id") or "").strip()
@@ -450,17 +449,6 @@ def sync_wallet_data(wallet):
         })
 
         upsert_chicken(record)
-
-        if has_cached_recessive_ready_data(record):
-            cached_recessive_candidates.append(dict(record))
-
-    if cached_recessive_candidates:
-        try:
-            enriched_records = enrich_chicken_records(cached_recessive_candidates)
-            for enriched in enriched_records or []:
-                upsert_chicken(enriched)
-        except Exception:
-            pass
 
     chickens = get_chickens_by_wallet(wallet)
 
