@@ -1,8 +1,11 @@
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from services.db.connection import DB_PATH
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, send_file
 import os
+from io import BytesIO
+from openpyxl import Workbook
 from services.ronin_api import fetch_all_owned_chickens
 from services.metadata_parser import parse_chicken_record
 from services.match_rules import find_potential_matches, is_generation_gap_allowed
@@ -26,6 +29,9 @@ from services.database import (
     insert_family_root_items,
     get_static_chickens_by_token_ids,
     preload_cached_family_roots_for_wallet,
+    get_wallet_last_synced_at,
+    upsert_wallet_last_synced_at,
+    delete_wallet_chickens_not_in_tokens,
 )
 from services.ultimate_breeding import (
     is_ultimate_eligible,
@@ -149,62 +155,9 @@ def sync_static_export_tables_to_main_db(source_path=None):
 
     return synced
 
-STATIC_CHICKEN_CACHE_FIELDS = [
-    "image",
-    "generation_text",
-    "generation_num",
-    "parent_1",
-    "parent_2",
-    "breed_count",
-    "gender",
-    "type",
-    "instinct",
-    "innate_attack",
-    "innate_defense",
-    "innate_speed",
-    "innate_health",
-    "innate_ferocity",
-    "innate_cockrage",
-    "innate_evasion",
-    "beak",
-    "comb",
-    "eyes",
-    "feet",
-    "wings",
-    "tail",
-    "body",
-    "beak_h1",
-    "beak_h2",
-    "beak_h3",
-    "comb_h1",
-    "comb_h2",
-    "comb_h3",
-    "eyes_h1",
-    "eyes_h2",
-    "eyes_h3",
-    "feet_h1",
-    "feet_h2",
-    "feet_h3",
-    "wings_h1",
-    "wings_h2",
-    "wings_h3",
-    "tail_h1",
-    "tail_h2",
-    "tail_h3",
-    "body_h1",
-    "body_h2",
-    "body_h3",
-    "is_dead",
-    "is_egg",
-    "gene_profile_loaded",
-    "recessive_build",
-    "recessive_build_match_count",
-    "recessive_build_match_total",
-    "recessive_build_repeat_bonus",
-]
-
 def get_required_static_cache_tables():
     return ["chicken_static"]
+
 
 def get_missing_static_cache_tables():
     required_tables = get_required_static_cache_tables()
@@ -252,12 +205,69 @@ def ensure_static_cache_tables_loaded():
         "missing_tables": missing_tables,
     }
 
+
+EGG_STATIC_CACHE_FIELDS = [
+    "parent_1",
+    "parent_2",
+]
+
+HATCHED_STATIC_CACHE_FIELDS = [
+    "parent_1",
+    "parent_2",
+    "gender",
+    "generation_text",
+    "generation_num",
+    "instinct",
+    "beak",
+    "comb",
+    "eyes",
+    "feet",
+    "wings",
+    "tail",
+    "body",
+    "beak_h1",
+    "beak_h2",
+    "beak_h3",
+    "comb_h1",
+    "comb_h2",
+    "comb_h3",
+    "eyes_h1",
+    "eyes_h2",
+    "eyes_h3",
+    "feet_h1",
+    "feet_h2",
+    "feet_h3",
+    "wings_h1",
+    "wings_h2",
+    "wings_h3",
+    "tail_h1",
+    "tail_h2",
+    "tail_h3",
+    "body_h1",
+    "body_h2",
+    "body_h3",
+    "innate_attack",
+    "innate_defense",
+    "innate_speed",
+    "innate_health",
+    "innate_ferocity",
+    "innate_cockrage",
+    "innate_evasion",
+]
+
 def merge_static_chicken_cache(record, static_row):
     if not static_row:
         return record
 
-    for field in STATIC_CHICKEN_CACHE_FIELDS:
+    is_live_egg = bool(record.get("is_egg")) or str(record.get("type") or "").strip().lower() == "egg"
+    allowed_fields = EGG_STATIC_CACHE_FIELDS if is_live_egg else HATCHED_STATIC_CACHE_FIELDS
+
+    for field in allowed_fields:
         if field not in static_row:
+            continue
+
+        current_value = record.get(field)
+        if current_value not in (None, ""):
             continue
 
         static_value = static_row.get(field)
@@ -267,7 +277,6 @@ def merge_static_chicken_cache(record, static_row):
         record[field] = static_value
 
     return record
-
 
 def needs_recessive_enrichment(chicken):
     return not chicken.get("gene_profile_loaded")
@@ -400,11 +409,30 @@ def require_authorized_wallet(wallet):
     return wallet and is_authorized_wallet(wallet)
 
 
+def wallet_needs_daily_refresh(wallet):
+    wallet = (wallet or "").strip().lower()
+    if not wallet:
+        return False
+
+    last_synced_at = get_wallet_last_synced_at(wallet)
+    if not last_synced_at:
+        return True
+
+    return last_synced_at.astimezone(timezone.utc).date() < datetime.now(timezone.utc).date()
+
+
 def sync_wallet_data(wallet):
     ensure_static_cache_tables_loaded()
 
     raw_items = fetch_all_owned_chickens(wallet, CONTRACTS)
     parsed_records = [parse_chicken_record(wallet, item) for item in raw_items]
+
+    current_token_ids = [
+        str(row.get("token_id") or "").strip()
+        for row in parsed_records
+        if str(row.get("token_id") or "").strip()
+    ]
+    delete_wallet_chickens_not_in_tokens(wallet, current_token_ids)
 
     static_lookup = get_static_chickens_by_token_ids([row.get("token_id") for row in parsed_records])
     cached_recessive_candidates = []
@@ -447,15 +475,23 @@ def sync_wallet_data(wallet):
         contract_addresses=CONTRACTS,
     )
 
+    upsert_wallet_last_synced_at(wallet)
+    clear_breeding_planner_for_wallet(wallet)
+
     return get_chickens_by_wallet(wallet)
 
 
-def get_wallet_chickens(wallet, ensure_loaded=False):
+def get_wallet_chickens(wallet, ensure_loaded=False, force_refresh=False):
     if wallet:
         clear_stale_family_root_summaries(wallet, max_age_hours=24)
 
     chickens = get_chickens_by_wallet(wallet)
-    if ensure_loaded and not chickens:
+    should_refresh = False
+
+    if ensure_loaded:
+        should_refresh = force_refresh or not chickens or wallet_needs_daily_refresh(wallet)
+
+    if should_refresh:
         chickens = sync_wallet_data(wallet)
         if wallet:
             clear_stale_family_root_summaries(wallet, max_age_hours=24)
@@ -712,6 +748,11 @@ def get_ip_item_candidates(parent, other_parent=None):
             and get_effective_ip_stat(parent, stat_name) > get_effective_ip_stat(other_parent, stat_name)
         )
 
+        soulknot_item = {
+            "name": "Soulknot",
+            "reason": "Best when this parent is strong across several usable stats.",
+        }
+
         result = [
             {
                 "name": item["name"],
@@ -720,11 +761,11 @@ def get_ip_item_candidates(parent, other_parent=None):
             for item in pair_candidates
         ]
 
+        if broad_count >= 4:
+            return [soulknot_item] + result
+
         if broad_count >= 3:
-            result.append({
-                "name": "Soulknot",
-                "reason": "Best when this parent is strong across several usable stats.",
-            })
+            result.append(soulknot_item)
 
         return result
 
@@ -851,7 +892,7 @@ def recommend_ip_item(parent, other_parent=None):
     ranked = get_top_base_stat_field(parent)
     broad_count = sum(1 for _, value in ranked if value >= 32)
 
-    if broad_count >= 3:
+    if broad_count >= 4:
         return {
             "name": "Soulknot",
             "reason": "Best when this parent is strong across several innate stats.",
@@ -900,10 +941,14 @@ def recommend_gene_item(parent, other_parent, build_type):
             "reason": "Best when no primary trait edge is available and this parent has a strong instinct fit for the target build.",
         }
 
-    return {
-        "name": "Gregor's Gift",
-        "reason": "Best when this parent is being valued for primary build inheritance.",
-    }
+    primary_match_count = safe_int(parent.get("primary_build_match_count"), 0) or 0
+    if build_source == "primary" and primary_match_count >= 4:
+        return {
+            "name": "Gregor's Gift",
+            "reason": "Best when this parent is contributing a strong primary build.",
+        }
+
+    return None
 
 
 def recommend_ultimate_item(parent, other_parent=None):
@@ -981,10 +1026,12 @@ def get_gene_item_candidates(parent, other_parent, build_type):
                 "reason": "Best when no primary trait edge is available and this parent has a strong instinct fit for the target build.",
             })
 
-        candidates.append({
-            "name": "Gregor's Gift",
-            "reason": "Best when this parent is being valued for primary build inheritance.",
-        })
+        primary_match_count = safe_int(parent.get("primary_build_match_count"), 0) or 0
+        if build_source == "primary" and primary_match_count >= 4:
+            candidates.append({
+                "name": "Gregor's Gift",
+                "reason": "Best when this parent is contributing a strong primary build.",
+            })
 
     return candidates
 
@@ -1046,6 +1093,596 @@ def resolve_pair_item_recommendations(left_candidates, right_candidates):
 
     return left_item, right_item
 
+def get_breeding_planner_session_key(wallet):
+    wallet = (wallet or "").strip().lower()
+    return f"breeding_planner_queue:{wallet}"
+
+def clear_breeding_planner_for_wallet(wallet):
+    wallet = (wallet or "").strip().lower()
+    if not wallet:
+        return
+
+    session.pop(get_breeding_planner_session_key(wallet), None)
+    session.modified = True
+
+def build_planner_pair_key(left_token_id, right_token_id):
+    left = str(left_token_id or "").strip()
+    right = str(right_token_id or "").strip()
+    pair = sorted([left, right])
+    return f"{pair[0]}::{pair[1]}" if len(pair) == 2 else ""
+
+
+def get_breeding_planner_queue(wallet):
+    queue = session.get(get_breeding_planner_session_key(wallet)) or []
+    if not isinstance(queue, list):
+        return []
+    cleaned = []
+    for row in queue:
+        if not isinstance(row, dict):
+            continue
+        pair_key = str(row.get("pair_key") or "").strip()
+        left = row.get("left") or {}
+        right = row.get("right") or {}
+        if not pair_key or not left.get("token_id") or not right.get("token_id"):
+            continue
+        cleaned.append(row)
+    return cleaned
+
+
+def save_breeding_planner_queue(wallet, queue_rows):
+    session[get_breeding_planner_session_key(wallet)] = queue_rows
+    session.modified = True
+
+
+def get_breeding_planner_token_ids(wallet):
+    token_ids = set()
+    for row in get_breeding_planner_queue(wallet):
+        left = row.get("left") or {}
+        right = row.get("right") or {}
+        if left.get("token_id"):
+            token_ids.add(str(left.get("token_id")))
+        if right.get("token_id"):
+            token_ids.add(str(right.get("token_id")))
+    return token_ids
+
+def filter_out_planner_tokens(rows, wallet):
+    queued_ids = get_breeding_planner_token_ids(wallet)
+    if not queued_ids:
+        return list(rows or [])
+    return [row for row in (rows or []) if str(row.get("token_id") or "") not in queued_ids]
+
+
+def planner_pair_exists(wallet, left_token_id, right_token_id):
+    pair_key = build_planner_pair_key(left_token_id, right_token_id)
+    return any(
+        str(row.get("pair_key") or "") == pair_key
+        for row in get_breeding_planner_queue(wallet)
+    )
+
+
+def build_planner_queue_row(mode, left, right, left_item=None, right_item=None, pair_quality="", build_type=""):
+    left = enrich_chicken_media(dict(left or {}))
+    right = enrich_chicken_media(dict(right or {}))
+    left_token_id = str(left.get("token_id") or "").strip()
+    right_token_id = str(right.get("token_id") or "").strip()
+    pair_key = build_planner_pair_key(left_token_id, right_token_id)
+    mode_text = str(mode or "").strip().title()
+    build_text = str(build_type or "").strip().title()
+
+    left_summary = left.get("weakest_stat_display") or left.get("build_match_display") or left.get("ultimate_build_match_display") or ""
+    right_summary = right.get("weakest_stat_display") or right.get("build_match_display") or right.get("ultimate_build_match_display") or ""
+
+    if str(mode or "").strip().lower() == "ip":
+        weakest_info = get_weakest_ip_stat_info(left)
+        if weakest_info.get("display"):
+            left_summary = weakest_info["display"]
+        if weakest_info.get("name"):
+            right_summary = f"{weakest_info['label']}: {get_effective_ip_stat(right, weakest_info['name'])}"
+
+    elif str(mode or "").strip().lower() == "gene":
+        current_build_type = str(build_type or "").strip().lower()
+        build_label = str(build_type or "").strip().title()
+
+        if current_build_type:
+            left_gene = enrich_gene_display(left, current_build_type)
+            right_gene = enrich_gene_display(right, current_build_type)
+
+            if left_gene.get("build_match_display"):
+                left_summary = f"{left_gene['build_match_display']} ({build_label})"
+            if right_gene.get("build_match_display"):
+                right_summary = f"{right_gene['build_match_display']} ({build_label})"
+
+    elif str(mode or "").strip().lower() == "ultimate":
+        left_ultimate = enrich_ultimate_display(left)
+        right_ultimate = enrich_ultimate_display(right)
+
+        left_build = str(left_ultimate.get("ultimate_build_display") or "").strip().title()
+        right_build = str(right_ultimate.get("ultimate_build_display") or "").strip().title()
+
+        if left_ultimate.get("ultimate_build_match_display"):
+            left_summary = (
+                f"{left_ultimate['ultimate_build_match_display']} ({left_build})"
+                if left_build else left_ultimate["ultimate_build_match_display"]
+            )
+
+        if right_ultimate.get("ultimate_build_match_display"):
+            right_summary = (
+                f"{right_ultimate['ultimate_build_match_display']} ({right_build})"
+                if right_build else right_ultimate["ultimate_build_match_display"]
+            )
+
+    
+    return {
+        "pair_key": pair_key,
+        "mode": str(mode or "").strip().lower(),
+        "mode_label": f"{mode_text} Breeding" if mode_text else "Breeding",
+        "build_type": str(build_type or "").strip().lower(),
+        "build_label": build_text,
+        "pair_quality": str(pair_quality or "").strip(),
+        "left": {
+            "token_id": left_token_id,
+            "image": left.get("image") or "",
+            "label": f"#{left_token_id}" if left_token_id else "",
+            "ip": left.get("ip"),
+            "breed_count": left.get("breed_count"),
+            "generation_text": left.get("generation_text") or "",
+            "ninuno": left.get("ownership_percent") or 0,
+            "summary": left_summary,
+        },
+        "right": {
+            "token_id": right_token_id,
+            "image": right.get("image") or "",
+            "label": f"#{right_token_id}" if right_token_id else "",
+            "ip": right.get("ip"),
+            "breed_count": right.get("breed_count"),
+            "generation_text": right.get("generation_text") or "",
+            "ninuno": right.get("ownership_percent") or 0,
+            "summary": right_summary,
+        },
+        "left_item": left_item or None,
+        "right_item": right_item or None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def build_planner_summary(queue_rows):
+    queue_rows = list(queue_rows or [])
+    count = len(queue_rows)
+    return {
+        "count": count,
+        "label": "Breeding Planner",
+        "note": (
+            "Queued pairs are removed from available matching pools until you remove them or refresh the wallet."
+            if count else
+            "You can manually review a match or use Auto Match, then add the pair to the breeding planner."
+        ),
+        "count_label": "Queued Pairs",
+    }
+
+
+
+def build_pair_quality_hint(raw_value):
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        value = 0
+    if value >= 5:
+        return "Excellent match"
+    if value >= 4:
+        return "Strong match"
+    if value >= 2:
+        return "Good match"
+    return "Situational"
+
+
+def count_ip_stats_at_or_above(chicken, threshold):
+    return sum(
+        1
+        for stat_name in IP_STAT_PRIORITY
+        if get_effective_ip_stat(chicken, stat_name) >= threshold
+    )
+
+
+def get_pair_combined_ip_stats(left_chicken, right_chicken):
+    return {
+        stat_name: max(
+            get_effective_ip_stat(left_chicken, stat_name),
+            get_effective_ip_stat(right_chicken, stat_name),
+        )
+        for stat_name in IP_STAT_PRIORITY
+    }
+
+
+def get_gene_pair_completion(selected_eval, candidate_eval):
+    selected_eval = selected_eval or {}
+    candidate_eval = candidate_eval or {}
+    selected_slots = set(selected_eval.get("matched_slots", []))
+    candidate_slots = set(candidate_eval.get("matched_slots", []))
+    combined_slots = selected_slots | candidate_slots
+    match_total = safe_int(selected_eval.get("match_total"), 0) or safe_int(candidate_eval.get("match_total"), 0) or 0
+    return {
+        "combined_count": len(combined_slots),
+        "combined_total": match_total,
+        "selected_count": safe_int(selected_eval.get("match_count"), 0) or 0,
+        "candidate_count": safe_int(candidate_eval.get("match_count"), 0) or 0,
+    }
+
+
+def get_gene_pair_completion_from_row(row):
+    row = row or {}
+    selected_eval = row.get("selected_eval") or {}
+    candidate_eval = row.get("candidate_eval") or {}
+    if selected_eval or candidate_eval:
+        return get_gene_pair_completion(selected_eval, candidate_eval)
+
+    left = row.get("left") or {}
+    right = row.get("right") or {}
+    build_type = str(row.get("build_type") or "").strip().lower()
+    if build_type and left and right:
+        left_resolution = get_gene_build_resolution(left, build_type)
+        right_resolution = get_gene_build_resolution(right, build_type)
+        return get_gene_pair_completion(
+            left_resolution.get("eval") or evaluate_build(left, build_type),
+            right_resolution.get("eval") or evaluate_build(right, build_type),
+        )
+
+    return {
+        "combined_count": 0,
+        "combined_total": 0,
+        "selected_count": 0,
+        "candidate_count": 0,
+    }
+
+
+def build_ip_pair_quality(selected_chicken, candidate, row=None):
+    if not selected_chicken or not candidate:
+        return "Poor"
+
+    selected_weakest = get_weakest_ip_stat_info(selected_chicken)
+    candidate_weakest = get_weakest_ip_stat_info(candidate)
+
+    selected_fixed_value = get_effective_ip_stat(candidate, selected_weakest.get("name")) if selected_weakest.get("name") else 0
+    candidate_fixed_value = get_effective_ip_stat(selected_chicken, candidate_weakest.get("name")) if candidate_weakest.get("name") else 0
+
+    combined_stats = get_pair_combined_ip_stats(selected_chicken, candidate)
+    all_combined_at_30 = all(value >= 30 for value in combined_stats.values()) if combined_stats else False
+    all_combined_at_25 = all(value >= 25 for value in combined_stats.values()) if combined_stats else False
+
+    ip_difference = get_ip_difference(selected_chicken, candidate)
+    each_has_four_at_30 = (
+        count_ip_stats_at_or_above(selected_chicken, 30) >= 4
+        and count_ip_stats_at_or_above(candidate, 30) >= 4
+    )
+
+    if (
+        all_combined_at_30
+        and selected_fixed_value >= 30
+        and candidate_fixed_value >= 30
+        and ip_difference is not None
+        and ip_difference < 10
+        and each_has_four_at_30
+    ):
+        return "Excellent match"
+
+    if (
+        all_combined_at_25
+        and selected_fixed_value >= 25
+        and candidate_fixed_value >= 25
+        and ip_difference is not None
+        and ip_difference < 10
+    ):
+        return "Strong match"
+
+    if (
+        selected_fixed_value >= 25
+        and candidate_fixed_value >= 25
+        and ip_difference is not None
+        and ip_difference <= 10
+    ):
+        return "Good match"
+
+    if selected_fixed_value >= 25:
+        return "Situational"
+
+    return "Poor"
+
+
+def build_gene_pair_quality(row):
+    metrics = get_gene_pair_completion_from_row(row)
+    combined_count = metrics["combined_count"]
+    combined_total = metrics["combined_total"]
+    selected_count = metrics["selected_count"]
+    candidate_count = metrics["candidate_count"]
+
+    both_have_three = selected_count >= 3 and candidate_count >= 3
+
+    if (combined_total == 7 and combined_count == 7 or combined_total == 5 and combined_count == 5) and both_have_three:
+        return "Excellent match"
+
+    if (combined_total == 7 and combined_count == 6 or combined_total == 5 and combined_count == 4) and both_have_three:
+        return "Strong match"
+
+    if (combined_total == 7 and combined_count == 5) or (combined_total == 5 and combined_count == 4):
+        return "Good match"
+
+    if (combined_total == 7 and combined_count == 4) or (combined_total == 5 and combined_count == 3):
+        return "Situational"
+
+    return "Poor"
+
+
+def build_ultimate_pair_quality(row):
+    row = row or {}
+    left = row.get("left") or {}
+    right = row.get("right") or {}
+    candidate = row.get("candidate") or {}
+
+    selected_type = str(row.get("selected_ultimate_type") or left.get("ultimate_type") or "").strip().lower()
+    candidate_type = str(row.get("candidate_ultimate_type") or candidate.get("ultimate_type") or right.get("ultimate_type") or "").strip().lower()
+
+    selected_build = str(row.get("selected_build") or left.get("primary_build") or "").strip().lower()
+    candidate_build = str(row.get("candidate_build") or candidate.get("primary_build") or right.get("primary_build") or "").strip().lower()
+
+    selected_count = safe_int(row.get("selected_build_match_count"), 0)
+    selected_total = safe_int(row.get("selected_build_match_total"), 0)
+    candidate_count = safe_int(row.get("candidate_build_match_count"), 0)
+    candidate_total = safe_int(row.get("candidate_build_match_total"), 0)
+
+    if not candidate_count:
+        candidate_count = safe_int(candidate.get("primary_build_match_count"), 0) or safe_int(right.get("primary_build_match_count"), 0)
+    if not candidate_total:
+        candidate_total = safe_int(candidate.get("primary_build_match_total"), 0) or safe_int(right.get("primary_build_match_total"), 0)
+    if not selected_count:
+        selected_count = safe_int(left.get("primary_build_match_count"), 0)
+    if not selected_total:
+        selected_total = safe_int(left.get("primary_build_match_total"), 0)
+
+    if not selected_type and left:
+        selected_type = str(left.get("ultimate_type") or "").strip().lower()
+    if not candidate_type and candidate:
+        candidate_type = str(candidate.get("ultimate_type") or "").strip().lower()
+
+    if selected_type == "both" and candidate_type == "both" and selected_build and selected_build == candidate_build:
+        return "Excellent match"
+
+    if "both" in {selected_type, candidate_type}:
+        return "Strong match"
+
+    pair_types = {selected_type, candidate_type}
+    if pair_types == {"ip_only", "gene_only"}:
+        ip_side = left if selected_type == "ip_only" else right if candidate_type == "ip_only" else candidate if candidate_type == "ip_only" else {}
+        gene_count = selected_count if selected_type == "gene_only" else candidate_count
+        gene_total = selected_total if selected_type == "gene_only" else candidate_total
+        ip_value = safe_int(ip_side.get("ip"), 0) or 0
+
+        if ip_value >= 270 and ((gene_total == 7 and gene_count >= 6) or (gene_total == 5 and gene_count == 5)):
+            return "Good match"
+
+        if ip_value < 270 and ((gene_total == 7 and gene_count == 5) or (gene_total == 5 and gene_count == 5)):
+            return "Situational"
+
+    return "Situational"
+
+
+def export_breeding_planner_excel(queue_rows):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Breeding Planner"
+    headers = [
+        "Mode", "Build", "Pair Quality",
+        "Left Chicken", "Left IP", "Left Breed Count", "Left Ninuno", "Left Item",
+        "Right Chicken", "Right IP", "Right Breed Count", "Right Ninuno", "Right Item",
+    ]
+    sheet.append(headers)
+    for row in queue_rows:
+        left = row.get("left") or {}
+        right = row.get("right") or {}
+        left_item = row.get("left_item") or {}
+        right_item = row.get("right_item") or {}
+        sheet.append([
+            row.get("mode_label") or "",
+            row.get("build_label") or "",
+            row.get("pair_quality") or "",
+            left.get("label") or "", left.get("ip") or "", left.get("breed_count") if left.get("breed_count") is not None else "", left.get("ninuno") or 0, left_item.get("name") or "",
+            right.get("label") or "", right.get("ip") or "", right.get("breed_count") if right.get("breed_count") is not None else "", right.get("ninuno") or 0, right_item.get("name") or "",
+        ])
+    for column_cells in sheet.columns:
+        length = max(len(str(cell.value or "")) for cell in column_cells)
+        sheet.column_dimensions[column_cells[0].column_letter].width = min(length + 4, 24)
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output
+
+def format_wallet_short(wallet):
+    wallet = str(wallet or "").strip()
+    if len(wallet) <= 14:
+        return wallet
+    return f"{wallet[:6]}...{wallet[-4:]}"
+
+
+def format_wallet_updated_at(dt_value):
+    if not dt_value:
+        return ""
+
+    try:
+        local_dt = dt_value.astimezone()
+    except Exception:
+        local_dt = dt_value
+
+    month = local_dt.strftime("%b")
+    day = local_dt.day
+    year = local_dt.year
+    hour = local_dt.strftime("%I").lstrip("0") or "0"
+    minute = local_dt.strftime("%M")
+    am_pm = local_dt.strftime("%p")
+    return f"{month} {day}, {year} {hour}:{minute} {am_pm}"
+
+
+def build_count_distribution_rows(pairs):
+    pairs = list(pairs or [])
+    total = sum(max(0, int(item.get("count", 0) or 0)) for item in pairs)
+    rows = []
+
+    for item in pairs:
+        count = max(0, int(item.get("count", 0) or 0))
+        percent = round((count / total) * 100, 1) if total else 0
+        rows.append({
+            "key": str(item.get("key") or "").strip().lower(),
+            "label": str(item.get("label") or "").strip(),
+            "count": count,
+            "percent": percent,
+        })
+
+    return rows
+
+
+def build_available_chickens_dashboard(chickens, breedable_chickens):
+    chickens = list(chickens or [])
+    breedable_chickens = list(breedable_chickens or [])
+
+    total_count = len(chickens)
+    breedable_count = len(breedable_chickens)
+    egg_count = sum(
+        1
+        for row in chickens
+        if bool(row.get("is_egg")) or str(row.get("type") or "").strip().lower() == "egg"
+    )
+    unavailable_count = max(0, total_count - breedable_count - egg_count)
+
+    composition = build_count_distribution_rows([
+        {"key": "breedable", "label": "Breedable", "count": breedable_count},
+        {"key": "eggs", "label": "Eggs", "count": egg_count},
+        {"key": "unavailable", "label": "Unavailable", "count": unavailable_count},
+    ])
+
+    generation_counts = {}
+    for row in breedable_chickens:
+        label = str(row.get("generation_text") or "").strip() or "Unknown"
+        sort_value = safe_int(row.get("generation_num"), 999999)
+        current = generation_counts.get(label, {"count": 0, "sort_value": sort_value})
+        current["count"] += 1
+        current["sort_value"] = min(current["sort_value"], sort_value)
+        generation_counts[label] = current
+
+    generation_distribution = build_count_distribution_rows([
+        {
+            "key": label.lower(),
+            "label": label,
+            "count": data["count"],
+        }
+        for label, data in sorted(
+            generation_counts.items(),
+            key=lambda item: (item[1]["sort_value"], item[0].lower())
+        )
+    ])
+
+    breed_count_counts = {}
+    for row in breedable_chickens:
+        breed_count = safe_int(row.get("breed_count"), 0)
+        label = str(breed_count if breed_count is not None else 0)
+        breed_count_counts[label] = breed_count_counts.get(label, 0) + 1
+
+    breed_count_distribution = build_count_distribution_rows([
+        {
+            "key": f"breed-{label}",
+            "label": label,
+            "count": count,
+        }
+        for label, count in sorted(
+            breed_count_counts.items(),
+            key=lambda item: safe_int(item[0], 999999)
+        )
+    ])
+
+    ninuno_counts = {
+        "complete_100": 0,
+        "above_0": 0,
+        "partial": 0,
+        "recalculate": 0,
+    }
+
+    for row in breedable_chickens:
+        ownership = float(row.get("ownership_percent") or 0)
+        total_root_count = safe_int(row.get("total_root_count"), 0) or 0
+        is_complete = bool(row.get("is_complete"))
+
+        if not total_root_count:
+            ninuno_counts["recalculate"] += 1
+        elif not is_complete:
+            ninuno_counts["partial"] += 1
+        elif ownership == 100.0:
+            ninuno_counts["complete_100"] += 1
+        elif ownership > 0:
+            ninuno_counts["above_0"] += 1
+        else:
+            ninuno_counts["above_0"] += 1
+
+    ninuno_distribution = build_count_distribution_rows([
+        {"key": "complete_100", "label": "100% Ninuno", "count": ninuno_counts["complete_100"]},
+        {"key": "above_0", "label": "Above 0%", "count": ninuno_counts["above_0"]},
+        {"key": "partial", "label": "Partial", "count": ninuno_counts["partial"]},
+        {"key": "recalculate", "label": "Recalculate", "count": ninuno_counts["recalculate"]},
+    ])
+
+    highest_ip_row = None
+    if breedable_chickens:
+        highest_ip_row = max(
+            breedable_chickens,
+            key=lambda row: (
+                safe_int(row.get("ip"), -1) or -1,
+                -(safe_int(row.get("breed_count"), 999999) or 999999),
+                -(safe_int(row.get("generation_num"), 999999) or 999999),
+            )
+        )
+
+    lowest_breed_count_row = None
+    if breedable_chickens:
+        lowest_breed_count_row = min(
+            breedable_chickens,
+            key=lambda row: (
+                safe_int(row.get("breed_count"), 999999) or 999999,
+                -(safe_int(row.get("ip"), -1) or -1),
+                safe_int(row.get("generation_num"), 999999) or 999999,
+            )
+        )
+
+    return {
+        "composition": composition,
+        "generation_distribution": generation_distribution,
+        "breed_count_distribution": breed_count_distribution,
+        "ninuno_distribution": ninuno_distribution,
+        "highest_ip_row": enrich_chicken_media(highest_ip_row) if highest_ip_row else None,
+        "lowest_breed_count_row": enrich_chicken_media(lowest_breed_count_row) if lowest_breed_count_row else None,
+    }
+
+def build_wallet_summary(wallet, chickens, access_expiry=None):
+    chickens = list(chickens or [])
+
+    total_count = len(chickens)
+    breedable_count = sum(1 for row in chickens if is_breedable(row))
+    egg_count = sum(
+        1
+        for row in chickens
+        if bool(row.get("is_egg")) or str(row.get("type") or "").strip().lower() == "egg"
+    )
+    unavailable_count = max(0, total_count - breedable_count - egg_count)
+    planner_count = len(get_breeding_planner_queue(wallet))
+
+    last_synced_at = get_wallet_last_synced_at(wallet)
+    updated_display = format_wallet_updated_at(last_synced_at)
+
+    return {
+        "wallet_full": wallet,
+        "wallet_short": format_wallet_short(wallet),
+        "total_count": total_count,
+        "breedable_count": breedable_count,
+        "egg_count": egg_count,
+        "unavailable_count": unavailable_count,
+        "planner_count": planner_count,
+        "access_expiry": access_expiry or "",
+        "updated_display": updated_display,
+    }
 
 @app.context_processor
 def inject_breeding_item_helpers():
@@ -1058,6 +1695,157 @@ def inject_breeding_item_helpers():
         "get_ultimate_item_candidates": get_ultimate_item_candidates,
         "resolve_pair_item_recommendations": resolve_pair_item_recommendations,
         "get_item_image_url": get_item_image_url,
+        "build_ip_pair_quality": build_ip_pair_quality,
+        "build_gene_pair_quality": build_gene_pair_quality,
+        "build_ultimate_pair_quality": build_ultimate_pair_quality,
+        "planner_pair_exists": lambda wallet, left_token_id, right_token_id: planner_pair_exists(wallet, left_token_id, right_token_id),
+    }
+
+
+GENE_PRIMARY_MIN_MATCH = 2
+GENE_PRIMARY_QUALIFIED_MATCH = 5
+GENE_RECESSIVE_MIN_MATCH = 4
+
+
+def _normalize_gene_eval(result):
+    result = dict(result or {})
+    return {
+        "build": result.get("build") or "",
+        "label": result.get("label") or "",
+        "match_count": safe_int(result.get("match_count"), 0) or 0,
+        "match_total": safe_int(result.get("match_total"), 0) or 0,
+        "matched_slots": list(result.get("matched_slots") or []),
+        "missing_slots": list(result.get("missing_slots") or []),
+    }
+
+
+def _get_gene_target_eval(chicken, build_type, source_type):
+    row = dict(chicken or {})
+    build_key = str(build_type or "").strip().lower()
+
+    if not build_key:
+        return _normalize_gene_eval({})
+
+    if source_type == "recessive":
+        evaluations = row.get("recessive_build_evaluations") or {}
+        stored = evaluations.get(build_key) if isinstance(evaluations, dict) else None
+        if stored:
+            return _normalize_gene_eval(stored)
+
+        if str(row.get("recessive_build") or "").strip().lower() == build_key:
+            return _normalize_gene_eval({
+                "build": build_key,
+                "label": build_key.title(),
+                "match_count": row.get("recessive_build_match_count"),
+                "match_total": row.get("recessive_build_match_total"),
+                "matched_slots": row.get("recessive_build_matched_slots") or [],
+                "missing_slots": row.get("recessive_build_missing_slots") or [],
+            })
+
+        return _normalize_gene_eval({})
+
+    evaluations = row.get("primary_build_evaluations") or {}
+    stored = evaluations.get(build_key) if isinstance(evaluations, dict) else None
+    if stored:
+        return _normalize_gene_eval(stored)
+
+    fallback = evaluate_build(row, build_key)
+    return _normalize_gene_eval(fallback)
+
+
+def get_gene_build_target_info(chicken, build_type):
+    row = dict(chicken or {})
+    build_key = str(build_type or "").strip().lower()
+
+    empty = {
+        "eligible": False,
+        "source": "",
+        "display_source": "",
+        "display_match": "",
+        "effective_eval": _normalize_gene_eval({}),
+        "primary_eval": _normalize_gene_eval({}),
+        "recessive_eval": _normalize_gene_eval({}),
+        "primary_count": 0,
+        "recessive_count": 0,
+        "sort_source_rank": 9,
+        "sort_match_count": 0,
+        "sort_match_total": 0,
+    }
+
+    if not build_key:
+        return empty
+
+    primary_eval = _get_gene_target_eval(row, build_key, "primary")
+    recessive_eval = _get_gene_target_eval(row, build_key, "recessive")
+
+    primary_count = primary_eval["match_count"]
+    primary_total = primary_eval["match_total"]
+    recessive_count = recessive_eval["match_count"]
+    recessive_total = recessive_eval["match_total"]
+
+    primary_build = str(row.get("primary_build") or "").strip().lower()
+    recessive_build = str(row.get("recessive_build") or "").strip().lower()
+
+    primary_qualified = primary_build == build_key and primary_count >= GENE_PRIMARY_QUALIFIED_MATCH
+    recessive_qualified = recessive_build == build_key and recessive_count >= GENE_RECESSIVE_MIN_MATCH
+    primary_supported = primary_count >= GENE_PRIMARY_MIN_MATCH
+
+    source = ""
+    display_source = ""
+    display_match = ""
+    effective_eval = primary_eval
+    sort_source_rank = 9
+    sort_match_count = 0
+    sort_match_total = 0
+
+    if primary_qualified:
+        source = "primary"
+        display_source = "Primary"
+        display_match = f"{primary_count}/{primary_total}" if primary_total else ""
+        effective_eval = primary_eval
+        sort_source_rank = 0
+        sort_match_count = primary_count
+        sort_match_total = primary_total
+    elif recessive_qualified and primary_supported:
+        source = "mixed"
+        display_source = "Primary + Recessive"
+        primary_display = f"{primary_count}/{primary_total}" if primary_total else ""
+        recessive_display = f"{recessive_count}/{recessive_total}" if recessive_total else ""
+        display_match = " + ".join(part for part in [primary_display, recessive_display] if part)
+        effective_eval = primary_eval
+        sort_source_rank = 1
+        sort_match_count = max(primary_count, recessive_count)
+        sort_match_total = max(primary_total, recessive_total)
+    elif recessive_qualified:
+        source = "recessive"
+        display_source = "Recessive"
+        display_match = f"{recessive_count}/{recessive_total}" if recessive_total else ""
+        effective_eval = recessive_eval
+        sort_source_rank = 2
+        sort_match_count = recessive_count
+        sort_match_total = recessive_total
+    elif primary_supported:
+        source = "primary"
+        display_source = "Primary"
+        display_match = f"{primary_count}/{primary_total}" if primary_total else ""
+        effective_eval = primary_eval
+        sort_source_rank = 0
+        sort_match_count = primary_count
+        sort_match_total = primary_total
+
+    return {
+        "eligible": bool(source),
+        "source": source,
+        "display_source": display_source,
+        "display_match": display_match,
+        "effective_eval": effective_eval,
+        "primary_eval": primary_eval,
+        "recessive_eval": recessive_eval,
+        "primary_count": primary_count,
+        "recessive_count": recessive_count,
+        "sort_source_rank": sort_source_rank,
+        "sort_match_count": sort_match_count,
+        "sort_match_total": sort_match_total,
     }
 
 
@@ -1066,23 +1854,21 @@ def enrich_gene_display(chicken, build_type):
 
     row["build_source_display"] = ""
     row["build_match_display"] = ""
+    row["gene_sort_source_rank"] = 9
+    row["gene_sort_match_count"] = 0
+    row["gene_sort_match_total"] = 0
+    row["gene_effective_source"] = ""
 
     if not build_type:
         return row
 
-    primary_build = str(row.get("primary_build") or "").strip().lower()
-    recessive_build = str(row.get("recessive_build") or "").strip().lower()
-
-    if primary_build == build_type:
-        match_count = safe_int(row.get("primary_build_match_count"), 0) or 0
-        match_total = safe_int(row.get("primary_build_match_total"), 0) or 0
-        row["build_source_display"] = "Primary"
-        row["build_match_display"] = f"{match_count}/{match_total}" if match_total else ""
-    elif recessive_build == build_type:
-        match_count = safe_int(row.get("recessive_build_match_count"), 0) or 0
-        match_total = safe_int(row.get("recessive_build_match_total"), 0) or 0
-        row["build_source_display"] = "Recessive"
-        row["build_match_display"] = f"{match_count}/{match_total}" if match_total else ""
+    target_info = get_gene_build_target_info(row, build_type)
+    row["build_source_display"] = target_info["display_source"]
+    row["build_match_display"] = target_info["display_match"]
+    row["gene_sort_source_rank"] = target_info["sort_source_rank"]
+    row["gene_sort_match_count"] = target_info["sort_match_count"]
+    row["gene_sort_match_total"] = target_info["sort_match_total"]
+    row["gene_effective_source"] = target_info["source"]
 
     return enrich_chicken_media(row)
 
@@ -1091,10 +1877,109 @@ def chicken_matches_gene_build(chicken, build_type):
     if not build_type:
         return False
 
-    primary_build = str(chicken.get("primary_build") or "").strip().lower()
-    recessive_build = str(chicken.get("recessive_build") or "").strip().lower()
+    return get_gene_build_target_info(chicken, build_type)["eligible"]
 
-    return (primary_build == build_type) or (recessive_build == build_type)
+
+def make_empty_state(kicker, title, body):
+    return {
+        "kicker": kicker,
+        "title": title,
+        "body": body,
+    }
+
+
+def build_ultimate_available_empty_state():
+    return make_empty_state(
+        "No candidates ready",
+        "No ultimate-eligible chickens found.",
+        "Load more breedable chickens or review your wallet inventory before returning to Ultimate matching.",
+    )
+
+
+def build_ultimate_match_empty_state(auto_match=False, ninuno_mode="all", breed_diff=None):
+    if breed_diff is not None and breed_diff <= 1:
+        return make_empty_state(
+            "Breed count too tight",
+            "No ultimate pair passed the current breed-count difference rule.",
+            "Increase the allowed breed-count difference to widen the partner pool.",
+        )
+    if str(ninuno_mode or "all") != "all":
+        return make_empty_state(
+            "Ninuno filter active",
+            "No ultimate pair survived the current Ninuno filter.",
+            "Relax the Ninuno filter to include more candidates.",
+        )
+    if auto_match:
+        return make_empty_state(
+            "No valid auto-match",
+            "Auto Match could not find a usable ultimate pair.",
+            "Try wider popup filters or choose a chicken manually.",
+        )
+    return make_empty_state(
+        "No matches found",
+        "No valid ultimate pair was found for the selected chicken.",
+        "Try another chicken or review a larger available pool.",
+    )
+
+def make_empty_state(kicker, title, body):
+    return {
+        "kicker": kicker,
+        "title": title,
+        "body": body,
+    }
+
+
+def build_gene_available_empty_state(build_type, ninuno_100_only=False):
+    if not build_type:
+        return make_empty_state(
+            "Choose a build",
+            "Select a build to see available chickens.",
+            "Pick your target build first to load compatible gene candidates.",
+        )
+    if ninuno_100_only:
+        return make_empty_state(
+            "Build plus Ninuno filter",
+            "No chickens matched this build under the 100% Ninuno filter.",
+            "Turn off the 100% Ninuno filter or try a different build.",
+        )
+    return make_empty_state(
+        "Build has no candidates",
+        "No chickens were found for this build.",
+        "Try another build or refresh the wallet if you expect more candidates.",
+    )
+
+
+def build_gene_match_empty_state(build_type, ninuno_100_only=False, auto_match=False, same_instinct=False, min_build_count=None):
+    if min_build_count is not None and min_build_count >= 4:
+        return make_empty_state(
+            "Build threshold too high",
+            "No gene pair passed the current build-match requirement.",
+            "Lower the minimum build-match count to widen the pool.",
+        )
+    if same_instinct:
+        return make_empty_state(
+            "Same instinct required",
+            "No gene pair survived the same-instinct filter.",
+            "Turn off Same Instinct to allow more compatible partners.",
+        )
+    if ninuno_100_only:
+        return make_empty_state(
+            "100% Ninuno only",
+            "No gene pair survived the Ninuno filter.",
+            "Turn off the 100% Ninuno filter to allow more possible partners.",
+        )
+    if auto_match:
+        return make_empty_state(
+            "No valid auto-match",
+            "Auto Match could not find a usable gene pair.",
+            "Try a different build, wider popup filters, or choose a chicken manually.",
+        )
+    build_label = str(build_type or "selected").title()
+    return make_empty_state(
+        "No matches found",
+        f"No valid {build_label} gene pair was found for the selected chicken.",
+        "Try another chicken or a different build target.",
+    )
 
 
 def enrich_ultimate_display(chicken):
@@ -1115,7 +2000,8 @@ def build_gene_potential_matches(selected_chicken, breedable_chickens, build_typ
         return []
 
     selected_token_id = str(selected_chicken.get("token_id") or "")
-    selected_eval = evaluate_build(selected_chicken, build_type)
+    selected_target_info = get_gene_build_target_info(selected_chicken, build_type)
+    selected_eval = selected_target_info["effective_eval"]
 
     candidate_pool = [
         row for row in breedable_chickens
@@ -1129,19 +2015,26 @@ def build_gene_potential_matches(selected_chicken, breedable_chickens, build_typ
 
     scored_matches = []
     for candidate in candidate_pool:
-        candidate_eval = evaluate_build(candidate, build_type)
+        candidate_target_info = get_gene_build_target_info(candidate, build_type)
+        if not candidate_target_info["eligible"]:
+            continue
+
+        candidate_eval = candidate_target_info["effective_eval"]
+        candidate_source = candidate_target_info["source"]
 
         scored_matches.append({
             "candidate": candidate,
             "candidate_eval": candidate_eval,
+            "candidate_target_info": candidate_target_info,
             "added_missing_traits": count_added_missing_traits(selected_eval, candidate_eval),
-            "instinct_rank": get_instinct_tier_rank(candidate.get("instinct"), build_type) if str(candidate.get("build_source_display") or "").strip().lower() == "primary" else 999,
+            "instinct_rank": get_instinct_tier_rank(candidate.get("instinct"), build_type) if candidate_source == "primary" else 999,
         })
 
     scored_matches.sort(
         key=lambda row: (
             -(row["added_missing_traits"] or 0),
-            -(row["candidate_eval"]["match_count"] or 0),
+            -(row["candidate_target_info"]["sort_match_count"] or 0),
+            row["candidate_target_info"]["sort_source_rank"],
             row.get("instinct_rank", 999),
             safe_int(row["candidate"].get("breed_count"), 999999) or 999999,
             -(float(row["candidate"].get("ownership_percent") or 0)),
@@ -1304,10 +2197,18 @@ def chicken_passes_auto_ninuno_filter(chicken, mode):
 
 def parse_build_match_count(value):
     raw = str(value or "").strip()
-    if "/" in raw:
-        left, _, _ = raw.partition("/")
-        return safe_int(left, 0) or 0
-    return safe_int(raw, 0) or 0
+    if not raw:
+        return 0
+
+    best = 0
+    for part in raw.split("+"):
+        part = part.strip()
+        if "/" in part:
+            left, _, _ = part.partition("/")
+            best = max(best, safe_int(left, 0) or 0)
+        else:
+            best = max(best, safe_int(part, 0) or 0)
+    return best
 
 
 def build_ip_available_auto_candidates(breedable_chickens, ip_diff=None, breed_diff=None, ninuno_mode="all"):
@@ -1419,9 +2320,17 @@ def build_gene_available_auto_candidates(breedable_chickens, build_type, min_bui
                 "right": chosen_right,
                 "left_item": left_item,
                 "right_item": right_item,
+                "build_type": build_type,
+                "selected_eval": chosen_match.get("selected_eval"),
+                "candidate_eval": chosen_match.get("candidate_eval"),
+                "combined_match_count": chosen_match.get("combined_match_count", 0),
+                "combined_match_total": chosen_match.get("combined_match_total", 0),
+                "selected_build_match_count": chosen_match.get("selected_build_match_count", 0),
+                "candidate_build_match_count": chosen_match.get("candidate_build_match_count", 0),
                 "same_instinct": normalize_instinct_name(chosen_left.get("instinct")) == normalize_instinct_name(chosen_right.get("instinct")),
                 "added_missing_traits": chosen_match.get("added_missing_traits") or 0,
                 "ranking": (
+                    -(chosen_match.get("combined_match_count") or 0),
                     -(chosen_match.get("added_missing_traits") or 0),
                     -(chosen_match.get("candidate_eval", {}).get("match_count") or 0),
                     chosen_match.get("instinct_rank", 999),
@@ -1516,21 +2425,32 @@ def sort_key_int(value, default=0):
 
 def sort_key_build_match(value):
     raw = str(value or "").strip()
-    if "/" in raw:
-        left, _, right = raw.partition("/")
-        return (
+    if not raw:
+        return (0, 0)
+
+    best = (0, 0)
+    for part in raw.split("+"):
+        part = part.strip()
+        if "/" not in part:
+            continue
+        left, _, right = part.partition("/")
+        candidate = (
             safe_int(left, 0) or 0,
             safe_int(right, 0) or 0,
         )
-    return (0, 0)
+        if candidate > best:
+            best = candidate
+    return best
 
 
 def get_gene_build_source_rank(value):
     source = str(value or "").strip().lower()
     if source == "primary":
         return 0
-    if source == "recessive":
+    if source in {"primary + recessive", "mixed"}:
         return 1
+    if source == "recessive":
+        return 2
     return 9
 
 
@@ -1737,6 +2657,15 @@ def sort_ultimate_available_chickens(rows, sort_by="ultimate_type", sort_dir="as
         reverse=reverse,
     )
 
+def get_ip_difference(chicken_a, chicken_b):
+    ip_a = safe_int((chicken_a or {}).get("ip"))
+    ip_b = safe_int((chicken_b or {}).get("ip"))
+
+    if ip_a is None or ip_b is None:
+        return None
+
+    return abs(ip_a - ip_b)
+
 def pick_best_ip_auto_match_from_pool(pool, ip_diff=10, breed_diff=1):
     best_selected = None
     best_matches = []
@@ -1899,7 +2828,7 @@ def index():
                     error = "This wallet has no active access. Send at least 0.1 RON to 0x9933199Fa3D96D7696d2B2A4CfBa48d99E47a079 to gain access."
                 else:
                     set_authorized_wallet(wallet)
-                    sync_wallet_data(wallet)
+                    get_wallet_chickens(wallet, ensure_loaded=True)
 
                     expiry_display = get_wallet_access_expiry_display(wallet)
                     if expiry_display:
@@ -2002,7 +2931,16 @@ def landing_page():
     wallet = request.args.get("wallet_address", "").strip().lower()
     breedable_chickens = []
     error = None
+    success = None
     access_expiry = None
+    refresh_status = str(request.args.get("refresh_status") or "").strip().lower()
+    refresh_message = str(request.args.get("refresh_message") or "").strip()
+    wallet_summary = None
+
+    if refresh_status == "success" and refresh_message:
+        success = refresh_message
+    elif refresh_status == "error" and refresh_message:
+        error = refresh_message
 
     if not require_authorized_wallet(wallet):
         return redirect(url_for("index"))
@@ -2011,6 +2949,13 @@ def landing_page():
         chickens = get_wallet_chickens(wallet, ensure_loaded=True)
         breedable_chickens = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
         access_expiry = get_wallet_access_expiry_display(wallet)
+
+        wallet_summary = build_wallet_summary(
+            wallet=wallet,
+            chickens=chickens,
+            access_expiry=access_expiry,
+        )
+        
     except Exception as exc:
         error = f"Failed to load wallet data: {exc}"
 
@@ -2019,8 +2964,54 @@ def landing_page():
         wallet=wallet,
         breedable_count=len(breedable_chickens),
         access_expiry=access_expiry,
+        wallet_summary=wallet_summary,
         error=error,
+        success=success,
     )
+
+
+@app.route("/refresh-wallet", methods=["POST"])
+def refresh_wallet():
+    wallet = request.form.get("wallet_address", "").strip().lower()
+
+    if not require_authorized_wallet(wallet):
+        return redirect(url_for("index"))
+
+    cooldown_key = f"wallet_refresh_last_clicked_{wallet}"
+    now = datetime.now(timezone.utc)
+    last_clicked_raw = session.get(cooldown_key)
+
+    if last_clicked_raw:
+        try:
+            last_clicked = datetime.fromisoformat(last_clicked_raw)
+            seconds_since = (now - last_clicked).total_seconds()
+            if seconds_since < 60:
+                remaining = max(1, int(60 - seconds_since))
+                return redirect(url_for(
+                    "landing_page",
+                    wallet_address=wallet,
+                    refresh_status="error",
+                    refresh_message=f"Wallet was refreshed recently. Please wait {remaining} second(s) before refreshing again.",
+                ))
+        except Exception:
+            pass
+
+    try:
+        sync_wallet_data(wallet)
+        session[cooldown_key] = now.isoformat()
+        return redirect(url_for(
+            "landing_page",
+            wallet_address=wallet,
+            refresh_status="success",
+            refresh_message="Wallet refreshed successfully.",
+        ))
+    except Exception as exc:
+        return redirect(url_for(
+            "landing_page",
+            wallet_address=wallet,
+            refresh_status="error",
+            refresh_message=f"Failed to refresh wallet data: {exc}",
+        ))
 
 
 @app.route("/available-chickens", methods=["GET"])
@@ -2028,6 +3019,8 @@ def available_chickens_page():
     wallet = request.args.get("wallet_address", "").strip().lower()
     breedable_chickens = []
     error = None
+    wallet_summary = None
+    available_dashboard = None
 
     if not require_authorized_wallet(wallet):
         return redirect(url_for("index"))
@@ -2035,6 +3028,17 @@ def available_chickens_page():
     try:
         chickens = get_wallet_chickens(wallet, ensure_loaded=True)
         breedable_chickens = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
+
+        access_expiry = get_wallet_access_expiry_display(wallet)
+        wallet_summary = build_wallet_summary(
+            wallet=wallet,
+            chickens=chickens,
+            access_expiry=access_expiry,
+        )
+        available_dashboard = build_available_chickens_dashboard(
+            chickens=chickens,
+            breedable_chickens=breedable_chickens,
+        )
     except Exception as exc:
         error = f"Failed to load available chickens: {exc}"
 
@@ -2042,8 +3046,104 @@ def available_chickens_page():
         "available_chickens.html",
         wallet=wallet,
         breedable_chickens=breedable_chickens,
+        wallet_summary=wallet_summary,
+        available_dashboard=available_dashboard,
         error=error,
     )
+
+
+@app.route("/planner/add", methods=["POST"])
+def add_to_breeding_planner():
+    wallet = request.form.get("wallet_address", "").strip().lower()
+    mode = str(request.form.get("mode") or "").strip().lower()
+    return_endpoint = str(request.form.get("return_endpoint") or "match_ip_page").strip()
+    build_type = str(request.form.get("build_type") or "").strip().lower()
+    left_token_id = str(request.form.get("left_token_id") or "").strip()
+    right_token_id = str(request.form.get("right_token_id") or "").strip()
+    pair_quality = str(request.form.get("pair_quality") or "").strip()
+    left_item_name = str(request.form.get("left_item_name") or "").strip()
+    right_item_name = str(request.form.get("right_item_name") or "").strip()
+
+    if not require_authorized_wallet(wallet):
+        return redirect(url_for("index"))
+
+    redirect_kwargs = {"wallet_address": wallet}
+    selected_token_id = str(request.form.get("selected_token_id") or "").strip()
+    sort_by = str(request.form.get("sort_by") or "").strip()
+    sort_dir = str(request.form.get("sort_dir") or "").strip()
+    if selected_token_id:
+        redirect_kwargs["selected_token_id"] = selected_token_id
+    if sort_by:
+        redirect_kwargs["sort_by"] = sort_by
+    if sort_dir:
+        redirect_kwargs["sort_dir"] = sort_dir
+    if mode == "ip":
+        if request.form.get("min_ip") not in (None, ""):
+            redirect_kwargs["min_ip"] = request.form.get("min_ip")
+        if request.form.get("ip_diff") not in (None, ""):
+            redirect_kwargs["ip_diff"] = request.form.get("ip_diff")
+        if str(request.form.get("ninuno_100_only") or "").strip() in {"1", "true", "on", "yes"}:
+            redirect_kwargs["ninuno_100_only"] = 1
+    elif mode == "gene":
+        if build_type:
+            redirect_kwargs["build_type"] = build_type
+        if str(request.form.get("ninuno_100_only") or "").strip() in {"1", "true", "on", "yes"}:
+            redirect_kwargs["ninuno_100_only"] = 1
+
+    chickens = get_wallet_chickens(wallet, ensure_loaded=True)
+    chicken_lookup = {str(row.get("token_id") or ""): enrich_chicken_media(row) for row in chickens}
+    left = chicken_lookup.get(left_token_id)
+    right = chicken_lookup.get(right_token_id)
+    if left and right and not planner_pair_exists(wallet, left_token_id, right_token_id):
+        left_item = {"name": left_item_name, "reason": ""} if left_item_name else None
+        right_item = {"name": right_item_name, "reason": ""} if right_item_name else None
+        queue_rows = get_breeding_planner_queue(wallet)
+        queue_rows.append(
+            build_planner_queue_row(
+                mode=mode,
+                left=left,
+                right=right,
+                left_item=left_item,
+                right_item=right_item,
+                pair_quality=pair_quality,
+                build_type=build_type,
+            )
+        )
+        save_breeding_planner_queue(wallet, queue_rows)
+    redirect_kwargs["skip_auto_open"] = 1
+    return redirect(url_for(return_endpoint, **redirect_kwargs))
+
+
+@app.route("/planner/remove", methods=["POST"])
+def remove_from_breeding_planner():
+    wallet = request.form.get("wallet_address", "").strip().lower()
+    return_endpoint = str(request.form.get("return_endpoint") or "match_ip_page").strip()
+    pair_key = str(request.form.get("pair_key") or "").strip()
+    queue_rows = [
+        row for row in get_breeding_planner_queue(wallet)
+        if str(row.get("pair_key") or "") != pair_key
+    ]
+    save_breeding_planner_queue(wallet, queue_rows)
+    if return_endpoint == "planner_modal":
+        return redirect(url_for("match_ip_page", wallet_address=wallet, skip_auto_open=1))
+    redirect_kwargs = {"wallet_address": wallet, "skip_auto_open": 1}
+    for key in ["selected_token_id", "sort_by", "sort_dir", "build_type", "min_ip", "ip_diff"]:
+        value = request.form.get(key)
+        if value not in (None, ""):
+            redirect_kwargs[key] = value
+    if str(request.form.get("ninuno_100_only") or "").strip() in {"1", "true", "on", "yes"}:
+        redirect_kwargs["ninuno_100_only"] = 1
+    return redirect(url_for(return_endpoint, **redirect_kwargs))
+
+
+@app.route("/planner/export", methods=["GET"])
+def export_breeding_planner():
+    wallet = request.args.get("wallet_address", "").strip().lower()
+    if wallet and not require_authorized_wallet(wallet):
+        return redirect(url_for("index"))
+    output = export_breeding_planner_excel(get_breeding_planner_queue(wallet))
+    filename = f"breeding_planner_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return send_file(output, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.route("/match/ip", methods=["GET"])
@@ -2078,6 +3178,7 @@ def match_ip_page():
     multi_match_note = ""
     auto_open_multi_match = False
     auto_match_single_empty = False
+    wallet_summary = None
 
     if ip_sort_by not in {"ip", "breed_count", "generation"}:
         ip_sort_by = "ip"
@@ -2093,7 +3194,16 @@ def match_ip_page():
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-            breedable_chickens = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
+            breedable_chickens = filter_out_planner_tokens(
+                [enrich_chicken_media(row) for row in chickens if is_breedable(row)],
+                wallet,
+            )
+            access_expiry = get_wallet_access_expiry_display(wallet)
+            wallet_summary = build_wallet_summary(
+                wallet=wallet,
+                chickens=chickens,
+                access_expiry=access_expiry,
+            )
             if min_ip is not None:
                 breedable_chickens = [row for row in breedable_chickens if safe_int(row.get("ip"), default=-1) is not None and safe_int(row.get("ip"), default=-1) >= min_ip]
             if ninuno_100_only:
@@ -2220,6 +3330,9 @@ def match_ip_page():
         available_pair_max=max(0, len(breedable_chickens) // 2),
         auto_open_template_id=("" if skip_auto_open else (f"compare-ip-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches and not multi_match_rows else "")),
         auto_match_single_empty=auto_match_single_empty,
+        planner_queue=get_breeding_planner_queue(wallet),
+        planner_summary=build_planner_summary(get_breeding_planner_queue(wallet)),
+        wallet_summary=wallet_summary,
         error=error,
     )
 
@@ -2258,16 +3371,44 @@ def match_gene_page():
     multi_match_note = ""
     auto_open_multi_match = False
     auto_match_single_empty = False
+    wallet_summary = None
+
+    available_empty_state = build_gene_available_empty_state(build_type, ninuno_100_only=ninuno_100_only)
+    match_empty_state = build_gene_match_empty_state(
+        build_type,
+        ninuno_100_only=ninuno_100_only,
+        auto_match=auto_match,
+        same_instinct=False,
+        min_build_count=None,
+    )
+    auto_match_empty_state = build_gene_match_empty_state(
+        build_type,
+        ninuno_100_only=(popup_ninuno == "100" or ninuno_100_only),
+        auto_match=True,
+        same_instinct=popup_same_instinct,
+        min_build_count=popup_min_build_count,
+    )
 
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
+
+            access_expiry = get_wallet_access_expiry_display(wallet)
+            wallet_summary = build_wallet_summary(
+                wallet=wallet,
+                chickens=chickens,
+                access_expiry=access_expiry,
+            )
+            
             batch_result = enrich_missing_gene_data_in_batches(chickens=chickens, wallet=wallet, page_key="gene", batch_size=5, prioritized_token_id=selected_token_id or None)
             gene_enrichment_loaded = batch_result["loaded"]
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
             gene_enrichment_remaining = batch_result["remaining"]
             all_breedable = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
-            breedable_chickens = [enrich_gene_display(row, build_type) for row in all_breedable if build_type and chicken_matches_gene_build(row, build_type)] if build_type else []
+            breedable_chickens = filter_out_planner_tokens(
+                [enrich_gene_display(row, build_type) for row in all_breedable if build_type and chicken_matches_gene_build(row, build_type)] if build_type else [],
+                wallet,
+            )
             if ninuno_100_only:
                 breedable_chickens = [row for row in breedable_chickens if row.get("is_complete") and float(row.get("ownership_percent") or 0) == 100.0]
             sort_gene_available_chickens(breedable_chickens, sort_by=gene_sort_by, sort_dir=gene_sort_dir)
@@ -2299,8 +3440,13 @@ def match_gene_page():
                             continue
                         if not chicken_passes_auto_ninuno_filter(source, popup_ninuno):
                             continue
-                    selected_eval = evaluate_build(source, build_type)
-                    candidate_pool = [row for row in breedable_chickens if str(row["token_id"]) != str(source["token_id"]) and is_generation_gap_allowed(source, row, max_gap=MATCH_SETTINGS["max_generation_gap"])]
+
+                    candidate_pool = [
+                        row for row in breedable_chickens
+                        if str(row["token_id"]) != str(source["token_id"])
+                        and is_generation_gap_allowed(source, row, max_gap=MATCH_SETTINGS["max_generation_gap"])
+                    ]
+
                     if auto_match_source == "available" and auto_match_mode == "single":
                         if popup_min_build_count is not None:
                             candidate_pool = [row for row in candidate_pool if parse_build_match_count(row.get("build_match_display")) >= popup_min_build_count]
@@ -2311,15 +3457,18 @@ def match_gene_page():
                         if popup_same_instinct:
                             candidate_pool = [row for row in candidate_pool if normalize_instinct_name(row.get("instinct")) == normalize_instinct_name(source.get("instinct"))]
                         candidate_pool = [row for row in candidate_pool if chicken_passes_auto_ninuno_filter(row, popup_ninuno)]
-                    scored_matches = []
-                    for candidate in candidate_pool:
-                        candidate_eval = evaluate_build(candidate, build_type)
-                        scored_matches.append({"candidate": candidate, "candidate_eval": candidate_eval, "added_missing_traits": count_added_missing_traits(selected_eval, candidate_eval), "instinct_rank": get_instinct_tier_rank(candidate.get("instinct"), build_type) if str(candidate.get("build_source_display") or "").strip().lower() == "primary" else 999})
-                    scored_matches.sort(key=lambda row: (-(row["added_missing_traits"] or 0), -(row["candidate_eval"]["match_count"] or 0), row.get("instinct_rank", 999), safe_int(row["candidate"].get("breed_count"), 999999) or 999999, -(float(row["candidate"].get("ownership_percent") or 0)), safe_int(row["candidate"].get("token_id"), 999999999) or 999999999))
-                    if scored_matches:
-                        ranked_sources.append({"source": source, "top_match": scored_matches[0], "source_match_count": evaluate_build(source, build_type).get("match_count", 0), "source_build_source": str(source.get("build_source_display") or "").strip().lower()})
 
-                ranked_sources.sort(key=lambda row: (-(row["top_match"]["added_missing_traits"] or 0), -(row["source_match_count"] or 0), 0 if row["source_build_source"] == "primary" else 1, safe_int(row["source"].get("breed_count"), 999999) or 999999, -(float(row["source"].get("ownership_percent") or 0)), safe_int(row["source"].get("token_id"), 999999999) or 999999999))
+                    scored_matches = build_gene_potential_matches(source, [source] + candidate_pool, build_type)
+                    if scored_matches:
+                        source_target_info = get_gene_build_target_info(source, build_type)
+                        ranked_sources.append({
+                            "source": source,
+                            "top_match": scored_matches[0],
+                            "source_match_count": source_target_info["sort_match_count"],
+                            "source_build_source_rank": source_target_info["sort_source_rank"],
+                        })
+
+                ranked_sources.sort(key=lambda row: (-(row["top_match"]["added_missing_traits"] or 0), -(row["source_match_count"] or 0), row["source_build_source_rank"], safe_int(row["source"].get("breed_count"), 999999) or 999999, -(float(row["source"].get("ownership_percent") or 0)), safe_int(row["source"].get("token_id"), 999999999) or 999999999))
 
                 if ranked_sources:
                     selected_token_id = str(ranked_sources[0]["source"]["token_id"])
@@ -2331,13 +3480,7 @@ def match_gene_page():
                 selected_chicken = next((row for row in breedable_chickens if str(row["token_id"]) == selected_token_id), None)
 
             if selected_chicken and build_type:
-                selected_eval = evaluate_build(selected_chicken, build_type)
-                candidate_pool = [row for row in breedable_chickens if str(row["token_id"]) != selected_token_id and is_generation_gap_allowed(selected_chicken, row, max_gap=MATCH_SETTINGS["max_generation_gap"])]
-                potential_matches = []
-                for candidate in candidate_pool:
-                    candidate_eval = evaluate_build(candidate, build_type)
-                    potential_matches.append({"candidate": candidate, "candidate_eval": candidate_eval, "added_missing_traits": count_added_missing_traits(selected_eval, candidate_eval), "instinct_rank": get_instinct_tier_rank(candidate.get("instinct"), build_type) if str(candidate.get("build_source_display") or "").strip().lower() == "primary" else 999})
-                potential_matches.sort(key=lambda row: (-(row["added_missing_traits"] or 0), -(row["candidate_eval"]["match_count"] or 0), row.get("instinct_rank", 999), safe_int(row["candidate"].get("breed_count"), 999999) or 999999, -(float(row["candidate"].get("ownership_percent") or 0)), safe_int(row["candidate"].get("token_id"), 999999999) or 999999999))
+                potential_matches = build_gene_potential_matches(selected_chicken, breedable_chickens, build_type)
 
                 if auto_match and (auto_match_source != "available" or auto_match_mode == "single") and not potential_matches and not multi_match_rows:
                     auto_match_single_empty = True
@@ -2372,6 +3515,12 @@ def match_gene_page():
         auto_match_single_empty=auto_match_single_empty,
         gene_enrichment_loaded=gene_enrichment_loaded,
         gene_enrichment_remaining=gene_enrichment_remaining,
+        planner_queue=get_breeding_planner_queue(wallet),
+        planner_summary=build_planner_summary(get_breeding_planner_queue(wallet)),
+        available_empty_state=available_empty_state,
+        match_empty_state=match_empty_state,
+        auto_match_empty_state=auto_match_empty_state,
+        wallet_summary=wallet_summary,
         error=error,
     )
 
@@ -2399,6 +3548,7 @@ def match_ultimate_page():
     multi_match_note = ""
     auto_open_multi_match = False
     auto_match_single_empty = False
+    wallet_summary = None
 
     ultimate_sort_by = str(request.args.get("sort_by") or "ultimate_type").strip().lower()
     ultimate_sort_dir = str(request.args.get("sort_dir") or "asc").strip().lower()
@@ -2407,11 +3557,35 @@ def match_ultimate_page():
     if ultimate_sort_dir not in {"asc", "desc"}:
         ultimate_sort_dir = "asc"
 
+    available_empty_state = build_ultimate_available_empty_state()
+    match_empty_state = build_ultimate_match_empty_state(
+        auto_match=auto_match,
+        ninuno_mode="all",
+        breed_diff=None,
+    )
+    auto_match_empty_state = build_ultimate_match_empty_state(
+        auto_match=True,
+        ninuno_mode=popup_ninuno,
+        breed_diff=popup_breed_diff,
+    )
+
+
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
+
+            access_expiry = get_wallet_access_expiry_display(wallet)
+            wallet_summary = build_wallet_summary(
+                wallet=wallet,
+                chickens=chickens,
+                access_expiry=access_expiry,
+            )
+            
             all_breedable = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
-            breedable_chickens = [enrich_ultimate_display(row) for row in all_breedable if is_ultimate_eligible(row)]
+            breedable_chickens = filter_out_planner_tokens(
+                [enrich_ultimate_display(row) for row in all_breedable if is_ultimate_eligible(row)],
+                wallet,
+            )
             sort_ultimate_available_chickens(breedable_chickens, sort_by=ultimate_sort_by, sort_dir=ultimate_sort_dir)
             if auto_match and auto_match_source == "available" and auto_match_mode == "multiple":
                 multi_match_target = min(popup_match_count, max(0, len(breedable_chickens) // 2))
@@ -2471,6 +3645,12 @@ def match_ultimate_page():
         available_pair_max=max(0, len(breedable_chickens) // 2),
         auto_open_template_id=("" if skip_auto_open else (f"compare-ultimate-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches and not multi_match_rows else "")),
         auto_match_single_empty=auto_match_single_empty,
+        planner_queue=get_breeding_planner_queue(wallet),
+        planner_summary=build_planner_summary(get_breeding_planner_queue(wallet)),
+        available_empty_state=available_empty_state,
+        match_empty_state=match_empty_state,
+        auto_match_empty_state=auto_match_empty_state,
+        wallet_summary=wallet_summary,
         error=error,
     )
 
@@ -2561,3 +3741,58 @@ def inventory():
 
 if __name__ == "__main__":
     app.run(debug=True)
+def build_gene_potential_matches(selected_chicken, breedable_chickens, build_type):
+    if not selected_chicken or not build_type:
+        return []
+
+    selected_token_id = str(selected_chicken.get("token_id") or "")
+    selected_resolution = get_gene_build_resolution(selected_chicken, build_type)
+    selected_eval = selected_resolution.get("eval") or evaluate_build(selected_chicken, build_type)
+
+    candidate_pool = [
+        row for row in breedable_chickens
+        if str(row.get("token_id") or "") != selected_token_id
+        and is_generation_gap_allowed(
+            selected_chicken,
+            row,
+            max_gap=MATCH_SETTINGS["max_generation_gap"],
+        )
+    ]
+
+    scored_matches = []
+    for candidate in candidate_pool:
+        candidate_resolution = get_gene_build_resolution(candidate, build_type)
+        if not candidate_resolution.get("source"):
+            continue
+
+        candidate_eval = candidate_resolution.get("eval") or evaluate_build(candidate, build_type)
+        completion = get_gene_pair_completion(selected_eval, candidate_eval)
+
+        scored_matches.append({
+            "candidate": candidate,
+            "candidate_eval": candidate_eval,
+            "selected_eval": selected_eval,
+            "build_type": build_type,
+            "added_missing_traits": count_added_missing_traits(selected_eval, candidate_eval),
+            "combined_match_count": completion["combined_count"],
+            "combined_match_total": completion["combined_total"],
+            "selected_build_match_count": completion["selected_count"],
+            "candidate_build_match_count": completion["candidate_count"],
+            "instinct_rank": get_instinct_tier_rank(candidate.get("instinct"), build_type) if candidate_resolution.get("source") == "primary" else 999,
+        })
+
+    scored_matches.sort(
+        key=lambda row: (
+            -(row["combined_match_count"] or 0),
+            -(row["added_missing_traits"] or 0),
+            -(row["candidate_eval"]["match_count"] or 0),
+            row.get("instinct_rank", 999),
+            safe_int(row["candidate"].get("breed_count"), 999999) or 999999,
+            -(float(row["candidate"].get("ownership_percent") or 0)),
+            safe_int(row["candidate"].get("token_id"), 999999999) or 999999999,
+        )
+    )
+
+    return scored_matches
+
+
