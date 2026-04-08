@@ -139,6 +139,15 @@ def init_db():
 
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS wallet_sync_state (
+                wallet_address TEXT PRIMARY KEY,
+                last_synced_at TEXT
+            )
+            """
+        )
+
+        conn.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_chicken_family_root_items_wallet_token
             ON chicken_family_root_items(wallet_address, token_id)
             """

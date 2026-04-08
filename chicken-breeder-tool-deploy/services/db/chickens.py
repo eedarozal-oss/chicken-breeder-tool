@@ -390,6 +390,68 @@ def get_chickens_by_wallet(wallet_address: str):
     return [dict(row) for row in rows]
 
 
+def delete_wallet_chickens_not_in_tokens(wallet_address: str, keep_token_ids):
+    wallet_address = (wallet_address or "").strip().lower()
+    if not wallet_address:
+        return 0
+
+    keep_token_ids = [str(token_id).strip() for token_id in (keep_token_ids or []) if str(token_id).strip()]
+
+    with get_connection() as conn:
+        if keep_token_ids:
+            placeholders = ",".join(["?"] * len(keep_token_ids))
+            rows = conn.execute(
+                f"""
+                SELECT token_id
+                FROM chickens
+                WHERE wallet_address = ?
+                  AND token_id NOT IN ({placeholders})
+                """,
+                [wallet_address, *keep_token_ids],
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT token_id
+                FROM chickens
+                WHERE wallet_address = ?
+                """,
+                (wallet_address,),
+            ).fetchall()
+
+        token_ids_to_remove = [str(row["token_id"]) for row in rows]
+
+        if token_ids_to_remove:
+            token_placeholders = ",".join(["?"] * len(token_ids_to_remove))
+            conn.execute(
+                f"""
+                DELETE FROM chicken_family_root_items
+                WHERE wallet_address = ?
+                  AND token_id IN ({token_placeholders})
+                """,
+                [wallet_address, *token_ids_to_remove],
+            )
+            conn.execute(
+                f"""
+                DELETE FROM chicken_family_roots
+                WHERE wallet_address = ?
+                  AND token_id IN ({token_placeholders})
+                """,
+                [wallet_address, *token_ids_to_remove],
+            )
+            conn.execute(
+                f"""
+                DELETE FROM chickens
+                WHERE wallet_address = ?
+                  AND token_id IN ({token_placeholders})
+                """,
+                [wallet_address, *token_ids_to_remove],
+            )
+            conn.commit()
+
+    return len(token_ids_to_remove)
+
+
 def get_static_chickens_by_token_ids(token_ids):
     token_ids = [str(token_id).strip() for token_id in (token_ids or []) if str(token_id).strip()]
     if not token_ids:
@@ -419,3 +481,117 @@ def get_static_chickens_by_token_ids(token_ids):
         ).fetchall()
 
     return {str(row["token_id"]): dict(row) for row in rows}
+
+
+def get_wallet_last_synced_at(wallet_address: str):
+    wallet_address = (wallet_address or "").strip().lower()
+    if not wallet_address:
+        return None
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT last_synced_at
+            FROM wallet_sync_state
+            WHERE wallet_address = ?
+            """,
+            (wallet_address,),
+        ).fetchone()
+
+    if not row or not row["last_synced_at"]:
+        return None
+
+    try:
+        return datetime.fromisoformat(row["last_synced_at"])
+    except Exception:
+        return None
+
+
+def upsert_wallet_last_synced_at(wallet_address: str, synced_at=None):
+    wallet_address = (wallet_address or "").strip().lower()
+    if not wallet_address:
+        return
+
+    if synced_at is None:
+        synced_at = datetime.now(timezone.utc)
+
+    synced_at_value = synced_at.isoformat() if hasattr(synced_at, "isoformat") else str(synced_at)
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO wallet_sync_state (wallet_address, last_synced_at)
+            VALUES (?, ?)
+            ON CONFLICT(wallet_address) DO UPDATE SET
+                last_synced_at = excluded.last_synced_at
+            """,
+            (wallet_address, synced_at_value),
+        )
+        conn.commit()
+
+
+def delete_wallet_chickens_not_in_tokens(wallet_address: str, token_ids):
+    wallet_address = (wallet_address or "").strip().lower()
+    token_ids = [str(token_id).strip() for token_id in (token_ids or []) if str(token_id).strip()]
+
+    with get_connection() as conn:
+        if token_ids:
+            placeholders = ",".join(["?"] * len(token_ids))
+            params = [wallet_address] + token_ids
+
+            rows_to_delete = conn.execute(
+                f"""
+                SELECT token_id
+                FROM chickens
+                WHERE wallet_address = ?
+                  AND token_id NOT IN ({placeholders})
+                """,
+                params,
+            ).fetchall()
+        else:
+            rows_to_delete = conn.execute(
+                """
+                SELECT token_id
+                FROM chickens
+                WHERE wallet_address = ?
+                """,
+                (wallet_address,),
+            ).fetchall()
+
+        token_ids_to_delete = [str(row["token_id"]) for row in rows_to_delete]
+
+        if not token_ids_to_delete:
+            return 0
+
+        placeholders = ",".join(["?"] * len(token_ids_to_delete))
+        params = [wallet_address] + token_ids_to_delete
+
+        conn.execute(
+            f"""
+            DELETE FROM chicken_family_root_items
+            WHERE wallet_address = ?
+              AND token_id IN ({placeholders})
+            """,
+            params,
+        )
+
+        conn.execute(
+            f"""
+            DELETE FROM chicken_family_roots
+            WHERE wallet_address = ?
+              AND token_id IN ({placeholders})
+            """,
+            params,
+        )
+
+        conn.execute(
+            f"""
+            DELETE FROM chickens
+            WHERE wallet_address = ?
+              AND token_id IN ({placeholders})
+            """,
+            params,
+        )
+
+        conn.commit()
+        return len(token_ids_to_delete)
