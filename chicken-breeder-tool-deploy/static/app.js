@@ -8,11 +8,55 @@ document.addEventListener("DOMContentLoaded", function () {
     const compareCloseButtons = document.querySelectorAll("[data-close-compare]");
     const autoOpenTemplateId = (document.body?.dataset?.autoOpenTemplateId || "").trim();
 
+    const compareAddForm = document.getElementById("compare-add-form");
+
     const autoMatchConfigModal = document.getElementById("auto-match-config-modal");
     const autoMatchConfigCloseButtons = document.querySelectorAll("[data-close-auto-match-config]");
     const autoMatchResultModal = document.getElementById("auto-match-result-modal");
     const autoMatchResultCloseButtons = document.querySelectorAll("[data-close-auto-match-result]");
     const autoMatchOpenButtons = document.querySelectorAll(".open-auto-match-config-btn");
+
+    const plannerModal = document.getElementById("planner-modal");
+    const plannerOpenButtons = document.querySelectorAll(".open-planner-btn");
+    const plannerCloseButtons = document.querySelectorAll("[data-close-planner]");
+
+	let plannerStateChanged = false;
+	let plannerRemovalChanged = false;
+
+	function reloadPageWithoutModalState() {
+		const url = new URL(window.location.href);
+
+		url.searchParams.delete("auto_match");
+		url.searchParams.delete("auto_match_mode");
+		url.searchParams.delete("auto_match_source");
+		url.searchParams.delete("auto_open_template_id");
+		url.searchParams.delete("popup_match_count");
+		url.searchParams.delete("popup_ip_diff");
+		url.searchParams.delete("popup_breed_diff");
+		url.searchParams.delete("popup_ninuno");
+		url.searchParams.delete("popup_min_build_count");
+		url.searchParams.delete("popup_same_instinct");
+
+		url.searchParams.set("skip_auto_open", "1");
+
+		window.location.href = url.toString();
+	}
+	
+	function reloadPageForPlannerOpen() {
+		sessionStorage.setItem("reopenPlannerModal", "1");
+		reloadPageWithoutModalState();
+	}
+
+    function lockBody() {
+        document.body.classList.add("modal-open");
+    }
+
+    function unlockBodyIfNoModalOpen() {
+        const anyOpenModal = document.querySelector(".compare-modal:not(.hidden)");
+        if (!anyOpenModal) {
+            document.body.classList.remove("modal-open");
+        }
+    }
 
     function hideAllDetails() {
         document.querySelectorAll(".details-row").forEach((row) => {
@@ -95,6 +139,48 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
+    function fillCompareAddForm(template) {
+        if (!compareAddForm || !template) return;
+
+        const leftTokenId = (template.dataset.leftTokenId || "").trim();
+        const rightTokenId = (template.dataset.rightTokenId || "").trim();
+
+        compareAddForm.querySelector('input[name="left_token_id"]').value = leftTokenId;
+        compareAddForm.querySelector('input[name="right_token_id"]').value = rightTokenId;
+
+        const leftItemName = (template.dataset.leftItemName || "").trim();
+        const rightItemName = (template.dataset.rightItemName || "").trim();
+        const pairQuality = (template.dataset.pairQuality || "").trim();
+
+        compareAddForm.querySelector('input[name="left_item_name"]').value = leftItemName;
+        compareAddForm.querySelector('input[name="right_item_name"]').value = rightItemName;
+        compareAddForm.querySelector('input[name="pair_quality"]').value = pairQuality;
+    }
+	
+	function clearPlannerEmptyState() {
+		const emptyState = document.querySelector("#planner-modal .empty-state-card");
+		if (emptyState) {
+			emptyState.remove();
+		}
+	}
+	
+    function clearCompareAddForm() {
+        if (!compareAddForm) return;
+
+        const fields = [
+            'input[name="left_token_id"]',
+            'input[name="right_token_id"]',
+            'input[name="left_item_name"]',
+            'input[name="right_item_name"]',
+            'input[name="pair_quality"]'
+        ];
+
+        fields.forEach((selector) => {
+            const input = compareAddForm.querySelector(selector);
+            if (input) input.value = "";
+        });
+    }
+
     function openCompareModal(templateId) {
         if (!compareModal || !compareModalBody) return;
 
@@ -102,17 +188,19 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!template) return;
 
         compareModalBody.innerHTML = template.innerHTML;
+        fillCompareAddForm(template);
         compareModal.classList.remove("hidden");
-        document.body.classList.add("modal-open");
+        lockBody();
     }
 
-    function closeCompareModal() {
-        if (!compareModal || !compareModalBody) return;
+	function closeCompareModal() {
+		if (!compareModal || !compareModalBody) return;
 
-        compareModal.classList.add("hidden");
-        compareModalBody.innerHTML = "";
-        document.body.classList.remove("modal-open");
-    }
+		compareModal.classList.add("hidden");
+		compareModalBody.innerHTML = "";
+		clearCompareAddForm();
+		unlockBodyIfNoModalOpen();
+	}
 
     compareOpenButtons.forEach((button) => {
         button.addEventListener("click", function () {
@@ -130,20 +218,20 @@ document.addEventListener("DOMContentLoaded", function () {
     function openAutoMatchConfigModal() {
         if (!autoMatchConfigModal) return;
         autoMatchConfigModal.classList.remove("hidden");
-        document.body.classList.add("modal-open");
+        lockBody();
         syncAutoMatchConfigState();
     }
 
     function closeAutoMatchConfigModal() {
         if (!autoMatchConfigModal) return;
         autoMatchConfigModal.classList.add("hidden");
-        document.body.classList.remove("modal-open");
+        unlockBodyIfNoModalOpen();
     }
 
     function openAutoMatchResultModal() {
         if (!autoMatchResultModal) return;
         autoMatchResultModal.classList.remove("hidden");
-        document.body.classList.add("modal-open");
+        lockBody();
     }
 
 	function closeAutoMatchResultModal(reopenConfig = true) {
@@ -154,10 +242,10 @@ document.addEventListener("DOMContentLoaded", function () {
 		if (reopenConfig && autoMatchConfigModal) {
 			setTimeout(function () {
 				autoMatchConfigModal.classList.remove("hidden");
-				document.body.classList.add("modal-open");
+				lockBody();
 			}, 0);
 		} else {
-			document.body.classList.remove("modal-open");
+			unlockBodyIfNoModalOpen();
 		}
 	}
 
@@ -166,7 +254,7 @@ document.addEventListener("DOMContentLoaded", function () {
             event.preventDefault();
             openAutoMatchConfigModal();
         });
-    });	
+    });
 
     autoMatchConfigCloseButtons.forEach((button) => {
         button.addEventListener("click", function () {
@@ -178,56 +266,304 @@ document.addEventListener("DOMContentLoaded", function () {
 		button.addEventListener("click", function (event) {
 			event.preventDefault();
 			event.stopPropagation();
-			closeAutoMatchResultModal(true);
+			closeAutoMatchResultModal(false);
 		});
 	});
 
-    function syncAutoMatchConfigState() {
-        const modeInputs = document.querySelectorAll('input[name="auto_match_mode"]');
-        const countWrap = document.querySelector("[data-auto-match-count-wrap]");
-        const countInput = document.querySelector('input[name="multi_count"]');
+	function openPlannerModal() {
+		if (!plannerModal) return;
 
-        if (!modeInputs.length) return;
+		if (plannerStateChanged) {
+			reloadPageForPlannerOpen();
+			return;
+		}
+
+		plannerModal.classList.remove("hidden");
+		lockBody();
+	}
+
+	function closePlannerModal() {
+		if (!plannerModal) return;
+
+		plannerModal.classList.add("hidden");
+		unlockBodyIfNoModalOpen();
+
+		if (plannerRemovalChanged) {
+			reloadPageWithoutModalState();
+		}
+	}
+
+    plannerOpenButtons.forEach((button) => {
+        button.addEventListener("click", function (event) {
+            event.preventDefault();
+            openPlannerModal();
+        });
+    });
+
+    plannerCloseButtons.forEach((button) => {
+        button.addEventListener("click", function (event) {
+            event.preventDefault();
+            closePlannerModal();
+        });
+    });
+
+    function syncAutoMatchConfigState() {
+        const modeSelect = document.querySelector('select[name="auto_match_mode"]');
+        const modeInputs = document.querySelectorAll('input[name="auto_match_mode"]');
+        const countWrap =
+            document.querySelector("[data-auto-match-count-wrap]") ||
+            document.querySelector(".multi-match-count-wrap");
+
+        const countInput =
+            document.querySelector('input[name="multi_count"]') ||
+            document.querySelector('input[name="popup_match_count"]');
 
         let selectedMode = "single";
-        modeInputs.forEach((input) => {
-            if (input.checked) {
-                selectedMode = input.value;
-            }
-        });
+
+        if (modeSelect) {
+            selectedMode = modeSelect.value;
+        } else if (modeInputs.length) {
+            modeInputs.forEach((input) => {
+                if (input.checked) selectedMode = input.value;
+            });
+        }
 
         const isMultiple = selectedMode === "multiple";
 
-        if (countWrap) {
-            countWrap.classList.toggle("hidden", !isMultiple);
-        }
-
-        if (countInput) {
-            countInput.disabled = !isMultiple;
-        }
+        if (countWrap) countWrap.classList.toggle("hidden", !isMultiple);
+        if (countInput) countInput.disabled = !isMultiple;
     }
 
-    document.querySelectorAll('input[name="auto_match_mode"]').forEach((input) => {
+    document.querySelectorAll('input[name="auto_match_mode"], select[name="auto_match_mode"]').forEach((input) => {
         input.addEventListener("change", syncAutoMatchConfigState);
     });
 
     syncAutoMatchConfigState();
 
-	document.addEventListener("keydown", function (event) {
-		if (event.key !== "Escape") return;
+    function markPlannerButtonAdded(button) {
+        if (!button) return;
+        button.disabled = true;
+        button.dataset.plannerState = "added";
+        button.classList.add("is-disabled", "is-added");
+        button.setAttribute("aria-disabled", "true");
+        button.setAttribute("title", "Already added to breeding planner");
+    }
+
+    function markPlannerButtonRemoved(button) {
+        if (!button) return;
+        button.disabled = true;
+        button.dataset.plannerState = "removed";
+        button.classList.add("is-disabled", "is-removed");
+        button.setAttribute("aria-disabled", "true");
+        button.setAttribute("title", "Already removed from breeding planner");
+    }
+
+	function updateAvailablePairMax(delta) {
+		const note = document.querySelector(".multi-match-count-wrap .note");
+		const countInput = document.querySelector('input[name="popup_match_count"]');
+
+		if (!note) return;
+
+		const match = note.textContent.match(/(\d+)/);
+		if (!match) return;
+
+		const current = parseInt(match[1], 10);
+		if (Number.isNaN(current)) return;
+
+		const next = Math.max(0, current + delta);
+
+		note.textContent = `Max from current pool: ${next}`;
+
+		if (countInput) {
+			countInput.max = String(next);
+
+			const currentValue = parseInt(countInput.value || "0", 10);
+			if (!Number.isNaN(currentValue) && currentValue > next) {
+				countInput.value = String(Math.max(1, next));
+			}
+		}
+	}
+
+	function updatePlannerCount(delta) {
+		const heroCount = document.querySelector(".breeding-planner-count");
+		const modalCount = document.querySelector(".planner-modal-count strong");
+
+		if (heroCount) {
+			const current = parseInt(heroCount.textContent || "0", 10);
+			if (!Number.isNaN(current)) {
+				heroCount.textContent = String(Math.max(0, current + delta));
+			}
+		}
+
+		if (modalCount) {
+			const current = parseInt(modalCount.textContent || "0", 10);
+			if (!Number.isNaN(current)) {
+				modalCount.textContent = String(Math.max(0, current + delta));
+			}
+		}
+	}
+	
+	function removePlannerRow(button) {
+		const row = button.closest(".planner-row");
+		if (!row) return;
+
+		row.remove();
+
+		const remainingRows = document.querySelectorAll("#planner-modal .planner-row");
+		const emptyState = document.querySelector("#planner-modal .empty-state-card");
+
+		if (remainingRows.length === 0 && !emptyState) {
+			const compareBody = document.querySelector("#planner-modal .compare-body");
+			if (compareBody) {
+				const emptyCard = document.createElement("div");
+				emptyCard.className = "empty-state-card empty-state-card-inline";
+				emptyCard.innerHTML = `
+					<div class="empty-state-kicker">Planner is empty</div>
+					<h3>No queued pairs yet.</h3>
+					<p>You can manually review a match or use Auto Match, then add the pair to the breeding planner.</p>
+				`;
+				compareBody.appendChild(emptyCard);
+			}
+		}
+	}
+
+	function reloadWithoutSelectedChicken() {
+		const url = new URL(window.location.href);
+
+		url.searchParams.delete("selected_token_id");
+		url.searchParams.delete("auto_match");
+		url.searchParams.delete("auto_match_mode");
+		url.searchParams.delete("auto_match_source");
+		url.searchParams.delete("auto_open_template_id");
+		url.searchParams.delete("popup_match_count");
+		url.searchParams.delete("popup_ip_diff");
+		url.searchParams.delete("popup_breed_diff");
+		url.searchParams.delete("popup_ninuno");
+
+		url.hash = "selected-chicken";
+		window.location.href = url.toString();
+	}
+
+    async function submitPlannerFormAjax(form, button, mode) {
+        if (!form || !button || button.disabled || form.dataset.submitting === "1") return;
+
+        form.dataset.submitting = "1";
+        button.disabled = true;
+        button.classList.add("is-pending");
+
+        try {
+            const response = await fetch(form.action, {
+                method: (form.method || "POST").toUpperCase(),
+                body: new FormData(form),
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                credentials: "same-origin",
+                redirect: "follow"
+            });
+
+            if (!response.ok) {
+                throw new Error("Request failed");
+            }
+
+			if (mode === "add") {
+				markPlannerButtonAdded(button);
+				updatePlannerCount(1);
+				updateAvailablePairMax(-1);
+				clearPlannerEmptyState();
+
+				const isSelectedMatchFlow =
+					form.id === "compare-add-form" ||
+					!!form.closest("#compare-modal");
+
+				form.dataset.submitting = "0";
+				button.classList.remove("is-pending");
+				plannerStateChanged = true;
+
+				if (isSelectedMatchFlow) {
+					reloadWithoutSelectedChicken();
+					return;
+				}
+			} else {
+				markPlannerButtonRemoved(button);
+				updatePlannerCount(-1);
+				updateAvailablePairMax(1);
+				removePlannerRow(button);
+
+				plannerStateChanged = true;
+				plannerRemovalChanged = true;
+				form.dataset.submitting = "0";
+				button.classList.remove("is-pending");
+			}
+			
+        } catch (error) {
+            button.disabled = false;
+            button.classList.remove("is-pending");
+            form.dataset.submitting = "0";
+            console.error(error);
+        }
+    }
+
+    function bindPlannerAjaxForms(scope = document) {
+        const forms = scope.querySelectorAll("form");
+
+        forms.forEach((form) => {
+            if (form.dataset.ajaxPlannerBound === "1") return;
+
+            const addButton = form.querySelector(".planner-add-btn");
+            const removeButton = form.querySelector(".planner-remove-icon-btn");
+
+            if (!addButton && !removeButton) return;
+
+            form.dataset.ajaxPlannerBound = "1";
+
+            form.addEventListener("submit", function (event) {
+                if (addButton) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    submitPlannerFormAjax(form, addButton, "add");
+                    return;
+                }
+
+                if (removeButton) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    submitPlannerFormAjax(form, removeButton, "remove");
+                }
+            });
+        });
+    }
+
+    bindPlannerAjaxForms(document);
+
+    document.addEventListener("keydown", function (event) {
+        if (event.key !== "Escape") return;
+
+        if (plannerModal && !plannerModal.classList.contains("hidden")) {
+            closePlannerModal();
+            return;
+        }
 
 		if (autoMatchResultModal && !autoMatchResultModal.classList.contains("hidden")) {
-			closeAutoMatchResultModal(true);
+			closeAutoMatchResultModal(false);
 			return;
 		}
 
-		if (autoMatchConfigModal && !autoMatchConfigModal.classList.contains("hidden")) {
-			closeAutoMatchConfigModal();
-			return;
-		}
+        if (autoMatchConfigModal && !autoMatchConfigModal.classList.contains("hidden")) {
+            closeAutoMatchConfigModal();
+            return;
+        }
 
-		closeCompareModal();
-	});
+        if (compareModal && !compareModal.classList.contains("hidden")) {
+            closeCompareModal();
+        }
+    });
+
+	const reopenPlannerModal = sessionStorage.getItem("reopenPlannerModal") === "1";
+	if (reopenPlannerModal) {
+		sessionStorage.removeItem("reopenPlannerModal");
+		openPlannerModal();
+	}
 
     if (autoOpenTemplateId) {
         openCompareModal(autoOpenTemplateId);
