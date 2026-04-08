@@ -1307,11 +1307,11 @@ def get_gene_pair_completion_from_row(row):
     right = row.get("right") or {}
     build_type = str(row.get("build_type") or "").strip().lower()
     if build_type and left and right:
-        left_resolution = get_gene_build_resolution(left, build_type)
-        right_resolution = get_gene_build_resolution(right, build_type)
+        left_target_info = get_gene_build_target_info(left, build_type)
+        right_target_info = get_gene_build_target_info(right, build_type)
         return get_gene_pair_completion(
-            left_resolution.get("eval") or evaluate_build(left, build_type),
-            right_resolution.get("eval") or evaluate_build(right, build_type),
+            left_target_info.get("effective_eval") or evaluate_build(left, build_type),
+            right_target_info.get("effective_eval") or evaluate_build(right, build_type),
         )
 
     return {
@@ -1868,14 +1868,6 @@ def chicken_matches_gene_build(chicken, build_type):
     return get_gene_build_target_info(chicken, build_type)["eligible"]
 
 
-def make_empty_state(kicker, title, body):
-    return {
-        "kicker": kicker,
-        "title": title,
-        "body": body,
-    }
-
-
 def build_ultimate_available_empty_state():
     return make_empty_state(
         "No candidates ready",
@@ -2010,14 +2002,21 @@ def build_gene_potential_matches(selected_chicken, breedable_chickens, build_typ
         candidate_eval = candidate_target_info["effective_eval"]
         candidate_source = candidate_target_info["source"]
 
+        completion = get_gene_pair_completion(selected_eval, candidate_eval)
+
         scored_matches.append({
             "candidate": candidate,
             "candidate_eval": candidate_eval,
             "candidate_target_info": candidate_target_info,
+            "selected_eval": selected_eval,
+            "build_type": build_type,
             "added_missing_traits": count_added_missing_traits(selected_eval, candidate_eval),
+            "combined_match_count": completion["combined_count"],
+            "combined_match_total": completion["combined_total"],
+            "selected_build_match_count": completion["selected_count"],
+            "candidate_build_match_count": completion["candidate_count"],
             "instinct_rank": get_instinct_tier_rank(candidate.get("instinct"), build_type) if candidate_source == "primary" else 999,
         })
-
     scored_matches.sort(
         key=lambda row: (
             -(row["added_missing_traits"] or 0),
@@ -3390,7 +3389,9 @@ def match_gene_page():
             
             batch_result = enrich_missing_gene_data_in_batches(chickens=chickens, wallet=wallet, page_key="gene", batch_size=5, prioritized_token_id=selected_token_id or None)
             gene_enrichment_loaded = batch_result["loaded"]
-            chickens = get_wallet_chickens(wallet, ensure_loaded=True)
+
+            chickens = get_wallet_chickens(wallet, ensure_loaded=False)
+
             gene_enrichment_remaining = batch_result["remaining"]
             all_breedable = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
             breedable_chickens = filter_out_planner_tokens(
@@ -3729,58 +3730,4 @@ def inventory():
 
 if __name__ == "__main__":
     app.run(debug=True)
-def build_gene_potential_matches(selected_chicken, breedable_chickens, build_type):
-    if not selected_chicken or not build_type:
-        return []
-
-    selected_token_id = str(selected_chicken.get("token_id") or "")
-    selected_resolution = get_gene_build_resolution(selected_chicken, build_type)
-    selected_eval = selected_resolution.get("eval") or evaluate_build(selected_chicken, build_type)
-
-    candidate_pool = [
-        row for row in breedable_chickens
-        if str(row.get("token_id") or "") != selected_token_id
-        and is_generation_gap_allowed(
-            selected_chicken,
-            row,
-            max_gap=MATCH_SETTINGS["max_generation_gap"],
-        )
-    ]
-
-    scored_matches = []
-    for candidate in candidate_pool:
-        candidate_resolution = get_gene_build_resolution(candidate, build_type)
-        if not candidate_resolution.get("source"):
-            continue
-
-        candidate_eval = candidate_resolution.get("eval") or evaluate_build(candidate, build_type)
-        completion = get_gene_pair_completion(selected_eval, candidate_eval)
-
-        scored_matches.append({
-            "candidate": candidate,
-            "candidate_eval": candidate_eval,
-            "selected_eval": selected_eval,
-            "build_type": build_type,
-            "added_missing_traits": count_added_missing_traits(selected_eval, candidate_eval),
-            "combined_match_count": completion["combined_count"],
-            "combined_match_total": completion["combined_total"],
-            "selected_build_match_count": completion["selected_count"],
-            "candidate_build_match_count": completion["candidate_count"],
-            "instinct_rank": get_instinct_tier_rank(candidate.get("instinct"), build_type) if candidate_resolution.get("source") == "primary" else 999,
-        })
-
-    scored_matches.sort(
-        key=lambda row: (
-            -(row["combined_match_count"] or 0),
-            -(row["added_missing_traits"] or 0),
-            -(row["candidate_eval"]["match_count"] or 0),
-            row.get("instinct_rank", 999),
-            safe_int(row["candidate"].get("breed_count"), 999999) or 999999,
-            -(float(row["candidate"].get("ownership_percent") or 0)),
-            safe_int(row["candidate"].get("token_id"), 999999999) or 999999999,
-        )
-    )
-
-    return scored_matches
-
 
