@@ -12,49 +12,98 @@
     data-auto-match-result-open="{{ 1 if auto_open_multi_match else 0 }}"
 >
     <div class="container breeding-page breeding-page-ip">
-        <section class="breeding-hero breeding-hero-ip">
-            <div class="panel breeding-hero-main">
-                <div class="topbar">
-                    <div class="page-header">
-                        <h1>IP Breeding</h1>
-                        <p class="page-description">
-                            Compare IP-focused pairs, review instinct and lineage, and check the best breeding match for your selected chicken.
-                        </p>
+		<section class="breeding-hero breeding-hero-ip">
+			<div class="panel breeding-hero-main">
+				<div class="breeding-hero-main-card">
+					<div class="topbar">
+						<div class="page-header">
+							<h1>IP Breeding</h1>
+							<p class="page-description">
+								Compare IP-focused pairs, review instinct and lineage, and check the best breeding match for your selected chicken.
+							</p>
+						</div>
+						<div class="topbar-actions">
+							<a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Home</a>
+						</div>
+					</div>
+				</div>
 
-                        <div class="breeding-hero-highlights">
-                            <span class="breeding-hero-highlight">IP Thresholds</span>
-                            <span class="breeding-hero-highlight">100% Ninuno</span>
-                            <span class="breeding-hero-highlight">Auto Match Ready</span>
-                        </div>
-                    </div>
-                    <div class="topbar-actions">
-                        <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Landing Page</a>
-                    </div>
-                </div>
-            </div>
+				<div class="breeding-planner-inline-card">
+					<div class="breeding-planner-title">BREEDING PLANNER</div>
 
-            <div class="panel breeding-hero-side">
-                <div class="breeding-hero-side-card">
-                    <div class="breeding-hero-side-label">Mode</div>
-                    <div class="breeding-hero-side-value">IP</div>
-                    <div class="breeding-hero-side-note">Set your IP rules first, then compare the strongest pairings for the selected parent.</div>
-                </div>
+					<div class="breeding-planner-count-row">
+						<div class="breeding-planner-count">{{ planner_summary.count }}</div>
 
-                <div class="breeding-hero-steps">
-                    <div class="breeding-hero-steps-title">Workflow</div>
-                    <ol class="breeding-hero-steps-list" aria-label="IP breeding workflow">
-                        <li><span>Configure IP filters</span></li>
-                        <li><span>Select a chicken</span></li>
-                        <li><span>Compare best matches</span></li>
-                    </ol>
-                </div>
-            </div>
-        </section>
+						<div class="breeding-planner-actions">
+							<button type="button" class="link-btn secondary-link-btn open-planner-btn">View Planner</button>
+						</div>
+					</div>
+
+					<div class="breeding-planner-note">{{ planner_summary.note }}</div>
+				</div>
+			</div>
+
+			<div class="panel breeding-hero-side">
+				<div class="breeding-hero-side-card">
+					<div class="breeding-hero-side-label">Mode</div>
+					<div class="breeding-hero-side-value">IP</div>
+					<div class="breeding-hero-side-note">Set your IP rules first, then compare the strongest pairings for the selected parent.</div>
+				</div>
+
+				<div class="breeding-hero-steps">
+					<div class="breeding-hero-steps-title">Workflow</div>
+					<ol class="breeding-hero-steps-list" aria-label="IP breeding workflow">
+						<li><span>Configure IP filters</span></li>
+						<li><span>Select a chicken</span></li>
+						<li><span>Compare best matches</span></li>
+					</ol>
+				</div>
+			</div>
+		</section>
+		{% if wallet_summary %}
+		<section class="wallet-summary-strip panel wallet-summary-strip-page" aria-label="Wallet summary">
+			<div class="wallet-summary-inline">
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Total</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.total_count }}</strong>
+				</div>
+
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Wallet Breedable</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.breedable_count }}</strong>
+				</div>
+
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Eggs</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.egg_count }}</strong>
+				</div>
+
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Unavailable</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.unavailable_count }}</strong>
+				</div>
+
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Planner</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.planner_count }}</strong>
+				</div>
+
+				{% if wallet_summary.updated_display %}
+					<div class="wallet-summary-inline-divider"></div>
+					<div class="wallet-summary-inline-item wallet-summary-inline-item-meta">
+						<span class="wallet-summary-inline-label">Updated</span>
+						<strong class="wallet-summary-inline-value wallet-summary-inline-value-meta">{{ wallet_summary.updated_display }}</strong>
+					</div>
+				{% endif %}
+			</div>
+		</section>
+		{% endif %}
+		
 
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
-
+		
         {% if wallet and not error %}
             <section class="breeding-section">
                 <div class="breeding-section-header">
@@ -238,7 +287,7 @@
             <div class="breeding-section-header">
                 <div>
                     <div class="breeding-section-kicker">Step 3</div>
-                    <h2>Review best matches</h2>
+                    <h2>Review selected chicken and best IP matches</h2>
                 </div>
                 <p class="breeding-section-note">Use the selected parent on the left and compare the best IP-based pairings on the right.</p>
             </div>
@@ -330,9 +379,9 @@
 			</a>
 		</div>
     {% else %}
+		<h2>Selected Chicken</h2>
         <div class="empty-state-card">
             <div class="empty-state-kicker">No selection</div>
-            <h3>Selected Chicken</h3>
             <p>Pick a chicken from the available list to load its stats and pairing view here.</p>
         </div>
     {% endif %}
@@ -363,13 +412,16 @@
 										tabindex="0"
 									>
                                         <td class="action-cell">
-											<button
-													type="button"
-													class="open-compare-btn"
-												data-template-id="compare-ip-{{ row.candidate.token_id }}"
-											>
-												Match
-											</button>
+											<div class="table-row-action-wrap">
+												<span class="table-row-action-placeholder">View</span>
+												<button
+														type="button"
+														class="open-compare-btn table-row-action-btn"
+													data-template-id="compare-ip-{{ row.candidate.token_id }}"
+												>
+													Match
+												</button>
+											</div>
 										</td>
                                         <td>
                                             <div class="chicken-id-card compact-id-card">
@@ -448,14 +500,12 @@
                     {% else %}
                         <div class="empty-state-card empty-state-card-inline">
                             <div class="empty-state-kicker">No matches found</div>
-                            <h3>Potential IP Matches</h3>
                             <p>No IP matches passed your current rules for the selected chicken. Try widening your filter settings.</p>
                         </div>
                     {% endif %}
                 {% else %}
                     <div class="empty-state-card empty-state-card-inline">
                     <div class="empty-state-kicker">Waiting for selection</div>
-                    <h3>Potential IP Matches</h3>
                     <p>Select a chicken first to load the best IP-based pairings here.</p>
                 </div>
                 {% endif %}
@@ -464,6 +514,136 @@
     </div>
         </section>
 	
+
+<div id="planner-modal" class="compare-modal hidden">
+    <div class="compare-backdrop" data-close-planner></div>
+    <div class="compare-dialog multi-match-dialog">
+        <div class="compare-header">
+            <div class="compare-header-main">
+                <h3>Breeding Planner</h3>
+                <div class="match-disclaimer">Queued pairs stay out of the available matching pools until you remove them or refresh the wallet.</div>
+            </div>
+            <button type="button" class="selected-chicken-clear-btn" data-close-planner aria-label="Close" title="Close">×</button>
+        </div>
+        <div class="compare-body">
+			<div class="planner-modal-toolbar">
+				<div class="planner-toolbar-left">
+					<div class="planner-modal-count">Queued pairs: <strong>{{ planner_summary.count }}</strong></div>
+					<a class="link-btn secondary-link-btn planner-export-btn" href="{{ url_for('export_breeding_planner', wallet_address=wallet) }}">
+						<span class="planner-export-icon">XLS</span>
+						<span>Export Excel</span>
+					</a>
+				</div>
+			</div>
+            {% if planner_queue %}
+				{% for row in planner_queue %}
+					<div class="multi-match-row planner-row">
+						{% if row.pair_quality %}
+						<div class="pair-quality-stamp-image-wrap">
+							<img
+								src="{{ url_for('static', filename='images/' ~ (
+									'excellent.png' if row.pair_quality == 'Excellent match'
+									else 'strong.png' if row.pair_quality == 'Strong match'
+									else 'good.png' if row.pair_quality == 'Good match'
+									else 'situational.png' if row.pair_quality == 'Situational'
+									else 'poor.png'
+								)) }}"
+								alt="{{ row.pair_quality }}"
+								class="pair-quality-stamp-image"
+							>
+						</div>
+						{% endif %}
+						<div class="planner-row-topbar">
+							<div class="planner-row-title-wrap">
+								<strong class="planner-row-mode">{{ row.mode_label|upper }}</strong>
+							</div>
+						</div>
+
+						<div class="multi-match-side multi-match-side-boxed">
+							<h4>Chicken {{ row.left.label }}</h4>
+
+							<div class="multi-match-details-grid">
+								<div><strong>IP</strong><span>{{ row.left.ip or '' }}</span></div>
+								<div><strong>Breed Count</strong><span>{{ row.left.breed_count if row.left.breed_count is not none else '' }}</span></div>
+								<div><strong>Ninuno</strong><span>{{ row.left.ninuno or 0 }}%</span></div>
+								<div><strong>{% if row.mode == 'ip' %}Weakest Stat{% else %}Build Match{% endif %}</strong><span>{{ row.left.summary or 'No Build' }}</span></div>
+							</div>
+
+							<div class="multi-match-item-bar">
+								<div class="multi-match-item-inner multi-match-item-inner-right">
+									<div class="multi-match-item-text-single">
+										Recommended item: {{ row.left_item.name if row.left_item else 'No item recommended' }}
+									</div>
+									{% set left_item_image = get_item_image_url(row.left_item.name) if row.left_item else '' %}
+									{% if left_item_image %}
+										<img src="{{ left_item_image }}" alt="{{ row.left_item.name }}" class="multi-match-item-image">
+									{% endif %}
+								</div>
+							</div>
+						</div>
+
+						<div class="multi-match-center">
+							<div class="multi-match-center-stack planner-center-stack">
+								<form method="POST" action="{{ url_for('remove_from_breeding_planner') }}" class="planner-center-remove-form">
+									<input type="hidden" name="wallet_address" value="{{ wallet }}">
+									<input type="hidden" name="pair_key" value="{{ row.pair_key }}">
+									<input type="hidden" name="return_endpoint" value="match_ip_page">
+									<button type="submit" class="planner-remove-icon-btn" title="Remove from planner" aria-label="Remove from planner">
+										💔
+									</button>
+								</form>
+
+								<div class="multi-match-images-row">
+									<img
+										src="{{ row.left.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.left.token_id ~ '.png') }}"
+										class="multi-match-image face-right"
+										alt="Chicken {{ row.left.label }}"
+									>
+									<div class="planner-pair-index">PAIR {{ loop.index }}</div>
+									<img
+										src="{{ row.right.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.right.token_id ~ '.png') }}"
+										class="multi-match-image"
+										alt="Chicken {{ row.right.label }}"
+									>
+								</div>
+							</div>
+						</div>
+
+						<div class="multi-match-side multi-match-side-boxed">
+							<h4>Chicken {{ row.right.label }}</h4>
+
+							<div class="multi-match-details-grid">
+								<div><strong>IP</strong><span>{{ row.right.ip or '' }}</span></div>
+								<div><strong>Breed Count</strong><span>{{ row.right.breed_count if row.right.breed_count is not none else '' }}</span></div>
+								<div><strong>Ninuno</strong><span>{{ row.right.ninuno or 0 }}%</span></div>
+								<div><strong>{% if row.mode == 'ip' %}Matched Stat{% else %}Build Match{% endif %}</strong><span>{{ row.right.summary or 'No Build' }}</span></div>
+							</div>
+
+							<div class="multi-match-item-bar">
+								<div class="multi-match-item-inner multi-match-item-inner-left">
+									{% set right_item_image = get_item_image_url(row.right_item.name) if row.right_item else '' %}
+									{% if right_item_image %}
+										<img src="{{ right_item_image }}" alt="{{ row.right_item.name }}" class="multi-match-item-image">
+									{% endif %}
+									<div class="multi-match-item-text-single">
+										Recommended item: {{ row.right_item.name if row.right_item else 'No item recommended' }}
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				{% endfor %}
+            {% else %}
+                <div class="empty-state-card empty-state-card-inline">
+                    <div class="empty-state-kicker">Planner is empty</div>
+                    <h3>No queued pairs yet.</h3>
+                    <p>You can manually review a match or use Auto Match, then add the pair to the breeding planner.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
 <div id="auto-match-config-modal" class="compare-modal hidden">
     <div class="compare-backdrop" data-close-auto-match-config></div>
     <div class="compare-dialog auto-match-config-dialog">
@@ -501,7 +681,9 @@
                     <div><label><strong>Breed Count Difference</strong></label><input type="number" name="popup_breed_diff" min="0" value="{{ popup_breed_diff if popup_breed_diff is not none else '1' }}"></div>
                     <div><label><strong>Ninuno</strong></label><select name="popup_ninuno"><option value="all" {% if popup_ninuno == 'all' %}selected{% endif %}>All</option><option value="gt0" {% if popup_ninuno == 'gt0' %}selected{% endif %}>Above 0%</option><option value="100" {% if popup_ninuno == '100' %}selected{% endif %}>100% Only</option></select></div>
                     <div class="multi-match-count-wrap"><label><strong>Number of Matches</strong></label><input type="number" name="popup_match_count" min="1" max="{{ available_pair_max }}" value="{{ popup_match_count if popup_match_count is not none else 1 }}"><div class="note">Max from current pool: {{ available_pair_max }}</div></div>
-                    <div class="filter-actions-group"><button type="submit">Run Auto Match</button></div>
+                    <div class="auto-match-field auto-match-submit-field">
+						<button type="submit">Run Auto Match</button>
+					</div>
                 </div>
             </form>
         </div>
@@ -536,7 +718,21 @@
         </div>
 		<div class="compare-body">
 			{% for row in multi_match_rows %}
-			<div class="multi-match-row">
+				<div class="multi-match-row">
+					{% set pair_quality = build_ip_pair_quality(row.left, row.right, row) %}
+					<div class="pair-quality-stamp-image-wrap">
+						<img
+							src="{{ url_for('static', filename='images/' ~ (
+								'excellent.png' if pair_quality == 'Excellent match'
+								else 'strong.png' if pair_quality == 'Strong match'
+								else 'good.png' if pair_quality == 'Good match'
+								else 'situational.png' if pair_quality == 'Situational'
+								else 'poor.png'
+							)) }}"
+							alt="{{ pair_quality }}"
+							class="pair-quality-stamp-image"
+						>
+					</div>
 				<div class="multi-match-side multi-match-side-boxed">
 					<h4>Chicken #{{ row.left.token_id }}</h4>
 
@@ -548,7 +744,7 @@
 					</div>
 
 					<div class="multi-match-item-bar">
-						<div class="multi-match-item-text-single">
+						<div class="multi-match-item-inner multi-match-item-inner-right">
 							Recommended item: {{ row.left_item.name if row.left_item else 'No item recommended' }}
 						</div>
 						{% set left_item_image = get_item_image_url(row.left_item.name) if row.left_item else '' %}
@@ -559,18 +755,39 @@
 				</div>
 
 				<div class="multi-match-center">
-					<div class="multi-match-images-row">
-						<img
-							src="{{ row.left.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.left.token_id ~ '.png') }}"
-							class="multi-match-image face-right"
-							alt="Chicken {{ row.left.token_id }}"
-						>
-						<div class="multi-match-vs">PAIR {{ loop.index }}</div>
-						<img
-							src="{{ row.right.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.right.token_id ~ '.png') }}"
-							class="multi-match-image"
-							alt="Chicken {{ row.right.token_id }}"
-						>
+					<div class="multi-match-center-stack">
+						<form method="POST" action="{{ url_for('add_to_breeding_planner') }}" class="multi-match-center-add-form">
+							<input type="hidden" name="wallet_address" value="{{ wallet }}">
+							<input type="hidden" name="mode" value="ip">
+							<input type="hidden" name="return_endpoint" value="match_ip_page">
+							<input type="hidden" name="sort_by" value="{{ sort_by }}">
+							<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+							<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
+							<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
+							<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+							<input type="hidden" name="left_token_id" value="{{ row.left.token_id }}">
+							<input type="hidden" name="right_token_id" value="{{ row.right.token_id }}">
+							<input type="hidden" name="left_item_name" value="{{ row.left_item.name if row.left_item else '' }}">
+							<input type="hidden" name="right_item_name" value="{{ row.right_item.name if row.right_item else '' }}">
+							<input type="hidden" name="pair_quality" value="{{ build_ip_pair_quality(row.left, row.right) }}">
+							<button type="submit" class="planner-add-btn planner-add-btn-center" title="Add to breeding planner">+</button>
+						</form>
+
+						<!--<div class="multi-match-row-meta">{{ build_ip_pair_quality(row.left, row.right) }}</div>-->
+
+						<div class="multi-match-images-row">
+							<img
+								src="{{ row.left.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.left.token_id ~ '.png') }}"
+								class="multi-match-image face-right"
+								alt="Chicken {{ row.left.token_id }}"
+							>
+							<div class="multi-match-vs">PAIR {{ loop.index }}</div>
+							<img
+								src="{{ row.right.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.right.token_id ~ '.png') }}"
+								class="multi-match-image"
+								alt="Chicken {{ row.right.token_id }}"
+							>
+						</div>
 					</div>
 				</div>
 
@@ -613,15 +830,35 @@
 						This IP match guide is for reference only. It highlights promising pairings based on current stats, but breeding outcomes are not guaranteed.
 					</div>
 				</div>
-				<button
-					type="button"
-					class="selected-chicken-clear-btn"
-					data-close-compare
-					aria-label="Close"
-					title="Close"
-				>
-					×
-				</button>
+				<div class="compare-header-actions">
+					<form method="POST" action="{{ url_for('add_to_breeding_planner') }}" id="compare-add-form" class="compare-add-form">
+						<input type="hidden" name="wallet_address" value="{{ wallet }}">
+						<input type="hidden" name="mode" value="ip">
+						<input type="hidden" name="return_endpoint" value="match_ip_page">
+						<input type="hidden" name="selected_token_id" value="{{ selected_token_id or '' }}">
+						<input type="hidden" name="sort_by" value="{{ sort_by }}">
+						<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+						<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
+						<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
+						<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+						<input type="hidden" name="left_token_id">
+						<input type="hidden" name="right_token_id">
+						<input type="hidden" name="left_item_name">
+						<input type="hidden" name="right_item_name">
+						<input type="hidden" name="pair_quality">
+
+						<button type="submit" class="planner-add-btn" title="Add to breeding planner">+</button>
+					</form>
+					<button
+						type="button"
+						class="selected-chicken-clear-btn"
+						data-close-compare
+						aria-label="Close"
+						title="Close"
+					>
+						×
+					</button>
+				</div>
 			</div>
         <div id="compare-modal-body" class="compare-body"></div>
     </div>
@@ -633,13 +870,34 @@
 	{% set candidate_item_candidates = get_ip_item_candidates(row.candidate, selected_chicken) %}
 	{% set selected_item, candidate_item = resolve_pair_item_recommendations(selected_item_candidates, candidate_item_candidates) %}
 
-        <template id="compare-ip-{{ row.candidate.token_id }}">
+		<template
+			id="compare-ip-{{ row.candidate.token_id }}"
+			data-left-token-id="{{ selected_chicken.token_id }}"
+			data-right-token-id="{{ row.candidate.token_id }}"
+			data-left-item-name="{{ selected_item.name if selected_item else '' }}"
+			data-right-item-name="{{ candidate_item.name if candidate_item else '' }}"
+			data-pair-quality="{{ build_ip_pair_quality(selected_chicken, row.candidate, row) }}"
+		>
             <div class="compare-grid">
+				{% set pair_quality = build_ip_pair_quality(selected_chicken, row.candidate, row) %}
+				<div class="pair-quality-stamp-image-wrap pair-quality-stamp-image-wrap-compare">
+					<img
+						src="{{ url_for('static', filename='images/' ~ (
+							'excellent.png' if pair_quality == 'Excellent match'
+							else 'strong.png' if pair_quality == 'Strong match'
+							else 'good.png' if pair_quality == 'Good match'
+							else 'situational.png' if pair_quality == 'Situational'
+							else 'poor.png'
+						)) }}"
+						alt="{{ pair_quality }}"
+						class="pair-quality-stamp-image"
+					>
+				</div>
                 <div class="compare-card">
                     <h4>Selected Chicken #{{ selected_chicken.token_id }}</h4>
 
                     <div class="compare-image-wrap">
-                        <img src="{{ selected_chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ selected_chicken.token_id ~ '.png') }}" alt="Chicken {{ selected_chicken.token_id }}" class="compare-image">
+						<img src="{{ selected_chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ selected_chicken.token_id ~ '.png') }}" alt="Chicken {{ selected_chicken.token_id }}" class="compare-image compare-image-left-facing">
                     </div>
 					<div class="selected-chicken-group-box">
 						<div class="selected-chicken-group-box-title">Innate Stats</div>
@@ -654,18 +912,18 @@
 							<div><strong>Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
 						</div>
 					</div>
-					<div class="compare-item-box">
+					<div class="compare-item-box compare-item-box-right">
 						<div class="compare-item-label">Recommended Item</div>
 						{% if selected_item %}
 							{% set item_image = get_item_image_url(selected_item.name) %}
-							<div class="compare-item-inline">
-								{% if item_image %}
-									<img src="{{ item_image }}" alt="{{ selected_item.name }}" class="compare-item-image">
-								{% endif %}
+							<div class="compare-item-inline compare-item-inline-right">
 								<div class="compare-item-text">
 									<div class="compare-item-name">{{ selected_item.name }}</div>
 									<div class="compare-item-reason">{{ selected_item.reason }}</div>
 								</div>
+								{% if item_image %}
+									<img src="{{ item_image }}" alt="{{ selected_item.name }}" class="compare-item-image">
+								{% endif %}
 							</div>
 						{% else %}
 							<div class="compare-item-inline">

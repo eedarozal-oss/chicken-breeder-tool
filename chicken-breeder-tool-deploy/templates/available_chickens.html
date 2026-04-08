@@ -44,18 +44,209 @@
                 </div>
             </div>
         </section>
+		{% if wallet_summary %}
+		<section class="wallet-summary-strip panel wallet-summary-strip-page" aria-label="Wallet summary">
+			<div class="wallet-summary-inline">
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Total</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.total_count }}</strong>
+				</div>
 
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Wallet Breedable</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.breedable_count }}</strong>
+				</div>
+
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Eggs</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.egg_count }}</strong>
+				</div>
+
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Unavailable</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.unavailable_count }}</strong>
+				</div>
+
+				<div class="wallet-summary-inline-item">
+					<span class="wallet-summary-inline-label">Planner</span>
+					<strong class="wallet-summary-inline-value">{{ wallet_summary.planner_count }}</strong>
+				</div>
+
+				{% if wallet_summary.updated_display %}
+					<div class="wallet-summary-inline-divider"></div>
+					<div class="wallet-summary-inline-item wallet-summary-inline-item-meta">
+						<span class="wallet-summary-inline-label">Updated</span>
+						<strong class="wallet-summary-inline-value wallet-summary-inline-value-meta">{{ wallet_summary.updated_display }}</strong>
+					</div>
+				{% endif %}
+			</div>
+		</section>
+		{% endif %}
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
+		
+		{% if available_dashboard and not error %}
+		<section class="breeding-section">
+			<div class="breeding-section-header">
+				<div>
+					<div class="breeding-section-kicker">Dashboard</div>
+					<h2>Wallet breeding overview</h2>
+				</div>
+				<p class="breeding-section-note">Use these quick charts to understand your current breeding pool before scanning the full list.</p>
+			</div>
 
+			<div class="inventory-dashboard-grid">
+				<div class="panel inventory-chart-card">
+					<div class="inventory-chart-card-title">Wallet Composition</div>
+
+					<div class="inventory-composition-bar" aria-hidden="true">
+						{% for item in available_dashboard.composition %}
+							<div
+								class="inventory-composition-segment inventory-composition-segment-{{ item.key }}"
+								style="width: {{ item.percent }}%;"
+							></div>
+						{% endfor %}
+					</div>
+
+					<div class="inventory-legend-list">
+						{% for item in available_dashboard.composition %}
+							<div class="inventory-legend-item">
+								<span class="inventory-legend-dot inventory-legend-dot-{{ item.key }}"></span>
+								<span class="inventory-legend-label">{{ item.label }}</span>
+								<strong class="inventory-legend-value">{{ item.count }}</strong>
+							</div>
+						{% endfor %}
+					</div>
+				</div>
+
+				<div class="panel inventory-chart-card">
+					<div class="inventory-chart-card-title">Generation Spread</div>
+
+					{% if available_dashboard.generation_distribution %}
+						<div class="inventory-bar-list">
+							{% for row in available_dashboard.generation_distribution %}
+								<div class="inventory-bar-row">
+									<div class="inventory-bar-label">{{ row.label }}</div>
+									<div class="inventory-bar-track">
+										<div class="inventory-bar-fill inventory-bar-fill-generation" style="width: {{ row.percent }}%;"></div>
+									</div>
+									<div class="inventory-bar-value">{{ row.count }}</div>
+								</div>
+							{% endfor %}
+						</div>
+					{% else %}
+						<div class="inventory-chart-empty">No generation data available.</div>
+					{% endif %}
+				</div>
+
+				<div class="panel inventory-chart-card">
+					<div class="inventory-chart-card-title">Breed Count Spread</div>
+
+					{% if available_dashboard.breed_count_distribution %}
+						<div class="inventory-bar-list">
+							{% for row in available_dashboard.breed_count_distribution %}
+								<div class="inventory-bar-row">
+									<div class="inventory-bar-label">{{ row.label }}</div>
+									<div class="inventory-bar-track">
+										<div class="inventory-bar-fill inventory-bar-fill-breed" style="width: {{ row.percent }}%;"></div>
+									</div>
+									<div class="inventory-bar-value">{{ row.count }}</div>
+								</div>
+							{% endfor %}
+						</div>
+					{% else %}
+						<div class="inventory-chart-empty">No breed count data available.</div>
+					{% endif %}
+				</div>
+
+				<div class="panel inventory-chart-card">
+					<div class="inventory-chart-card-title">Ninuno Status</div>
+
+					{% if available_dashboard.ninuno_distribution %}
+						<div class="inventory-bar-list">
+							{% for row in available_dashboard.ninuno_distribution %}
+								<div class="inventory-bar-row">
+									<div class="inventory-bar-label">{{ row.label }}</div>
+									<div class="inventory-bar-track">
+										<div class="inventory-bar-fill inventory-bar-fill-ninuno" style="width: {{ row.percent }}%;"></div>
+									</div>
+									<div class="inventory-bar-value">{{ row.count }}</div>
+								</div>
+							{% endfor %}
+						</div>
+					{% else %}
+						<div class="inventory-chart-empty">No Ninuno data available.</div>
+					{% endif %}
+				</div>
+			</div>
+
+			<div class="inventory-insight-grid">
+				<div class="panel inventory-insight-card">
+					<div class="inventory-insight-title">Highest IP Breedable</div>
+					{% if available_dashboard.highest_ip_row %}
+						<div class="inventory-insight-main">
+							<div class="chicken-id-card compact-id-card">
+								<img
+									src="{{ available_dashboard.highest_ip_row.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ available_dashboard.highest_ip_row.token_id ~ '.png') }}"
+									alt="Chicken {{ available_dashboard.highest_ip_row.token_id }}"
+									class="chicken-id-card-image compact-id-image"
+								>
+								<div class="chicken-id-card-text">#{{ available_dashboard.highest_ip_row.token_id }}</div>
+							</div>
+							<div class="inventory-insight-copy">
+								<div><strong>IP:</strong> {{ available_dashboard.highest_ip_row.ip if available_dashboard.highest_ip_row.ip is not none else '' }}</div>
+								<div><strong>Gen:</strong> {{ available_dashboard.highest_ip_row.generation_text or '' }}</div>
+								<div><strong>Breed Count:</strong> {{ available_dashboard.highest_ip_row.breed_count if available_dashboard.highest_ip_row.breed_count is not none else '' }}</div>
+							</div>
+						</div>
+					{% else %}
+						<div class="inventory-chart-empty">No breedable chickens found.</div>
+					{% endif %}
+				</div>
+
+				<div class="panel inventory-insight-card">
+					<div class="inventory-insight-title">Lowest Breed Count Breedable</div>
+					{% if available_dashboard.lowest_breed_count_row %}
+						<div class="inventory-insight-main">
+							<div class="chicken-id-card compact-id-card">
+								<img
+									src="{{ available_dashboard.lowest_breed_count_row.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ available_dashboard.lowest_breed_count_row.token_id ~ '.png') }}"
+									alt="Chicken {{ available_dashboard.lowest_breed_count_row.token_id }}"
+									class="chicken-id-card-image compact-id-image"
+								>
+								<div class="chicken-id-card-text">#{{ available_dashboard.lowest_breed_count_row.token_id }}</div>
+							</div>
+							<div class="inventory-insight-copy">
+								<div><strong>Breed Count:</strong> {{ available_dashboard.lowest_breed_count_row.breed_count if available_dashboard.lowest_breed_count_row.breed_count is not none else '' }}</div>
+								<div><strong>IP:</strong> {{ available_dashboard.lowest_breed_count_row.ip if available_dashboard.lowest_breed_count_row.ip is not none else '' }}</div>
+								<div><strong>Gen:</strong> {{ available_dashboard.lowest_breed_count_row.generation_text or '' }}</div>
+							</div>
+						</div>
+					{% else %}
+						<div class="inventory-chart-empty">No breedable chickens found.</div>
+					{% endif %}
+				</div>
+
+				<div class="panel inventory-action-card">
+					<div class="inventory-insight-title">Quick Actions</div>
+					<div class="inventory-action-list">
+						<a class="link-btn secondary-link-btn" href="{{ url_for('match_ip_page', wallet_address=wallet) }}">Open IP Breeding</a>
+						<a class="link-btn secondary-link-btn" href="{{ url_for('match_gene_page', wallet_address=wallet) }}">Open Gene Breeding</a>
+						<a class="link-btn secondary-link-btn" href="{{ url_for('match_ultimate_page', wallet_address=wallet) }}">Open Ultimate Breeding</a>
+					</div>
+				</div>
+			</div>
+		</section>
+		{% endif %}
+		
         <section class="breeding-section">
             <div class="breeding-section-header">
                 <div>
                     <div class="breeding-section-kicker">Inventory</div>
-                    <h2>Breedable Chicken List</h2>
+                    <h2>Full Breedable Chicken List</h2>
                 </div>
-                <p class="breeding-section-note">Use this page to review your eligible chickens before moving into IP, Gene, or Ultimate matching.</p>
+				<p class="breeding-section-note">Use the dashboard above for a quick wallet read, then scan the full breedable list below when you need exact chicken details.</p>
             </div>
 
             <div class="panel breeding-panel">
