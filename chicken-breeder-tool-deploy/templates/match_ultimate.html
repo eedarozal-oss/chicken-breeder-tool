@@ -788,10 +788,8 @@
                     <div class="multi-match-details-grid">
                         <div><strong>Type</strong><span>{{ row.right.ultimate_type_display or '' }}</span></div>
                         <div><strong>IP</strong><span>{{ row.right.ip or '' }}</span></div>
-                        <div><strong>Build</strong><span>{{ row.right.ultimate_build_display or '' }}</span></div>
-                        <div><strong>Build Count</strong><span>{{ row.right.ultimate_build_match_display or '' }}</span></div>
-                        <div><strong>Breed Count</strong><span>{{ row.right.breed_count if row.right.breed_count is not none else '' }}</span></div>
-                        <div><strong>Ninuno</strong><span>{{ row.right.ownership_percent or 0 }}%</span></div>
+                        <div><strong>Build</strong><span>{{ row.right.ultimate_build_display or 'No Build' }}</span></div>
+                        <div><strong>Build Count</strong><span>{{ row.right.ultimate_build_match_display or 'N/A' }}</span></div>
                     </div>
                     <div class="multi-match-item-bar">
                         {% set right_item_image = get_item_image_url(row.right_item.name) if row.right_item else '' %}
