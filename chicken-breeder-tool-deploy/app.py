@@ -46,6 +46,7 @@ from services.ultimate_breeding import (
     get_ultimate_item_candidates,
     resolve_ultimate_pair_item_recommendations,
     build_ultimate_pair_quality_from_items,
+    refresh_ultimate_primary_builds_if_needed,
 )
 from services.wallet_access import (
     init_wallet_access_db,
@@ -3831,6 +3832,15 @@ def match_ultimate_page():
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
+
+            recalculated_primary_builds = refresh_ultimate_primary_builds_if_needed(
+                chickens=chickens,
+                upsert_chicken_fn=upsert_chicken,
+                safe_int_fn=safe_int,
+            )
+
+            if recalculated_primary_builds:
+                chickens = get_wallet_chickens(wallet, ensure_loaded=False)
 
             access_expiry = get_wallet_access_expiry_display(wallet)
             wallet_summary = build_wallet_summary(
