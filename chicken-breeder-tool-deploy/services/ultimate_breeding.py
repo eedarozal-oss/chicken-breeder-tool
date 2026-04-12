@@ -1,5 +1,5 @@
 from services.primary_build_classifier import safe_int
-from services.build_eval import evaluate_build
+from services.build_eval import evaluate_all_builds, select_qualified_build
 from services.item_helper_text import get_item_helper_text, normalize_item_name
 
 ULTIMATE_IP_STRONG_THRESHOLD = 265
@@ -64,6 +64,61 @@ ULTIMATE_ITEM_PRIORITY_ORDER = [
 ]
 
 ULTIMATE_TYPE_ORDER = ["both", "gene_only", "ip_only"]
+
+def needs_ultimate_primary_build_refresh(chicken, safe_int_fn):
+    if not chicken:
+        return False
+
+    is_egg = bool(chicken.get("is_egg"))
+    state = str(chicken.get("state") or "").strip().lower()
+
+    if is_egg or state != "normal":
+        return False
+
+    primary_build = str(chicken.get("primary_build") or "").strip().lower()
+    primary_count = safe_int_fn(chicken.get("primary_build_match_count"))
+    primary_total = safe_int_fn(chicken.get("primary_build_match_total"))
+
+    if not primary_build:
+        return True
+
+    if primary_count is None or primary_total is None:
+        return True
+
+    if primary_total <= 0:
+        return True
+
+    if primary_count < 3:
+        return True
+
+    return False
+
+
+def refresh_ultimate_primary_builds_if_needed(chickens, upsert_chicken_fn, safe_int_fn):
+    updated_any = False
+
+    for chicken in chickens or []:
+        if not needs_ultimate_primary_build_refresh(chicken, safe_int_fn):
+            continue
+
+        refreshed = dict(chicken)
+
+        evaluations = evaluate_all_builds(refreshed)
+        selected = select_qualified_build(evaluations, min_matches=3)
+
+        if selected:
+            refreshed["primary_build"] = selected.get("build") or ""
+            refreshed["primary_build_match_count"] = selected.get("match_count") or 0
+            refreshed["primary_build_match_total"] = selected.get("match_total") or 0
+        else:
+            refreshed["primary_build"] = ""
+            refreshed["primary_build_match_count"] = 0
+            refreshed["primary_build_match_total"] = 0
+
+        upsert_chicken_fn(refreshed)
+        updated_any = True
+
+    return updated_any
 
 def get_primary_build(chicken):
     return str((chicken or {}).get("primary_build") or "").strip().lower()
