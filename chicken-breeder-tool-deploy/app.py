@@ -96,8 +96,10 @@ from services.planner_item_requirements import (
     build_per_pair_item_status,
 )
 from services.wallet_item_inventory import build_wallet_inventory_lookup
-from services.planner_bookmarklet import build_apex_breeder_bookmarklet_code
-
+from services.planner_bookmarklet import (
+    build_apex_breeder_bookmarklet_code,
+    build_bookmarklet_inventory_name_lookup,
+)
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-fallback-secret")
 
@@ -3112,6 +3114,11 @@ def planner_script_generate():
     }
 
     bookmarklet_code = ""
+    inventory_name_lookup = {}
+
+    script_mode = str(request.args.get("script_mode") or "full").strip().lower()
+    if script_mode not in {"full", "partial", "no_items"}:
+        script_mode = "full"
 
     try:
         chickens = get_wallet_chickens(wallet, ensure_loaded=True)
@@ -3128,14 +3135,21 @@ def planner_script_generate():
             queue_rows=planner_queue,
         )
 
-        if summary.get("overall_status") != "ready":
+        if script_mode == "partial":
+            inventory_name_lookup = build_bookmarklet_inventory_name_lookup(wallet)
+
+        if script_mode == "full" and summary.get("overall_status") != "ready":
             if source_page == "gene":
                 return redirect(url_for("planner_items_check", wallet_address=wallet, source_page="gene"))
             elif source_page == "ultimate":
                 return redirect(url_for("planner_items_check", wallet_address=wallet, source_page="ultimate"))
             return redirect(url_for("planner_items_check", wallet_address=wallet, source_page="ip"))
 
-        bookmarklet_code = build_apex_breeder_bookmarklet_code(planner_queue)
+        bookmarklet_code = build_apex_breeder_bookmarklet_code(
+            planner_queue,
+            script_mode=script_mode,
+            inventory_name_lookup=inventory_name_lookup,
+        )
 
     except Exception as exc:
         error = f"Failed to generate script page: {exc}"
@@ -3149,6 +3163,7 @@ def planner_script_generate():
         planner_summary=build_planner_summary(planner_queue),
         item_check_summary=summary,
         bookmarklet_code=bookmarklet_code,
+        script_mode=script_mode,
         error=error,
     )
 
