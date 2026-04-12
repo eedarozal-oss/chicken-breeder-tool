@@ -565,6 +565,21 @@ document.addEventListener("DOMContentLoaded", function () {
 		openPlannerModal();
 	}
 
+	const urlParams = new URLSearchParams(window.location.search);
+	const shouldOpenPlannerFromUrl = urlParams.get("open_planner") === "1";
+
+	if (shouldOpenPlannerFromUrl) {
+		openPlannerModal();
+
+		urlParams.delete("open_planner");
+		const nextQuery = urlParams.toString();
+		const nextUrl = nextQuery
+			? `${window.location.pathname}?${nextQuery}${window.location.hash || ""}`
+			: `${window.location.pathname}${window.location.hash || ""}`;
+
+		window.history.replaceState({}, "", nextUrl);
+	}
+
     if (autoOpenTemplateId) {
         openCompareModal(autoOpenTemplateId);
     }
@@ -572,4 +587,220 @@ document.addEventListener("DOMContentLoaded", function () {
     if (document.body?.dataset?.autoMatchResultOpen === "1") {
         openAutoMatchResultModal();
     }
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    const searchInput = document.getElementById("ip-available-search");
+    const searchButton = document.getElementById("ip-available-search-btn");
+    const clearButton = document.getElementById("ip-available-search-clear-btn");
+    const availableTable = document.querySelector(".ip-available-table table");
+
+    if (!searchInput || !searchButton || !availableTable) {
+        return;
+    }
+
+    const availableRows = Array.from(
+        availableTable.querySelectorAll("tbody tr.clickable-row[data-token-id]")
+    );
+
+    const filterDropdowns = Array.from(
+        document.querySelectorAll(".ip-column-filter-form .ip-filter-dropdown")
+    );
+
+    function normalizeSearchValue(value) {
+        return String(value || "").trim().toLowerCase();
+    }
+
+	function hasActiveCheckboxOrRadioFilter(detailsEl) {
+		if (!detailsEl) return false;
+		return Array.from(
+			detailsEl.querySelectorAll('input[type="checkbox"], input[type="radio"]')
+		).some(function (input) {
+			return input.checked;
+		});
+	}
+
+	function hasActiveMinIpFilter(detailsEl) {
+		if (!detailsEl) return false;
+
+		const input = detailsEl.querySelector(
+			'input[name="min_ip"], input[name="gene_min_ip"], input[name="ultimate_min_ip"]'
+		);
+
+		if (!input) return false;
+		return String(input.value || "").trim() !== "";
+	}
+	
+    function isFilterDropdownActive(detailsEl) {
+        return hasActiveCheckboxOrRadioFilter(detailsEl) || hasActiveMinIpFilter(detailsEl);
+    }
+	
+	function getFilterSummaryText(detailsEl) {
+		if (!detailsEl) return "Filter";
+
+		const minIpInput = detailsEl.querySelector(
+			'input[name="min_ip"], input[name="gene_min_ip"], input[name="ultimate_min_ip"]'
+		);
+		if (minIpInput) {
+			const value = String(minIpInput.value || "").trim();
+			return value ? `Min ${value}` : "Filter";
+		}
+
+		const checkedCheckboxes = Array.from(
+			detailsEl.querySelectorAll('.ip-filter-csv-source:checked')
+		);
+		if (checkedCheckboxes.length > 0) {
+			if (checkedCheckboxes.length === 1) {
+				const labelText = checkedCheckboxes[0].closest("label")?.innerText?.trim();
+				return labelText || "1 selected";
+			}
+			return `${checkedCheckboxes.length} selected`;
+		}
+
+		const checkedRadio = detailsEl.querySelector('input[type="radio"]:checked');
+		if (checkedRadio) {
+			return "1 selected";
+		}
+
+		return "Filter";
+	}
+
+	function updateFilterSummary(detailsEl) {
+		if (!detailsEl) return;
+
+		const summary = detailsEl.querySelector(".ip-filter-summary");
+		if (!summary) return;
+
+		const text = getFilterSummaryText(detailsEl);
+		summary.textContent = text;
+
+		detailsEl.classList.toggle("is-active", isFilterDropdownActive(detailsEl));
+	}
+
+	function updateAllFilterSummaries() {
+		filterDropdowns.forEach(function (dropdown) {
+			updateFilterSummary(dropdown);
+		});
+	}
+
+    function updateClearButtonVisibility() {
+        const hasSearch = normalizeSearchValue(searchInput.value) !== "";
+        if (clearButton) {
+            clearButton.classList.toggle("hidden", !hasSearch);
+        }
+    }
+
+    function applyAvailableSearch() {
+        const searchValue = normalizeSearchValue(searchInput.value);
+
+        let visibleCount = 0;
+
+        availableRows.forEach(function (row) {
+            const tokenId = normalizeSearchValue(row.getAttribute("data-token-id"));
+            const isMatch = !searchValue || tokenId.indexOf(searchValue) !== -1;
+
+            row.classList.toggle("hidden", !isMatch);
+
+            if (isMatch) {
+                visibleCount += 1;
+            }
+        });
+
+        let noResultRow = availableTable.querySelector(".ip-search-empty-row");
+
+        if (visibleCount === 0 && availableRows.length > 0) {
+            if (!noResultRow) {
+                noResultRow = document.createElement("tr");
+                noResultRow.className = "ip-search-empty-row";
+                noResultRow.innerHTML = `
+                    <td colspan="6">
+                        <div class="empty-state-card empty-state-card-inline">
+                            <div class="empty-state-kicker">No search result</div>
+                            <p>No chicken matched the current ID search.</p>
+                        </div>
+                    </td>
+                `;
+                availableTable.querySelector("tbody").appendChild(noResultRow);
+            }
+        } else if (noResultRow) {
+            noResultRow.remove();
+        }
+
+        updateClearButtonVisibility();
+    }
+
+    function closeUnusedDropdowns(exceptDropdown) {
+        filterDropdowns.forEach(function (dropdown) {
+            if (dropdown === exceptDropdown) return;
+            if (isFilterDropdownActive(dropdown)) return;
+            dropdown.removeAttribute("open");
+        });
+    }
+
+    searchButton.addEventListener("click", function () {
+        applyAvailableSearch();
+    });
+
+	searchInput.addEventListener("keydown", function (event) {
+		if (event.key === "Enter") {
+			event.preventDefault();
+			applyAvailableSearch();
+			return;
+		}
+
+		if (event.key === "Escape") {
+			searchInput.value = "";
+			applyAvailableSearch();
+			searchInput.blur();
+		}
+	});
+
+    searchInput.addEventListener("input", function () {
+        updateClearButtonVisibility();
+
+        if (normalizeSearchValue(searchInput.value) === "") {
+            applyAvailableSearch();
+        }
+    });
+
+    if (clearButton) {
+        clearButton.addEventListener("click", function () {
+            searchInput.value = "";
+            applyAvailableSearch();
+            searchInput.focus();
+        });
+    }
+
+    filterDropdowns.forEach(function (dropdown) {
+        dropdown.addEventListener("toggle", function () {
+            if (dropdown.open) {
+                closeUnusedDropdowns(dropdown);
+            }
+        });
+    });
+	
+	filterDropdowns.forEach(function (dropdown) {
+		dropdown.querySelectorAll('input[type="checkbox"], input[type="radio"], input[type="number"]').forEach(function (input) {
+			input.addEventListener("change", function () {
+				updateFilterSummary(dropdown);
+			});
+
+			input.addEventListener("input", function () {
+				updateFilterSummary(dropdown);
+			});
+		});
+	});
+
+    document.addEventListener("click", function (event) {
+        const clickedInsideFilter = event.target.closest(".ip-column-filter-form .ip-filter-dropdown");
+        if (clickedInsideFilter) return;
+
+        filterDropdowns.forEach(function (dropdown) {
+            if (isFilterDropdownActive(dropdown)) return;
+            dropdown.removeAttribute("open");
+        });
+    });
+
+    updateAllFilterSummaries();
+	applyAvailableSearch();
 });

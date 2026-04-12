@@ -369,6 +369,18 @@ th {
     backdrop-filter: blur(10px);
 }
 
+.ip-available-table thead tr:first-child th {
+    top: 0;
+    z-index: 4;
+    background: rgba(12, 25, 42, 0.98);
+}
+
+.ip-available-table thead tr.ip-available-filter-row th {
+    top: 38px;
+    z-index: 3;
+    background: rgba(12, 25, 42, 0.98);
+}
+
 tbody tr:last-child td {
     border-bottom: 0;
 }
@@ -957,11 +969,16 @@ body.modal-open {
 
 .ip-available-table table th:first-child,
 .ip-available-table table td:first-child {
-    width: 100px;
-    max-width: 100px;
+    width: 160px;
+    min-width: 160px;
+    max-width: 160px;
     padding-left: 20px;
     padding-right: 20px;
     white-space: nowrap;
+}
+
+.ip-available-filter-row th:first-child .ip-filter-panel {
+    min-width: 210px;
 }
 
 .match-layout > .panel:last-child table th,
@@ -2859,74 +2876,6 @@ body.modal-open {
     justify-content: start;
 }
 
-.available-list-toolbar {
-    margin: 0 0 16px;
-    padding: 16px 18px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(148, 163, 184, 0.12);
-}
-
-.available-sort-form {
-    display: block;
-}
-
-.available-sort-controls {
-    display: grid;
-    grid-template-columns: minmax(220px, 260px) minmax(220px, 260px) auto;
-    gap: 16px;
-    align-items: end;
-}
-
-.available-sort-controls label {
-    display: block;
-    margin-bottom: 8px;
-    color: #dbe8fb;
-    font-size: 13px;
-    letter-spacing: 0.01em;
-}
-
-.available-sort-controls select {
-    width: 100%;
-    min-height: 48px;
-    padding: 12px 14px;
-    border: 1px solid rgba(148, 163, 184, 0.26);
-    border-radius: 12px;
-    font-size: 14px;
-    color: var(--text-main);
-    background: rgba(8, 17, 30, 0.88);
-    outline: none;
-}
-
-.available-sort-actions {
-    display: flex;
-    gap: 12px;
-    align-items: end;
-    flex-wrap: wrap;
-}
-
-.available-sort-actions .link-btn,
-.available-sort-actions button {
-    min-width: 148px;
-    height: 46px;
-}
-
-@media (max-width: 900px) {
-    .available-sort-controls {
-        grid-template-columns: 1fr;
-    }
-
-    .available-sort-actions {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .available-sort-actions .link-btn,
-    .available-sort-actions button {
-        width: 100%;
-    }
-}
-
 .compare-dialog-small {
     width: min(560px, calc(100vw - 32px));
     max-height: none;
@@ -2964,23 +2913,35 @@ body.modal-open {
 }
 
 .multi-match-row {
-	position: relative;
-	padding-top: 54px;
+    position: relative;
+    overflow: visible;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 320px minmax(0, 1fr);
     gap: 20px;
     align-items: center;
-    padding: 18px 0;
+    padding: 30px 0 18px;
     border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .multi-match-row:first-child {
     border-top: 0;
-    padding-top: 0;
+    margin-top: 0;
+}
+
+.multi-match-row .planner-row-topbar {
+    top: 8px;
+}
+
+.multi-match-row:first-child .planner-row-topbar {
+    top: 14px;
+}
+
+.multi-match-row .pair-quality-stamp-image-wrap {
+    top: 10px !important;
 }
 
 .multi-match-row:first-child .pair-quality-stamp-image-wrap {
-    top: -30px !important;
+    top: 10px !important;
 }
 
 .multi-match-side-boxed {
@@ -3161,13 +3122,6 @@ body.modal-open {
 .compare-grid {
     position: relative;
     padding-top: 34px;
-}
-
-.planner-row,
-.multi-match-row {
-    position: relative;
-    overflow: visible;
-    padding-top: 26px;
 }
 
 
@@ -4106,11 +4060,6 @@ body.welcome-page {
     overflow: visible;
 }
 
-.multi-match-row,
-.planner-row {
-    padding-top: 38px;
-}
-
 .landing-section-header-centered {
     display: flex;
     align-items: end;
@@ -4240,4 +4189,326 @@ body.welcome-page {
     border-color: rgba(191, 219, 254, 0.22);
     background: rgba(255, 255, 255, 0.045);
     transform: translateY(-1px);
+}
+
+.available-search-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 16px;
+    flex-wrap: wrap;
+}
+
+.available-search-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.available-search-input {
+    width: 240px;
+    min-height: 44px;
+    padding: 11px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(8, 17, 30, 0.92);
+    color: var(--text-main);
+    outline: none;
+}
+
+.available-search-input:focus {
+    border-color: rgba(94, 166, 255, 0.45);
+    box-shadow: 0 0 0 3px rgba(94, 166, 255, 0.14);
+}
+
+.available-search-input::placeholder {
+    color: rgba(159, 178, 204, 0.78);
+}
+
+.available-search-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.table-sort-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #eaf2ff;
+    text-decoration: none;
+    font-weight: 700;
+    line-height: 1.2;
+    transition: color 0.16s ease;
+}
+
+.table-sort-label {
+    display: inline-block;
+}
+
+.table-sort-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    font-size: 12px;
+    line-height: 1;
+    color: #8fc2ff;
+    opacity: 0.95;
+}
+
+.table-sort-link:hover {
+    color: #8fc2ff;
+}
+
+.ip-available-table thead tr:first-child th .table-sort-link:hover .table-sort-icon {
+    color: #cfe5ff;
+}
+
+.ip-available-filter-row th {
+    padding-top: 6px !important;
+    padding-bottom: 12px !important;
+    vertical-align: top !important;
+}
+
+.ip-column-filter-form {
+    display: block;
+    width: 100%;
+}
+
+.ip-filter-dropdown {
+    width: 100%;
+}
+
+.ip-filter-dropdown[open] .ip-filter-summary {
+    border-color: rgba(94, 166, 255, 0.34);
+    background: rgba(18, 32, 54, 0.96);
+}
+
+.ip-filter-summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    min-height: 34px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background: rgba(255, 255, 255, 0.03);
+    color: #dbe8fb;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.1;
+    transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.ip-filter-dropdown.is-active .ip-filter-summary {
+    border-color: rgba(94, 166, 255, 0.34);
+    background: rgba(94, 166, 255, 0.10);
+    color: #f3f8ff;
+}
+
+.ip-filter-summary {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ip-filter-dropdown:not([open]):not(.is-active) .ip-filter-summary {
+    opacity: 0.88;
+}
+
+.ip-filter-summary::-webkit-details-marker {
+    display: none;
+}
+
+.ip-filter-panel {
+    margin-top: 8px;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(8, 17, 30, 0.96);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+    text-align: left;
+    min-width: 180px;
+}
+
+.ip-filter-check,
+.ip-filter-radio {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    color: #dbe8fb;
+    font-size: 13px;
+    text-align: left;
+}
+
+.ip-filter-check:last-of-type,
+.ip-filter-radio:last-of-type {
+    margin-bottom: 0;
+}
+
+.ip-filter-check input,
+.ip-filter-radio input {
+    margin: 0;
+    flex: 0 0 auto;
+}
+
+.ip-filter-input {
+    width: 100%;
+    min-height: 40px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-main);
+    outline: none;
+    margin-bottom: 10px;
+}
+
+.ip-filter-input:focus {
+    border-color: rgba(94, 166, 255, 0.45);
+    box-shadow: 0 0 0 3px rgba(94, 166, 255, 0.14);
+}
+
+.ip-filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.ip-filter-actions button,
+.ip-filter-actions .link-btn {
+    min-height: 34px;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+.active-filters-note {
+    margin-top: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.active-filters-label {
+    color: #9fb4cf;
+    font-size: 13px;
+    font-weight: 700;
+    padding-top: 6px;
+}
+
+.active-filters-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.active-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    text-decoration: none;
+    color: #eaf2ff;
+    background: rgba(94, 166, 255, 0.12);
+    border: 1px solid rgba(94, 166, 255, 0.22);
+    font-size: 12px;
+    line-height: 1.2;
+    transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.active-filter-chip:hover {
+    background: rgba(94, 166, 255, 0.18);
+    border-color: rgba(94, 166, 255, 0.34);
+    transform: translateY(-1px);
+}
+
+.active-filter-chip-x {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ip-available-table .empty-state-card-inline {
+    align-items: center;
+    text-align: center;
+}
+
+.ip-available-table .empty-state-card-inline p {
+    max-width: none;
+}
+
+@media (max-width: 900px) {
+    .available-search-toolbar {
+        align-items: stretch;
+    }
+
+    .available-search-box {
+        width: 100%;
+    }
+
+    .available-search-input {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .available-search-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .ip-filter-panel {
+        min-width: 150px;
+    }
+}
+
+@media (max-width: 640px) {
+    .ip-available-filter-row th {
+        min-width: 130px;
+    }
+
+    .ip-filter-summary {
+        font-size: 11px;
+        padding: 7px 8px;
+    }
+
+    .active-filters-note {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .active-filters-label {
+        padding-top: 0;
+    }
+}
+
+.ip-search-empty-row td {
+    padding: 18px !important;
+    background: transparent !important;
+    border-bottom: 0 !important;
+}
+
+.ip-search-empty-row .empty-state-card {
+    margin: 0;
+}
+
+.empty-state-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.ip-filter-panel {
+    max-height: 260px;
+    overflow-y: auto;
 }
