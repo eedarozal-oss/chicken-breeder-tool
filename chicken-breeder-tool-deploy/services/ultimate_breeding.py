@@ -1,5 +1,10 @@
 from services.primary_build_classifier import safe_int
-from services.build_eval import evaluate_all_builds, select_qualified_build
+from services.build_eval import (
+    evaluate_build,
+    evaluate_all_builds,
+    select_qualified_build,
+    count_added_missing_traits,
+)
 from services.item_helper_text import get_item_helper_text, normalize_item_name
 
 ULTIMATE_IP_STRONG_THRESHOLD = 265
