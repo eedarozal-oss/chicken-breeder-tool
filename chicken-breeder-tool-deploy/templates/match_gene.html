@@ -1526,9 +1526,6 @@
                         <div class="planner-row-topbar">
                             <div class="planner-row-title-wrap">
                                 <strong class="planner-row-mode">{{ row.mode_label|upper }}</strong>
-                                {% if row.build_label %}
-                                    <span class="planner-row-build">{{ row.build_label|upper }}</span>
-                                {% endif %}
                             </div>
                         </div>
 
@@ -1786,6 +1783,7 @@
                         <form method="POST" action="{{ url_for('add_to_breeding_planner') }}" class="multi-match-center-add-form">
                             <input type="hidden" name="wallet_address" value="{{ wallet }}">
                             <input type="hidden" name="mode" value="gene">
+							<input type="hidden" name="build_type" value="{{ row.left.build_type or '' }}">
                             <input type="hidden" name="return_endpoint" value="match_gene_page">
                             <input type="hidden" name="sort_by" value="{{ sort_by }}">
                             <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
@@ -1853,6 +1851,7 @@
 						<form method="POST" action="{{ url_for('add_to_breeding_planner') }}" id="compare-add-form" class="compare-add-form">
 							<input type="hidden" name="wallet_address" value="{{ wallet }}">
 							<input type="hidden" name="mode" value="gene">
+							<input type="hidden" name="build_type" value="{{ selected_chicken.build_type or '' }}">
 							<input type="hidden" name="return_endpoint" value="match_gene_page">
 							<input type="hidden" name="selected_token_id" value="{{ selected_token_id or '' }}">
 							<input type="hidden" name="sort_by" value="{{ sort_by }}">
