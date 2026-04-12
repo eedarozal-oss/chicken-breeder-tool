@@ -266,7 +266,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		button.addEventListener("click", function (event) {
 			event.preventDefault();
 			event.stopPropagation();
-			closeAutoMatchResultModal(false);
+			reloadPageWithoutModalState();
 		});
 	});
 
@@ -545,7 +545,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
 		if (autoMatchResultModal && !autoMatchResultModal.classList.contains("hidden")) {
-			closeAutoMatchResultModal(false);
+			reloadPageWithoutModalState();
 			return;
 		}
 
