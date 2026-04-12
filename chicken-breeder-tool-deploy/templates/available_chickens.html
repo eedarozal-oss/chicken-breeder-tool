@@ -261,13 +261,15 @@
                     <div class="table-wrap inventory-table-wrap">
                         <table class="available-chickens-table inventory-table">
                             <thead>
-                                <tr>
-                                    <th>Chicken ID</th>
-                                    <th>IP</th>
-                                    <th>Gen</th>
-                                    <th>Breed Count</th>
-                                    <th>Ninuno %</th>
-                                </tr>
+								<tr>
+									<th>Chicken ID</th>
+									<th>IP</th>
+									<th>Gen</th>
+									<th>Breed Count</th>
+									<th>Build</th>
+									<th>Build Count</th>
+									<th>Ninuno %</th>
+								</tr>
                             </thead>
                             <tbody>
                                 {% for chicken in breedable_chickens %}
@@ -282,16 +284,18 @@
                                             <div class="chicken-id-card-text">#{{ chicken.token_id }}</div>
                                         </div>
                                     </td>
-                                    <td>{{ chicken.ip if chicken.ip is not none else '' }}</td>
-                                    <td>{{ chicken.generation_text or '' }}</td>
-                                    <td>{{ chicken.breed_count if chicken.breed_count is not none else '' }}</td>
-                                    <td>
-                                        {% if chicken.is_complete %}
-                                            {{ chicken.ownership_percent }}%
-                                        {% else %}
-                                            Recalculate
-                                        {% endif %}
-                                    </td>
+									<td>{{ chicken.ip if chicken.ip is not none else '' }}</td>
+									<td>{{ chicken.generation_text or '' }}</td>
+									<td>{{ chicken.breed_count if chicken.breed_count is not none else '' }}</td>
+									<td>{{ chicken.available_build_display or '' }}</td>
+									<td>{{ chicken.available_build_count_display or '' }}</td>
+									<td>
+										{% if chicken.is_complete %}
+											{{ chicken.ownership_percent }}%
+										{% else %}
+											Recalculate
+										{% endif %}
+									</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

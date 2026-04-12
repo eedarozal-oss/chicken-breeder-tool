@@ -19,7 +19,7 @@
 						<div class="page-header">
 							<h1>IP Breeding</h1>
 							<p class="page-description">
-								Compare IP-focused pairs, review instinct and lineage, and check the best breeding match for your selected chicken.
+								Compare IP-focused pairs, review key stats, and find the best breeding match for your selected chicken.
 							</p>
 						</div>
 						<div class="topbar-actions">
@@ -47,15 +47,15 @@
 				<div class="breeding-hero-side-card">
 					<div class="breeding-hero-side-label">Mode</div>
 					<div class="breeding-hero-side-value">IP</div>
-					<div class="breeding-hero-side-note">Set your IP rules first, then compare the strongest pairings for the selected parent.</div>
+					<div class="breeding-hero-side-note">Review available chickens, select a parent, and compare the strongest IP pairings.</div>
 				</div>
 
 				<div class="breeding-hero-steps">
 					<div class="breeding-hero-steps-title">Workflow</div>
 					<ol class="breeding-hero-steps-list" aria-label="IP breeding workflow">
-						<li><span>Configure IP filters</span></li>
+						<li><span>Review available chickens</span></li>
 						<li><span>Select a chicken</span></li>
-						<li><span>Compare best matches</span></li>
+						<li><span>Compare IP matches</span></li>
 					</ol>
 				</div>
 			</div>
@@ -103,143 +103,485 @@
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
-		
-        {% if wallet and not error %}
-            <section class="breeding-section">
-                <div class="breeding-section-header">
-                    <div>
-                        <div class="breeding-section-kicker">Step 1</div>
-                        <h2>Configure filters</h2>
-                    </div>
-                    <p class="breeding-section-note">Set the minimum IP, keep pair differences controlled, and narrow the list with the Ninuno filter.</p>
-                </div>
-
-            <div class="settings-box breeding-settings-box">
-               <form method="GET" action="{{ url_for('match_ip_page') }}" class="filter-form">
-    <input type="hidden" name="wallet_address" value="{{ wallet }}">
-    {% if selected_token_id %}
-        <input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">
-    {% endif %}
-
-    <div class="filter-grid ip-filter-grid">
-        <div>
-            <label for="min_ip"><strong>Minimum IP</strong></label>
-            <input
-                type="number"
-                id="min_ip"
-                name="min_ip"
-                min="0"
-                value="{{ min_ip if min_ip is not none else '' }}"
-                placeholder="e.g. 260"
-            >
-        </div>
-
-        <div>
-            <label for="ip_diff"><strong>IP Difference</strong></label>
-            <input
-                type="number"
-                id="ip_diff"
-                name="ip_diff"
-                min="0"
-                value="{{ ip_diff if ip_diff is not none else '' }}"
-                placeholder="e.g. 10"
-            >
-        </div>
-
-        <div>
-		<div class="ninuno-filter-box">
-    		<label for="ninuno_100_only"><strong>Ninuno Filter</strong></label>
-    		<div class="ninuno-filter-inline">
-        	<input
-            	type="checkbox"
-            	id="ninuno_100_only"
-            	name="ninuno_100_only"
-            	value="1"
-            	{% if ninuno_100_only %}checked{% endif %}
-        	>
-        	<span>Show only 100% Ninuno</span>
-    	</div>
-</div>
-        </div>
-
-		<div class="filter-actions-group">
-    			<button type="submit">Apply Filters</button>
-		</div>
-    </div>
-</form>            
-</div>
-            </section>
-        {% endif %}
 
         <section class="breeding-section">
             <div class="breeding-section-header">
                 <div>
-                    <div class="breeding-section-kicker">Step 2</div>
-                    <h2>Choose a chicken</h2>
+                    <div class="breeding-section-kicker">Step 1</div>
+                    <h2>Choose an available chicken</h2>
                 </div>
-                <p class="breeding-section-note">Review the available parents first, then click a row to load that chicken into the selected panel below.</p>
+                <p class="breeding-section-note">Filter, sort, and search your available chickens below. Click any row to load it into the selected chicken panel.</p>
             </div>
 
-        <div class="panel breeding-panel">
-            <h2>Available Chickens</h2>
+        <div class="panel breeding-panel" id="available-chickens">
 			{% if breedable_chickens %}
-				<div class="available-list-toolbar">
-					<form method="GET" action="{{ url_for('match_ip_page') }}" class="available-sort-form">
-						<input type="hidden" name="wallet_address" value="{{ wallet }}">
-						<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
-						<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
-						<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
-						{% if selected_token_id %}
-							<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">
-						{% endif %}
+				<div class="available-search-toolbar">
+					<div class="available-search-box">
+						<input
+							type="text"
+							id="ip-available-search"
+							class="available-search-input"
+							placeholder="Search Chicken ID"
+							autocomplete="off"
+						>
+						<button type="button" class="link-btn secondary-link-btn" id="ip-available-search-btn">Search</button>
+						<button type="button" class="link-btn ghost-link-btn hidden" id="ip-available-search-clear-btn">Clear</button>
+					</div>
 
-						<div class="available-sort-controls">
-							<div>
-								<label for="sort_by"><strong>Sort Available By</strong></label>
-								<select id="sort_by" name="sort_by">
-									<option value="" {% if not sort_by %}selected{% endif %}>Default Order</option>
-									<option value="ip" {% if sort_by == "ip" %}selected{% endif %}>IP</option>
-									<option value="breed_count" {% if sort_by == "breed_count" %}selected{% endif %}>Breed Count</option>
-									<option value="generation" {% if sort_by == "generation" %}selected{% endif %}>Generation</option>
-								</select>
-							</div>
-
-							<div>
-								<label for="sort_dir"><strong>Direction</strong></label>
-								<select id="sort_dir" name="sort_dir">
-									<option value="desc" {% if sort_dir == "desc" %}selected{% endif %}>Descending</option>
-									<option value="asc" {% if sort_dir == "asc" %}selected{% endif %}>Ascending</option>
-								</select>
-							</div>
-
-							<div class="available-sort-actions">
-								<button type="submit">Apply Sort</button>
-								<!--<button type="button" class="link-btn open-auto-match-config-btn" data-modal-target="auto-match-config-modal">Auto Match</button>-->
-								<button type="button" class="link-btn open-auto-match-config-btn">Auto Match</button>
-							</div>
-						</div>
-					</form>
+					<div class="available-search-actions">
+						<button
+							type="button"
+							class="link-btn secondary-link-btn open-auto-match-config-btn"
+						>
+							Auto Match
+						</button>
+					</div>
 				</div>
 			{% endif %}
 			
             {% if breedable_chickens %}
                 <div class="table-wrap limited-table ip-available-table">
                     <table>
-                        <thead>
+						<thead>
 							<tr>
-								<th>Chicken ID</th>
-								<th>IP</th>
-								<th>Weakest Stat</th>
-								<th>Generation</th>
-								<th>Breed Count</th>
-								<th>Ninuno %</th>
+								<th>
+									<a class="table-sort-link" href="{{ url_for(
+										'match_ip_page',
+										wallet_address=wallet,
+										selected_token_id=selected_token_id or None,
+										min_ip=min_ip,
+										ip_diff=ip_diff,
+										ninuno_100_only=1 if ninuno_100_only else 0,
+										sort_by='token_id',
+										sort_dir='desc' if sort_by == 'token_id' and sort_dir == 'asc' else 'asc',
+										ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+										ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+										ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+										ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+									) }}#available-chickens">
+										<span class="table-sort-label">Chicken ID</span>
+										<span class="table-sort-icon">
+											{% if sort_by == 'token_id' %}
+												{{ '▲' if sort_dir == 'asc' else '▼' }}
+											{% else %}
+												⬧
+											{% endif %}
+										</span>
+									</a>
+								</th>
+
+								<th>
+									<a class="table-sort-link" href="{{ url_for(
+										'match_ip_page',
+										wallet_address=wallet,
+										selected_token_id=selected_token_id or None,
+										min_ip=min_ip,
+										ip_diff=ip_diff,
+										ninuno_100_only=1 if ninuno_100_only else 0,
+										sort_by='ip',
+										sort_dir='asc' if sort_by == 'ip' and sort_dir == 'desc' else 'desc',
+										ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+										ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+										ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+										ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+									) }}#available-chickens">
+										<span class="table-sort-label">IP</span>
+										<span class="table-sort-icon">
+											{% if sort_by == 'ip' %}
+												{{ '▲' if sort_dir == 'asc' else '▼' }}
+											{% else %}
+												⬧
+											{% endif %}
+										</span>
+									</a>
+								</th>
+
+								<th>
+									<a class="table-sort-link" href="{{ url_for(
+										'match_ip_page',
+										wallet_address=wallet,
+										selected_token_id=selected_token_id or None,
+										min_ip=min_ip,
+										ip_diff=ip_diff,
+										ninuno_100_only=1 if ninuno_100_only else 0,
+										sort_by='weakest_stat',
+										sort_dir='desc' if sort_by == 'weakest_stat' and sort_dir == 'asc' else 'asc',
+										ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+										ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+										ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+										ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+									) }}#available-chickens">
+										<span class="table-sort-label">Weakest Stat</span>
+										<span class="table-sort-icon">
+											{% if sort_by == 'weakest_stat' %}
+												{{ '▲' if sort_dir == 'asc' else '▼' }}
+											{% else %}
+												⬧
+											{% endif %}
+										</span>
+									</a>
+								</th>
+
+								<th>
+									<a class="table-sort-link" href="{{ url_for(
+										'match_ip_page',
+										wallet_address=wallet,
+										selected_token_id=selected_token_id or None,
+										min_ip=min_ip,
+										ip_diff=ip_diff,
+										ninuno_100_only=1 if ninuno_100_only else 0,
+										sort_by='generation',
+										sort_dir='desc' if sort_by == 'generation' and sort_dir == 'asc' else 'asc',
+										ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+										ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+										ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+										ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+									) }}#available-chickens">
+										<span class="table-sort-label">Generation</span>
+										<span class="table-sort-icon">
+											{% if sort_by == 'generation' %}
+												{{ '▲' if sort_dir == 'asc' else '▼' }}
+											{% else %}
+												⬧
+											{% endif %}
+										</span>
+									</a>
+								</th>
+
+								<th>
+									<a class="table-sort-link" href="{{ url_for(
+										'match_ip_page',
+										wallet_address=wallet,
+										selected_token_id=selected_token_id or None,
+										min_ip=min_ip,
+										ip_diff=ip_diff,
+										ninuno_100_only=1 if ninuno_100_only else 0,
+										sort_by='breed_count',
+										sort_dir='desc' if sort_by == 'breed_count' and sort_dir == 'asc' else 'asc',
+										ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+										ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+										ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+										ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+									) }}#available-chickens">
+										<span class="table-sort-label">Breed Count</span>
+										<span class="table-sort-icon">
+											{% if sort_by == 'breed_count' %}
+												{{ '▲' if sort_dir == 'asc' else '▼' }}
+											{% else %}
+												⬧
+											{% endif %}
+										</span>
+									</a>
+								</th>
+
+								<th>
+									<a class="table-sort-link" href="{{ url_for(
+										'match_ip_page',
+										wallet_address=wallet,
+										selected_token_id=selected_token_id or None,
+										min_ip=min_ip,
+										ip_diff=ip_diff,
+										ninuno_100_only=1 if ninuno_100_only else 0,
+										sort_by='ninuno',
+										sort_dir='desc' if sort_by == 'ninuno' and sort_dir == 'asc' else 'asc',
+										ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+										ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+										ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+										ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+									) }}#available-chickens">
+										<span class="table-sort-label">Ninuno %</span>
+										<span class="table-sort-icon">
+											{% if sort_by == 'ninuno' %}
+												{{ '▲' if sort_dir == 'asc' else '▼' }}
+											{% else %}
+												⬧
+											{% endif %}
+										</span>
+									</a>
+								</th>
 							</tr>
-                        </thead>
+
+							<tr class="ip-available-filter-row">
+								<th>
+									<form method="GET" action="{{ url_for('match_ip_page') }}" class="ip-column-filter-form">
+										<input type="hidden" name="wallet_address" value="{{ wallet }}">
+										{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+										<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
+										<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
+										<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+										<input type="hidden" name="sort_by" value="{{ sort_by }}">
+										<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+										<input type="hidden" name="ip_filter_generation" value="{{ ','.join(ip_filter_generation_values) if ip_filter_generation_values else '' }}">
+										<input type="hidden" name="ip_filter_breed_count" value="{{ ','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else '' }}">
+										<input type="hidden" name="ip_filter_ninuno" value="{{ ip_filter_ninuno if ip_filter_ninuno != 'all' else '' }}">
+
+										<details class="ip-filter-dropdown">
+											<summary class="ip-filter-summary">Filter</summary>
+											<div class="ip-filter-panel">
+												{% for option in ip_available_filter_options.type_options %}
+													<label class="ip-filter-check">
+														<input
+															type="checkbox"
+															class="ip-filter-csv-source"
+															data-target-input="ip_filter_type_csv"
+															value="{{ option.value }}"
+															{% if option.value in ip_filter_type_values %}checked{% endif %}
+														>
+														<span>{{ option.label }}</span>
+													</label>
+												{% endfor %}
+												<input
+													type="hidden"
+													name="ip_filter_type"
+													id="ip_filter_type_csv"
+													value="{{ ','.join(ip_filter_type_values) if ip_filter_type_values else '' }}"
+												>
+												<div class="ip-filter-actions">
+													<button type="submit">Apply</button>
+													<a class="link-btn ghost-link-btn" href="{{ url_for(
+														'match_ip_page',
+														wallet_address=wallet,
+														selected_token_id=selected_token_id or None,
+														min_ip=min_ip,
+														ip_diff=ip_diff,
+														ninuno_100_only=1 if ninuno_100_only else 0,
+														sort_by=sort_by,
+														sort_dir=sort_dir,
+														ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+														ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+														ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+													) }}#available-chickens">Clear</a>
+												</div>
+											</div>
+										</details>
+									</form>
+								</th>
+
+								<th>
+									<form method="GET" action="{{ url_for('match_ip_page') }}" class="ip-column-filter-form">
+										<input type="hidden" name="wallet_address" value="{{ wallet }}">
+										{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+										<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
+										<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+										<input type="hidden" name="sort_by" value="{{ sort_by }}">
+										<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+										<input type="hidden" name="ip_filter_type" value="{{ ','.join(ip_filter_type_values) if ip_filter_type_values else '' }}">
+										<input type="hidden" name="ip_filter_generation" value="{{ ','.join(ip_filter_generation_values) if ip_filter_generation_values else '' }}">
+										<input type="hidden" name="ip_filter_breed_count" value="{{ ','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else '' }}">
+										<input type="hidden" name="ip_filter_ninuno" value="{{ ip_filter_ninuno if ip_filter_ninuno != 'all' else '' }}">
+
+										<details class="ip-filter-dropdown">
+											<summary class="ip-filter-summary">Filter</summary>
+											<div class="ip-filter-panel">
+												<input
+													type="number"
+													name="min_ip"
+													min="0"
+													value="{{ min_ip if min_ip is not none else '' }}"
+													placeholder="Min IP"
+													class="ip-filter-input"
+												>
+												<div class="ip-filter-actions">
+													<button type="submit">Apply</button>
+													<a class="link-btn ghost-link-btn" href="{{ url_for(
+														'match_ip_page',
+														wallet_address=wallet,
+														selected_token_id=selected_token_id or None,
+														ip_diff=ip_diff,
+														ninuno_100_only=1 if ninuno_100_only else 0,
+														sort_by=sort_by,
+														sort_dir=sort_dir,
+														ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+														ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+														ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+														ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+													) }}#available-chickens">Clear</a>
+												</div>
+											</div>
+										</details>
+									</form>
+								</th>
+
+								<th></th>
+
+								<th>
+									<form method="GET" action="{{ url_for('match_ip_page') }}" class="ip-column-filter-form">
+										<input type="hidden" name="wallet_address" value="{{ wallet }}">
+										{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+										<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
+										<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
+										<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+										<input type="hidden" name="sort_by" value="{{ sort_by }}">
+										<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+										<input type="hidden" name="ip_filter_type" value="{{ ','.join(ip_filter_type_values) if ip_filter_type_values else '' }}">
+										<input type="hidden" name="ip_filter_breed_count" value="{{ ','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else '' }}">
+										<input type="hidden" name="ip_filter_ninuno" value="{{ ip_filter_ninuno if ip_filter_ninuno != 'all' else '' }}">
+
+										<details class="ip-filter-dropdown">
+											<summary class="ip-filter-summary">Filter</summary>
+											<div class="ip-filter-panel">
+												{% for option in ip_available_filter_options.generation_options %}
+													<label class="ip-filter-check">
+														<input
+															type="checkbox"
+															class="ip-filter-csv-source"
+															data-target-input="ip_filter_generation_csv"
+															value="{{ option.value }}"
+															{% if option.value in ip_filter_generation_values %}checked{% endif %}
+														>
+														<span>{{ option.label }}</span>
+													</label>
+												{% endfor %}
+												<input
+													type="hidden"
+													name="ip_filter_generation"
+													id="ip_filter_generation_csv"
+													value="{{ ','.join(ip_filter_generation_values) if ip_filter_generation_values else '' }}"
+												>
+												<div class="ip-filter-actions">
+													<button type="submit">Apply</button>
+													<a class="link-btn ghost-link-btn" href="{{ url_for(
+														'match_ip_page',
+														wallet_address=wallet,
+														selected_token_id=selected_token_id or None,
+														min_ip=min_ip,
+														ip_diff=ip_diff,
+														ninuno_100_only=1 if ninuno_100_only else 0,
+														sort_by=sort_by,
+														sort_dir=sort_dir,
+														ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+														ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+														ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+													) }}#available-chickens">Clear</a>
+												</div>
+											</div>
+										</details>
+									</form>
+								</th>
+
+								<th>
+									<form method="GET" action="{{ url_for('match_ip_page') }}" class="ip-column-filter-form">
+										<input type="hidden" name="wallet_address" value="{{ wallet }}">
+										{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+										<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
+										<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
+										<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+										<input type="hidden" name="sort_by" value="{{ sort_by }}">
+										<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+										<input type="hidden" name="ip_filter_type" value="{{ ','.join(ip_filter_type_values) if ip_filter_type_values else '' }}">
+										<input type="hidden" name="ip_filter_generation" value="{{ ','.join(ip_filter_generation_values) if ip_filter_generation_values else '' }}">
+										<input type="hidden" name="ip_filter_ninuno" value="{{ ip_filter_ninuno if ip_filter_ninuno != 'all' else '' }}">
+
+										<details class="ip-filter-dropdown">
+											<summary class="ip-filter-summary">Filter</summary>
+											<div class="ip-filter-panel">
+												{% for option in ip_available_filter_options.breed_count_options %}
+													<label class="ip-filter-check">
+														<input
+															type="checkbox"
+															class="ip-filter-csv-source"
+															data-target-input="ip_filter_breed_count_csv"
+															value="{{ option.value }}"
+															{% if option.value in ip_filter_breed_count_values %}checked{% endif %}
+														>
+														<span>{{ option.label }}</span>
+													</label>
+												{% endfor %}
+												<input
+													type="hidden"
+													name="ip_filter_breed_count"
+													id="ip_filter_breed_count_csv"
+													value="{{ ','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else '' }}"
+												>
+												<div class="ip-filter-actions">
+													<button type="submit">Apply</button>
+													<a class="link-btn ghost-link-btn" href="{{ url_for(
+														'match_ip_page',
+														wallet_address=wallet,
+														selected_token_id=selected_token_id or None,
+														min_ip=min_ip,
+														ip_diff=ip_diff,
+														ninuno_100_only=1 if ninuno_100_only else 0,
+														sort_by=sort_by,
+														sort_dir=sort_dir,
+														ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+														ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+														ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+													) }}#available-chickens">Clear</a>
+												</div>
+											</div>
+										</details>
+									</form>
+								</th>
+
+								<th>
+									<form method="GET" action="{{ url_for('match_ip_page') }}" class="ip-column-filter-form">
+										<input type="hidden" name="wallet_address" value="{{ wallet }}">
+										{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+										<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
+										<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
+										<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+										<input type="hidden" name="sort_by" value="{{ sort_by }}">
+										<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+										<input type="hidden" name="ip_filter_type" value="{{ ','.join(ip_filter_type_values) if ip_filter_type_values else '' }}">
+										<input type="hidden" name="ip_filter_generation" value="{{ ','.join(ip_filter_generation_values) if ip_filter_generation_values else '' }}">
+										<input type="hidden" name="ip_filter_breed_count" value="{{ ','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else '' }}">
+
+										<details class="ip-filter-dropdown">
+											<summary class="ip-filter-summary">Filter</summary>
+											<div class="ip-filter-panel">
+												{% for option in ip_available_filter_options.ninuno_options %}
+													<label class="ip-filter-radio">
+														<input
+															type="radio"
+															name="ip_filter_ninuno"
+															value="{{ option.value }}"
+															{% if option.value == ip_filter_ninuno %}checked{% endif %}
+														>
+														<span>{{ option.label }}</span>
+													</label>
+												{% endfor %}
+												<div class="ip-filter-actions">
+													<button type="submit">Apply</button>
+													<a class="link-btn ghost-link-btn" href="{{ url_for(
+														'match_ip_page',
+														wallet_address=wallet,
+														selected_token_id=selected_token_id or None,
+														min_ip=min_ip,
+														ip_diff=ip_diff,
+														ninuno_100_only=1 if ninuno_100_only else 0,
+														sort_by=sort_by,
+														sort_dir=sort_dir,
+														ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+														ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+														ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None
+													) }}#available-chickens">Clear</a>
+												</div>
+											</div>
+										</details>
+									</form>
+								</th>
+							</tr>
+						</thead>
                         <tbody>
                             {% for chicken in breedable_chickens %}
 							<tr
 								class="clickable-row"
-								data-href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=chicken.token_id, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir) }}#selected-chicken"
+								data-token-id="{{ chicken.token_id }}"
+								data-href="{{ url_for(
+									'match_ip_page',
+									wallet_address=wallet,
+									selected_token_id=chicken.token_id,
+									min_ip=min_ip,
+									ip_diff=ip_diff,
+									ninuno_100_only=1 if ninuno_100_only else 0,
+									sort_by=sort_by,
+									sort_dir=sort_dir,
+									ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+									ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+									ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+									ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+								) }}#selected-chicken"
 								tabindex="0"
 							>
                                 <td>
@@ -273,24 +615,154 @@
                         </tbody>
                     </table>
                 </div>
+			{% if ip_active_filters %}
+			<div class="active-filters-note">
+				<span class="active-filters-label">Active filters:</span>
+				<div class="active-filters-list">
+					{% for item in ip_active_filters %}
+						{% if item.key == 'type' %}
+							<a
+								class="active-filter-chip"
+								href="{{ url_for(
+									'match_ip_page',
+									wallet_address=wallet,
+									selected_token_id=selected_token_id or None,
+									min_ip=min_ip,
+									ip_diff=ip_diff,
+									ninuno_100_only=1 if ninuno_100_only else 0,
+									sort_by=sort_by,
+									sort_dir=sort_dir,
+									ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+									ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+									ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+								) }}#available-chickens"
+							>
+								<span>{{ item.label }}: {{ item.value }}</span>
+								<span class="active-filter-chip-x">×</span>
+							</a>
+						{% elif item.key == 'min_ip' %}
+							<a
+								class="active-filter-chip"
+								href="{{ url_for(
+									'match_ip_page',
+									wallet_address=wallet,
+									selected_token_id=selected_token_id or None,
+									ip_diff=ip_diff,
+									ninuno_100_only=1 if ninuno_100_only else 0,
+									sort_by=sort_by,
+									sort_dir=sort_dir,
+									ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+									ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+									ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+									ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+								) }}#available-chickens"
+							>
+								<span>{{ item.label }}: {{ item.value }}</span>
+								<span class="active-filter-chip-x">×</span>
+							</a>
+						{% elif item.key == 'generation' %}
+							<a
+								class="active-filter-chip"
+								href="{{ url_for(
+									'match_ip_page',
+									wallet_address=wallet,
+									selected_token_id=selected_token_id or None,
+									min_ip=min_ip,
+									ip_diff=ip_diff,
+									ninuno_100_only=1 if ninuno_100_only else 0,
+									sort_by=sort_by,
+									sort_dir=sort_dir,
+									ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+									ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+									ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+								) }}#available-chickens"
+							>
+								<span>{{ item.label }}: {{ item.value }}</span>
+								<span class="active-filter-chip-x">×</span>
+							</a>
+						{% elif item.key == 'breed_count' %}
+							<a
+								class="active-filter-chip"
+								href="{{ url_for(
+									'match_ip_page',
+									wallet_address=wallet,
+									selected_token_id=selected_token_id or None,
+									min_ip=min_ip,
+									ip_diff=ip_diff,
+									ninuno_100_only=1 if ninuno_100_only else 0,
+									sort_by=sort_by,
+									sort_dir=sort_dir,
+									ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+									ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+									ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+								) }}#available-chickens"
+							>
+								<span>{{ item.label }}: {{ item.value }}</span>
+								<span class="active-filter-chip-x">×</span>
+							</a>
+						{% elif item.key == 'ninuno' %}
+							<a
+								class="active-filter-chip"
+								href="{{ url_for(
+									'match_ip_page',
+									wallet_address=wallet,
+									selected_token_id=selected_token_id or None,
+									min_ip=min_ip,
+									ip_diff=ip_diff,
+									ninuno_100_only=1 if ninuno_100_only else 0,
+									sort_by=sort_by,
+									sort_dir=sort_dir,
+									ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+									ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+									ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+									ip_filter_ninuno='all'
+								) }}#available-chickens"
+							>
+								<span>{{ item.label }}: {{ item.value }}</span>
+								<span class="active-filter-chip-x">×</span>
+							</a>
+						{% endif %}
+					{% endfor %}
+				</div>
+			</div>
+			{% endif %}
             {% else %}
-                <div class="empty-state-card empty-state-card-wide">
-                <div class="empty-state-kicker">No parents ready</div>
-                <h3>No available chickens found for IP breeding.</h3>
-                <p>Try lowering the minimum IP or clearing the Ninuno filter to widen the available pool.</p>
-            </div>
+			<div class="empty-state-card empty-state-card-wide">
+				<div class="empty-state-kicker">No parents ready</div>
+				<h3>No available chickens found for IP breeding.</h3>
+				<p>Try lowering the minimum IP or clearing the Ninuno filter to widen the available pool.</p>
+
+				{% if ip_active_filters %}
+				<div class="empty-state-actions">
+					<a
+						class="link-btn secondary-link-btn"
+						href="{{ url_for(
+							'match_ip_page',
+							wallet_address=wallet,
+							selected_token_id=selected_token_id or None,
+							sort_by=sort_by,
+							sort_dir=sort_dir,
+							ip_diff=ip_diff,
+							ip_filter_ninuno='all'
+						) }}#available-chickens"
+					>
+						Clear all filters
+					</a>
+				</div>
+				{% endif %}
+			</div>
             {% endif %}
         </div>
         </section>
 
         <section class="breeding-section">
-            <div class="breeding-section-header">
-                <div>
-                    <div class="breeding-section-kicker">Step 3</div>
-                    <h2>Review selected chicken and best IP matches</h2>
-                </div>
-                <p class="breeding-section-note">Use the selected parent on the left and compare the best IP-based pairings on the right.</p>
-            </div>
+			<div class="breeding-section-header">
+				<div>
+					<div class="breeding-section-kicker">Step 2</div>
+					<h2>Review selected chicken</h2>
+				</div>
+				<p class="breeding-section-note">Review the selected chicken on the left and compare potential IP matches on the right.</p>
+			</div>
 
         <div class="match-layout">
             <div class="panel breeding-panel" id="selected-chicken">
@@ -299,7 +771,19 @@
 			<h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
 			<a
 				class="selected-chicken-clear-btn"
-				href="{{ url_for('match_ip_page', wallet_address=wallet, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir) }}"
+				href="{{ url_for(
+					'match_ip_page',
+					wallet_address=wallet,
+					min_ip=min_ip,
+					ip_diff=ip_diff,
+					ninuno_100_only=1 if ninuno_100_only else 0,
+					sort_by=sort_by,
+					sort_dir=sort_dir,
+					ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+					ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+					ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+					ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+				) }}"
 				title="Clear selected chicken"
 			>
 				×
@@ -373,7 +857,21 @@
 		<div class="selected-chicken-actions">
 			<a
 				class="link-btn selected-auto-match-btn"
-				href="{{ url_for('match_ip_page', wallet_address=wallet, selected_token_id=selected_chicken.token_id, min_ip=min_ip, ip_diff=ip_diff, ninuno_100_only=1 if ninuno_100_only else 0, sort_by=sort_by, sort_dir=sort_dir, auto_match=1) }}"
+				href="{{ url_for(
+					'match_ip_page',
+					wallet_address=wallet,
+					selected_token_id=selected_chicken.token_id,
+					min_ip=min_ip,
+					ip_diff=ip_diff,
+					ninuno_100_only=1 if ninuno_100_only else 0,
+					sort_by=sort_by,
+					sort_dir=sort_dir,
+					auto_match=1,
+					ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+					ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+					ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+					ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+				) }}"
 			>
 				Auto Match
 			</a>
@@ -382,7 +880,7 @@
 		<h2>Selected Chicken</h2>
         <div class="empty-state-card">
             <div class="empty-state-kicker">No selection</div>
-            <p>Pick a chicken from the available list to load its stats and pairing view here.</p>
+            <p>Select a chicken from the available list to review it here.</p>
         </div>
     {% endif %}
 </div>
@@ -500,13 +998,13 @@
                     {% else %}
                         <div class="empty-state-card empty-state-card-inline">
                             <div class="empty-state-kicker">No matches found</div>
-                            <p>No IP matches passed your current rules for the selected chicken. Try widening your filter settings.</p>
+                            <p>No IP matches were found for the selected chicken under the current rules. Try widening your filters.</p>
                         </div>
                     {% endif %}
                 {% else %}
                     <div class="empty-state-card empty-state-card-inline">
                     <div class="empty-state-kicker">Waiting for selection</div>
-                    <p>Select a chicken first to load the best IP-based pairings here.</p>
+                    <p>Select a chicken first to load potential IP matches.</p>
                 </div>
                 {% endif %}
             </div>
@@ -532,6 +1030,9 @@
 					<a class="link-btn secondary-link-btn planner-export-btn" href="{{ url_for('export_breeding_planner', wallet_address=wallet) }}">
 						<span class="planner-export-icon">XLS</span>
 						<span>Export Excel</span>
+					</a>
+					<a href="{{ url_for('planner_items_check', wallet_address=wallet, source_page='ip') }}" class="link-btn secondary-link-btn">
+						🤖 Prepare for Automation
 					</a>
 				</div>
 			</div>
@@ -666,15 +1167,19 @@
 			</button>
         </div>
         <div class="compare-body">
-            <form method="GET" action="{{ url_for('match_ip_page') }}" class="filter-form auto-match-config-form">
-                <input type="hidden" name="wallet_address" value="{{ wallet }}">
-                <input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
-                <input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
-                <input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
-                <input type="hidden" name="sort_by" value="{{ sort_by }}">
-                <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
-                <input type="hidden" name="auto_match" value="1">
-                <input type="hidden" name="auto_match_source" value="available">
+			<form method="GET" action="{{ url_for('match_ip_page') }}#available-chickens" class="filter-form auto-match-config-form">
+				<input type="hidden" name="wallet_address" value="{{ wallet }}">
+				<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
+				<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
+				<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
+				<input type="hidden" name="sort_by" value="{{ sort_by }}">
+				<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+				<input type="hidden" name="ip_filter_type" value="{{ ','.join(ip_filter_type_values) if ip_filter_type_values else '' }}">
+				<input type="hidden" name="ip_filter_generation" value="{{ ','.join(ip_filter_generation_values) if ip_filter_generation_values else '' }}">
+				<input type="hidden" name="ip_filter_breed_count" value="{{ ','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else '' }}">
+				<input type="hidden" name="ip_filter_ninuno" value="{{ ip_filter_ninuno if ip_filter_ninuno else 'all' }}">
+				<input type="hidden" name="auto_match" value="1">
+				<input type="hidden" name="auto_match_source" value="available">
                 <div class="filter-grid">
                     <div><label><strong>Mode</strong></label><select name="auto_match_mode" id="ip-auto-match-mode"><option value="single" {% if auto_match_mode == 'single' %}selected{% endif %}>Single</option><option value="multiple" {% if auto_match_mode == 'multiple' %}selected{% endif %}>Multiple</option></select></div>
                     <div><label><strong>IP Difference</strong></label><input type="number" name="popup_ip_diff" min="0" value="{{ popup_ip_diff if popup_ip_diff is not none else '10' }}"></div>
@@ -1066,6 +1571,32 @@
 
 		emptyModal.querySelectorAll("[data-close-auto-match-empty]").forEach(function (node) {
 			node.addEventListener("click", closeEmptyModal);
+		});
+	});
+	</script>
+	<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		document.querySelectorAll(".ip-column-filter-form").forEach(function (form) {
+			form.addEventListener("submit", function () {
+				form.querySelectorAll(".ip-filter-csv-source").forEach(function (checkbox) {
+					const targetId = checkbox.getAttribute("data-target-input");
+					if (!targetId) return;
+
+					const hiddenInput = form.querySelector("#" + targetId);
+					if (!hiddenInput) return;
+
+					const selectedValues = Array.from(
+						form.querySelectorAll('.ip-filter-csv-source[data-target-input="' + targetId + '"]:checked')
+					).map(function (node) {
+						return node.value;
+					});
+
+					hiddenInput.value = selectedValues.join(",");
+				});
+
+				const currentAction = form.getAttribute("action") || window.location.pathname;
+				form.setAttribute("action", currentAction.split("#")[0] + "#available-chickens");
+			});
 		});
 	});
 	</script>

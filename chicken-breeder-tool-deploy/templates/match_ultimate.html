@@ -18,7 +18,7 @@
                         <div class="page-header">
                             <h1>Ultimate Breeding</h1>
                             <p class="page-description">
-                                Compare ultimate builds, review complementary pairings, and find the best match for your selected chicken.
+                                Compare Ultimate-focused pairs, review build fit and stats, and find the best breeding match for your selected chicken.
                             </p>
                         </div>
                         <div class="topbar-actions">
@@ -46,15 +46,15 @@
                 <div class="breeding-hero-side-card">
                     <div class="breeding-hero-side-label">Mode</div>
                     <div class="breeding-hero-side-value">Ultimate</div>
-                    <div class="breeding-hero-side-note">Review eligible chickens first, then compare the strongest overall pairings for the selected parent.</div>
+                    <div class="breeding-hero-side-note">Review available chickens, select a parent, and compare the strongest Ultimate pairings.</div>
                 </div>
 
                 <div class="breeding-hero-steps">
                     <div class="breeding-hero-steps-title">Workflow</div>
                     <ol class="breeding-hero-steps-list" aria-label="Ultimate breeding workflow">
-                        <li><span>Review eligible chickens</span></li>
+                        <li><span>Review available chickens</span></li>
                         <li><span>Select a chicken</span></li>
-                        <li><span>Compare best matches</span></li>
+                        <li><span>Compare Ultimate matches</span></li>
                     </ol>
                 </div>
             </div>
@@ -103,137 +103,830 @@
             <div class="error">{{ error }}</div>
         {% endif %}
 
-
-        <section class="breeding-section">
-        <div class="breeding-section-header">
-            <div>
-                <div class="breeding-section-kicker">Step 1</div>
-				<div class="breeding-section-title-row">
-					<h2>Available Chickens</h2>
-					<!--<a
-						class="link-btn"
-						href="{{ url_for('match_ultimate_page', wallet_address=wallet, selected_token_id=selected_token_id or None, auto_match=1) }}"
-					>
-						Auto-Match
-					</a>-->
+		<section class="breeding-section">
+			<div class="breeding-section-header">
+				<div>
+					<div class="breeding-section-kicker">Step 1</div>
+					<h2>Choose an available chicken</h2>
 				</div>
-            </div>
-            <p class="breeding-section-note">Review all chickens currently eligible for Ultimate breeding and pick one to evaluate.</p>
-        </div>
-		<div class="settings-box breeding-settings-box">
-			<form method="GET" action="{{ url_for('match_ultimate_page') }}" class="filter-form">
-				<input type="hidden" name="wallet_address" value="{{ wallet }}">
-				{% if selected_token_id %}
-					<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">
-				{% endif %}
+				<p class="breeding-section-note">
+					Filter, sort, and search your available chickens below. Click any row to load it into the selected chicken panel.
+				</p>
+			</div>
 
-				<div class="filter-grid gene-filter-grid">
-					<div>
-						<label for="sort_by"><strong>Sort Available By</strong></label>
-						<select id="sort_by" name="sort_by">
-							<option value="ultimate_type" {% if sort_by == "ultimate_type" %}selected{% endif %}>Ultimate Type</option>
-							<option value="build" {% if sort_by == "build" %}selected{% endif %}>Build</option>
-							<option value="build_match" {% if sort_by == "build_match" %}selected{% endif %}>Build Match</option>
-							<option value="ip" {% if sort_by == "ip" %}selected{% endif %}>IP</option>
-							<option value="generation" {% if sort_by == "generation" %}selected{% endif %}>Generation</option>
-							<option value="breed_count" {% if sort_by == "breed_count" %}selected{% endif %}>Breed Count</option>
-						</select>
-					</div>
-
-					<div>
-						<label for="sort_dir"><strong>Direction</strong></label>
-						<select id="sort_dir" name="sort_dir">
-							<option value="asc" {% if sort_dir == "asc" %}selected{% endif %}>Ascending</option>
-							<option value="desc" {% if sort_dir == "desc" %}selected{% endif %}>Descending</option>
-						</select>
-					</div>
-
-					<div class="filter-actions-group">
-						<button type="submit">Apply Sort</button>
-						<button type="button" class="link-btn open-auto-match-config-btn">Auto Match</button>
-					</div>
-				</div>
-			</form>
-		</div>
-        <div class="panel breeding-panel">
-
-            {% if breedable_chickens %}
-                <div class="table-wrap limited-table ip-available-table">
-                    <table>
-                        <thead>
-							<tr>
-								<th>Chicken ID</th>
-								<th>Ultimate Type</th>
-								<th>Build</th>
-								<th>Build Match</th>
-								<th>IP</th>
-								<th>Generation</th>
-								<th>Breed Count</th>
-								<th>Ninuno %</th>
-							</tr>
-                        </thead>
-                        <tbody>
-                            {% for chicken in breedable_chickens %}
-							<tr
-								class="clickable-row"
-								data-href="{{ url_for('match_ultimate_page', wallet_address=wallet, selected_token_id=chicken.token_id, sort_by=sort_by, sort_dir=sort_dir) }}#selected-chicken"
-								tabindex="0"
+			<div class="panel breeding-panel" id="available-chickens">
+				{% if breedable_chickens %}
+					<div class="available-search-toolbar">
+						<div class="available-search-box">
+							<input
+								type="text"
+								id="ip-available-search"
+								class="available-search-input"
+								placeholder="Search Chicken ID"
+								autocomplete="off"
 							>
-                                <td>
-                                    <div class="chicken-id-card compact-id-card">
-                                        <img
-                                            src="{{ chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ chicken.token_id ~ '.png') }}"
-                                            alt="Chicken {{ chicken.token_id }}"
-                                            class="chicken-id-card-image compact-id-image"
-                                        >
-                                        <div class="chicken-id-card-text">#{{ chicken.token_id }}</div>
-                                    </div>
-                                </td>
-                                <td>{{ chicken.ultimate_type_display or "" }}</td>
-                                <td>{{ chicken.ultimate_build_display or "" }}</td>
-                                <td>{{ chicken.ultimate_build_match_display or "" }}</td>
-                                <td>{{ chicken.ip if chicken.ip is not none else "" }}</td>
-                                <td>{{ chicken.generation_text or "" }}</td>
-                                <td>{{ chicken.breed_count if chicken.breed_count is not none else "" }}</td>
-                                <td>
-									{% if chicken.total_root_count %}
-										{{ chicken.ownership_percent }}%
-										{% if not chicken.is_complete and chicken.root_check_target_count %}
-											<span>(Partial {{ chicken.pending_root_check_count }}/{{ chicken.root_check_target_count }})</span>
-										{% elif not chicken.is_complete %}
-											<span>(Partial)</span>
-										{% endif %}
-									{% else %}
-										Recalculate
-									{% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% else %}
-                <div class="empty-state-card empty-state-card-wide">
-                <div class="empty-state-kicker">{{ available_empty_state.kicker }}</div>
-                <h3>{{ available_empty_state.title }}</h3>
-                <p>{{ available_empty_state.body }}</p>
-            </div>
-            {% endif %}
-        </div>
-    </section>
-
-		<div class="match-layout">
-			<section class="breeding-section">
-				<div class="breeding-section-header">
-				<!--<div class="breeding-section-header breeding-section-header-inline">-->
-					<div>
-						<div class="breeding-section-kicker">Step 2</div>
-						<!--<p class="breeding-section-note breeding-section-note-inline">
-							Spotlight one candidate and review before comparing.
-						</p>-->
+							<button type="button" class="link-btn secondary-link-btn" id="ip-available-search-btn">Search</button>
+							<button type="button" class="link-btn ghost-link-btn hidden" id="ip-available-search-clear-btn">Clear</button>
 						</div>
-						<p class="breeding-section-note">Spotlight one candidate and review matches.</p>
+
+						<div class="available-search-actions">
+							<button
+								type="button"
+								class="link-btn secondary-link-btn open-auto-match-config-btn"
+							>
+								Auto Match
+							</button>
+						</div>
+					</div>
+
+					<div class="table-wrap limited-table ip-available-table">
+						<table id="ultimate-available-table">
+							<thead>
+								<tr>
+									<th>
+										<a class="table-sort-link" href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by='token_id',
+											sort_dir='desc' if sort_by == 'token_id' and sort_dir == 'asc' else 'asc',
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens">
+											<span class="table-sort-label">Chicken ID</span>
+											<span class="table-sort-icon">
+												{% if sort_by == 'token_id' %}
+													{{ '▲' if sort_dir == 'asc' else '▼' }}
+												{% else %}
+													⬧
+												{% endif %}
+											</span>
+										</a>
+									</th>
+									<th>
+										<a class="table-sort-link" href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by='ip',
+											sort_dir='asc' if sort_by == 'ip' and sort_dir == 'desc' else 'desc',
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens">
+											<span class="table-sort-label">IP</span>
+											<span class="table-sort-icon">
+												{% if sort_by == 'ip' %}
+													{{ '▲' if sort_dir == 'asc' else '▼' }}
+												{% else %}
+													⬧
+												{% endif %}
+											</span>
+										</a>
+									</th>
+									<th>
+										<a class="table-sort-link" href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by='build',
+											sort_dir='desc' if sort_by == 'build' and sort_dir == 'asc' else 'asc',
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens">
+											<span class="table-sort-label">Build</span>
+											<span class="table-sort-icon">
+												{% if sort_by == 'build' %}
+													{{ '▲' if sort_dir == 'asc' else '▼' }}
+												{% else %}
+													⬧
+												{% endif %}
+											</span>
+										</a>
+									</th>
+
+									<th>
+										<a class="table-sort-link" href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by='build_match',
+											sort_dir='desc' if sort_by == 'build_match' and sort_dir == 'asc' else 'asc',
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens">
+											<span class="table-sort-label">Build Match</span>
+											<span class="table-sort-icon">
+												{% if sort_by == 'build_match' %}
+													{{ '▲' if sort_dir == 'asc' else '▼' }}
+												{% else %}
+													⬧
+												{% endif %}
+											</span>
+										</a>
+									</th>
+
+									<th>
+										<a class="table-sort-link" href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by='generation',
+											sort_dir='desc' if sort_by == 'generation' and sort_dir == 'asc' else 'asc',
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens">
+											<span class="table-sort-label">Generation</span>
+											<span class="table-sort-icon">
+												{% if sort_by == 'generation' %}
+													{{ '▲' if sort_dir == 'asc' else '▼' }}
+												{% else %}
+													⬧
+												{% endif %}
+											</span>
+										</a>
+									</th>
+
+									<th>
+										<a class="table-sort-link" href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by='breed_count',
+											sort_dir='desc' if sort_by == 'breed_count' and sort_dir == 'asc' else 'asc',
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens">
+											<span class="table-sort-label">Breed Count</span>
+											<span class="table-sort-icon">
+												{% if sort_by == 'breed_count' %}
+													{{ '▲' if sort_dir == 'asc' else '▼' }}
+												{% else %}
+													⬧
+												{% endif %}
+											</span>
+										</a>
+									</th>
+
+									<th>
+										<a class="table-sort-link" href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by='ninuno',
+											sort_dir='desc' if sort_by == 'ninuno' and sort_dir == 'asc' else 'asc',
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens">
+											<span class="table-sort-label">Ninuno %</span>
+											<span class="table-sort-icon">
+												{% if sort_by == 'ninuno' %}
+													{{ '▲' if sort_dir == 'asc' else '▼' }}
+												{% else %}
+													⬧
+												{% endif %}
+											</span>
+										</a>
+									</th>
+								</tr>
+
+								<tr class="ip-available-filter-row">
+									<th>
+										<form method="GET" action="{{ url_for('match_ultimate_page') }}" class="ip-column-filter-form">
+											<input type="hidden" name="wallet_address" value="{{ wallet }}">
+											{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+											<input type="hidden" name="sort_by" value="{{ sort_by }}">
+											<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+											<input type="hidden" name="ultimate_filter_build" value="{{ ultimate_filter_build if ultimate_filter_build != 'all' else '' }}">
+											<input type="hidden" name="ultimate_filter_build_match" value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}">
+											<input type="hidden" name="ultimate_min_ip" value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}">
+											<input type="hidden" name="ultimate_filter_generation" value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}">
+											<input type="hidden" name="ultimate_filter_breed_count" value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}">
+											<input type="hidden" name="ultimate_filter_ninuno" value="{{ ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else '' }}">
+
+											<details class="ip-filter-dropdown">
+												<summary class="ip-filter-summary">Filter</summary>
+												<div class="ip-filter-panel">
+													{% for option in ultimate_available_filter_options.type_options %}
+														<label class="ip-filter-check">
+															<input
+																type="checkbox"
+																class="ip-filter-csv-source"
+																data-target-input="ultimate_filter_type_csv"
+																value="{{ option.value }}"
+																{% if option.value in ultimate_filter_type_values %}checked{% endif %}
+															>
+															<span>{{ option.label }}</span>
+														</label>
+													{% endfor %}
+													<input
+														type="hidden"
+														name="ultimate_filter_type"
+														id="ultimate_filter_type_csv"
+														value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}"
+													>
+													<div class="ip-filter-actions">
+														<button type="submit">Apply</button>
+														<a class="link-btn ghost-link-btn" href="{{ url_for(
+															'match_ultimate_page',
+															wallet_address=wallet,
+															selected_token_id=selected_token_id or None,
+															sort_by=sort_by,
+															sort_dir=sort_dir,
+															ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+															ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+															ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+															ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+															ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+															ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+														) }}#available-chickens">Clear</a>
+													</div>
+												</div>
+											</details>
+										</form>
+									</th>
+
+									<th>
+										<form method="GET" action="{{ url_for('match_ultimate_page') }}" class="ip-column-filter-form">
+											<input type="hidden" name="wallet_address" value="{{ wallet }}">
+											{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+											<input type="hidden" name="sort_by" value="{{ sort_by }}">
+											<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+											<input type="hidden" name="ultimate_filter_build" value="{{ ultimate_filter_build if ultimate_filter_build != 'all' else '' }}">
+											<input type="hidden" name="ultimate_filter_build_match" value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}">
+											<input type="hidden" name="ultimate_filter_type" value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}">
+											<input type="hidden" name="ultimate_filter_generation" value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}">
+											<input type="hidden" name="ultimate_filter_breed_count" value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}">
+											<input type="hidden" name="ultimate_filter_ninuno" value="{{ ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else '' }}">
+
+											<details class="ip-filter-dropdown">
+												<summary class="ip-filter-summary">Filter</summary>
+												<div class="ip-filter-panel">
+													<input
+														type="number"
+														name="ultimate_min_ip"
+														min="0"
+														value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}"
+														placeholder="Min IP"
+														class="ip-filter-input"
+													>
+													<div class="ip-filter-actions">
+														<button type="submit">Apply</button>
+														<a class="link-btn ghost-link-btn" href="{{ url_for(
+															'match_ultimate_page',
+															wallet_address=wallet,
+															selected_token_id=selected_token_id or None,
+															sort_by=sort_by,
+															sort_dir=sort_dir,
+															ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+															ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+															ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+															ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+															ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+															ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+														) }}#available-chickens">Clear</a>
+													</div>
+												</div>
+											</details>
+										</form>
+									</th>
+									<th>
+										<details class="ip-filter-dropdown">
+											<summary class="ip-filter-summary">Filter</summary>
+											<form method="GET" action="{{ url_for('match_ultimate_page') }}" class="ip-filter-panel">
+												<input type="hidden" name="wallet_address" value="{{ wallet }}">
+												<input type="hidden" name="selected_token_id" value="{{ selected_token_id or '' }}">
+												<input type="hidden" name="sort_by" value="{{ sort_by }}">
+												<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+												<input type="hidden" name="ultimate_filter_build_match" value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}">
+												<input type="hidden" name="ultimate_filter_type" value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}">
+												<input type="hidden" name="ultimate_min_ip" value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}">
+												<input type="hidden" name="ultimate_filter_generation" value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}">
+												<input type="hidden" name="ultimate_filter_breed_count" value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}">
+												<input type="hidden" name="ultimate_filter_ninuno" value="{{ ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else '' }}">
+												<label class="ip-filter-radio">
+													<input type="radio" name="ultimate_filter_build" value="all" {% if ultimate_filter_build == 'all' %}checked{% endif %}>
+													<span>All</span>
+												</label>
+												{% for option in ultimate_available_filter_options.build_options %}
+													<label class="ip-filter-radio">
+														<input type="radio" name="ultimate_filter_build" value="{{ option.value }}"
+															   {% if ultimate_filter_build == option.value %}checked{% endif %}>
+														<span>{{ option.label }}</span>
+													</label>
+												{% endfor %}
+												<div class="ip-filter-actions">
+													<button type="submit">Apply</button>
+													<a class="link-btn ghost-link-btn" href="{{ url_for(
+														'match_ultimate_page',
+														wallet_address=wallet,
+														selected_token_id=selected_token_id or None,
+														sort_by=sort_by,
+														sort_dir=sort_dir,
+														ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+														ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+														ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+														ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+														ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+														ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+													) }}#available-chickens">Clear</a>
+												</div>
+											</form>
+										</details>
+									</th>
+									<th>
+										<form method="GET" action="{{ url_for('match_ultimate_page') }}" class="ip-column-filter-form">
+											<input type="hidden" name="wallet_address" value="{{ wallet }}">
+											{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+											<input type="hidden" name="sort_by" value="{{ sort_by }}">
+											<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+											<input type="hidden" name="ultimate_filter_build" value="{{ ultimate_filter_build if ultimate_filter_build != 'all' else '' }}">
+											<input type="hidden" name="ultimate_filter_type" value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}">
+											<input type="hidden" name="ultimate_min_ip" value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}">
+											<input type="hidden" name="ultimate_filter_generation" value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}">
+											<input type="hidden" name="ultimate_filter_breed_count" value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}">
+											<input type="hidden" name="ultimate_filter_ninuno" value="{{ ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else '' }}">
+
+											<details class="ip-filter-dropdown">
+												<summary class="ip-filter-summary">Filter</summary>
+												<div class="ip-filter-panel">
+													{% for option in ultimate_available_filter_options.build_match_options %}
+														<label class="ip-filter-check">
+															<input
+																type="checkbox"
+																class="ip-filter-csv-source"
+																data-target-input="ultimate_filter_build_match_csv"
+																value="{{ option.value }}"
+																{% if option.value in ultimate_filter_build_match_values %}checked{% endif %}
+															>
+															<span>{{ option.label }}</span>
+														</label>
+													{% endfor %}
+													<input
+														type="hidden"
+														name="ultimate_filter_build_match"
+														id="ultimate_filter_build_match_csv"
+														value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}"
+													>
+													<div class="ip-filter-actions">
+														<button type="submit">Apply</button>
+														<a class="link-btn ghost-link-btn" href="{{ url_for(
+															'match_ultimate_page',
+															wallet_address=wallet,
+															selected_token_id=selected_token_id or None,
+															sort_by=sort_by,
+															sort_dir=sort_dir,
+															ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+															ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+															ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+															ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+															ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+															ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+														) }}#available-chickens">Clear</a>
+													</div>
+												</div>
+											</details>
+										</form>
+									</th>				
+
+									<th>
+										<form method="GET" action="{{ url_for('match_ultimate_page') }}" class="ip-column-filter-form">
+											<input type="hidden" name="wallet_address" value="{{ wallet }}">
+											{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+											<input type="hidden" name="sort_by" value="{{ sort_by }}">
+											<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+											<input type="hidden" name="ultimate_filter_build" value="{{ ultimate_filter_build if ultimate_filter_build != 'all' else '' }}">
+											<input type="hidden" name="ultimate_filter_build_match" value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}">
+											<input type="hidden" name="ultimate_filter_type" value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}">
+											<input type="hidden" name="ultimate_min_ip" value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}">
+											<input type="hidden" name="ultimate_filter_breed_count" value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}">
+											<input type="hidden" name="ultimate_filter_ninuno" value="{{ ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else '' }}">
+
+											<details class="ip-filter-dropdown">
+												<summary class="ip-filter-summary">Filter</summary>
+												<div class="ip-filter-panel">
+													{% for option in ultimate_available_filter_options.generation_options %}
+														<label class="ip-filter-check">
+															<input
+																type="checkbox"
+																class="ip-filter-csv-source"
+																data-target-input="ultimate_filter_generation_csv"
+																value="{{ option.value }}"
+																{% if option.value in ultimate_filter_generation_values %}checked{% endif %}
+															>
+															<span>{{ option.label }}</span>
+														</label>
+													{% endfor %}
+													<input
+														type="hidden"
+														name="ultimate_filter_generation"
+														id="ultimate_filter_generation_csv"
+														value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}"
+													>
+													<div class="ip-filter-actions">
+														<button type="submit">Apply</button>
+														<a class="link-btn ghost-link-btn" href="{{ url_for(
+															'match_ultimate_page',
+															wallet_address=wallet,
+															selected_token_id=selected_token_id or None,
+															sort_by=sort_by,
+															sort_dir=sort_dir,
+															ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+															ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+															ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+															ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+															ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+															ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+														) }}#available-chickens">Clear</a>
+													</div>
+												</div>
+											</details>
+										</form>
+									</th>
+
+									<th>
+										<form method="GET" action="{{ url_for('match_ultimate_page') }}" class="ip-column-filter-form">
+											<input type="hidden" name="wallet_address" value="{{ wallet }}">
+											{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+											<input type="hidden" name="sort_by" value="{{ sort_by }}">
+											<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+											<input type="hidden" name="ultimate_filter_build" value="{{ ultimate_filter_build if ultimate_filter_build != 'all' else '' }}">
+											<input type="hidden" name="ultimate_filter_build_match" value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}">
+											<input type="hidden" name="ultimate_filter_type" value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}">
+											<input type="hidden" name="ultimate_min_ip" value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}">
+											<input type="hidden" name="ultimate_filter_generation" value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}">
+											<input type="hidden" name="ultimate_filter_ninuno" value="{{ ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else '' }}">
+
+											<details class="ip-filter-dropdown">
+												<summary class="ip-filter-summary">Filter</summary>
+												<div class="ip-filter-panel">
+													{% for option in ultimate_available_filter_options.breed_count_options %}
+														<label class="ip-filter-check">
+															<input
+																type="checkbox"
+																class="ip-filter-csv-source"
+																data-target-input="ultimate_filter_breed_count_csv"
+																value="{{ option.value }}"
+																{% if option.value in ultimate_filter_breed_count_values %}checked{% endif %}
+															>
+															<span>{{ option.label }}</span>
+														</label>
+													{% endfor %}
+													<input
+														type="hidden"
+														name="ultimate_filter_breed_count"
+														id="ultimate_filter_breed_count_csv"
+														value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}"
+													>
+													<div class="ip-filter-actions">
+														<button type="submit">Apply</button>
+														<a class="link-btn ghost-link-btn" href="{{ url_for(
+															'match_ultimate_page',
+															wallet_address=wallet,
+															selected_token_id=selected_token_id or None,
+															sort_by=sort_by,
+															sort_dir=sort_dir,
+															ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+															ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+															ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+															ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+															ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+															ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+														) }}#available-chickens">Clear</a>
+													</div>
+												</div>
+											</details>
+										</form>
+									</th>
+
+									<th>
+										<form method="GET" action="{{ url_for('match_ultimate_page') }}" class="ip-column-filter-form">
+											<input type="hidden" name="wallet_address" value="{{ wallet }}">
+											{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+											<input type="hidden" name="sort_by" value="{{ sort_by }}">
+											<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+											<input type="hidden" name="ultimate_filter_build" value="{{ ultimate_filter_build if ultimate_filter_build != 'all' else '' }}">
+											<input type="hidden" name="ultimate_filter_build_match" value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}">
+											<input type="hidden" name="ultimate_filter_type" value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}">
+											<input type="hidden" name="ultimate_min_ip" value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}">
+											<input type="hidden" name="ultimate_filter_generation" value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}">
+											<input type="hidden" name="ultimate_filter_breed_count" value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}">
+
+											<details class="ip-filter-dropdown">
+												<summary class="ip-filter-summary">Filter</summary>
+												<div class="ip-filter-panel">
+													{% for option in ultimate_available_filter_options.ninuno_options %}
+														<label class="ip-filter-radio">
+															<input
+																type="radio"
+																name="ultimate_filter_ninuno"
+																value="{{ option.value }}"
+																{% if option.value == ultimate_filter_ninuno %}checked{% endif %}
+															>
+															<span>{{ option.label }}</span>
+														</label>
+													{% endfor %}
+													<div class="ip-filter-actions">
+														<button type="submit">Apply</button>
+														<a class="link-btn ghost-link-btn" href="{{ url_for(
+															'match_ultimate_page',
+															wallet_address=wallet,
+															selected_token_id=selected_token_id or None,
+															sort_by=sort_by,
+															sort_dir=sort_dir,
+															ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+															ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+															ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+															ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+															ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+															ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+														) }}#available-chickens">Clear</a>
+													</div>
+												</div>
+											</details>
+										</form>
+									</th>
+								</tr>
+							</thead>
+
+							<tbody>
+								{% for chicken in breedable_chickens %}
+								<tr
+									class="clickable-row"
+									data-token-id="{{ chicken.token_id }}"
+									data-build-key="{{ chicken.ultimate_build_key or chicken.primary_build or '' }}"
+									data-build-count="{{ chicken.ultimate_build_match_count if chicken.ultimate_build_match_count is not none else 0 }}"
+									data-href="{{ url_for(
+										'match_ultimate_page',
+										wallet_address=wallet,
+										selected_token_id=chicken.token_id,
+										sort_by=sort_by,
+										sort_dir=sort_dir,
+										ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+										ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+										ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+										ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+										ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+										ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+										ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+									) }}#selected-chicken"
+								>
+									<td>
+										<div class="chicken-id-card compact-id-card">
+											<img
+												src="{{ chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ chicken.token_id ~ '.png') }}"
+												alt="Chicken {{ chicken.token_id }}"
+												class="chicken-id-card-image compact-id-image"
+											>
+											<div class="chicken-id-card-text">#{{ chicken.token_id }}</div>
+										</div>
+									</td>
+									<td>{{ chicken.ip if chicken.ip is not none else "" }}</td>
+									<td>{{ chicken.ultimate_build_display or "" }}</td>
+									<td>{{ chicken.ultimate_build_match_display or "" }}</td>
+									<td>{{ chicken.generation_text or "" }}</td>
+									<td>{{ chicken.breed_count if chicken.breed_count is not none else "" }}</td>
+									<td>
+										{% if chicken.total_root_count %}
+											{{ chicken.ownership_percent }}%
+											{% if not chicken.is_complete and chicken.root_check_target_count %}
+												<span>(Partial {{ chicken.pending_root_check_count }}/{{ chicken.root_check_target_count }})</span>
+											{% elif not chicken.is_complete %}
+												<span>(Partial)</span>
+											{% endif %}
+										{% else %}
+											Recalculate
+										{% endif %}
+									</td>
+								</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+
+					{% if ultimate_active_filters %}
+					<div class="active-filters-note">
+						<span class="active-filters-label">Active filters:</span>
+						<div class="active-filters-list">
+							{% for item in ultimate_active_filters %}
+								{% if item.key == 'type' %}
+									<a
+										class="active-filter-chip"
+										href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by=sort_by,
+											sort_dir=sort_dir,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens"
+									>
+										<span>{{ item.label }}: {{ item.value }}</span>
+										<span class="active-filter-chip-x">×</span>
+									</a>
+								{% elif item.key == 'build' %}
+									<a
+										class="active-filter-chip"
+										href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by=sort_by,
+											sort_dir=sort_dir,
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens"
+									>
+										<span>{{ item.label }}: {{ item.value }}</span>
+										<span class="active-filter-chip-x">×</span>
+									</a>
+								{% elif item.key == 'build_match' %}
+									<a
+										class="active-filter-chip"
+										href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by=sort_by,
+											sort_dir=sort_dir,
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens"
+									>
+										<span>{{ item.label }}: {{ item.value }}</span>
+										<span class="active-filter-chip-x">×</span>
+									</a>
+								{% elif item.key == 'min_ip' %}
+									<a
+										class="active-filter-chip"
+										href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by=sort_by,
+											sort_dir=sort_dir,
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens"
+									>
+										<span>{{ item.label }}: {{ item.value }}</span>
+										<span class="active-filter-chip-x">×</span>
+									</a>
+								{% elif item.key == 'generation' %}
+									<a
+										class="active-filter-chip"
+										href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by=sort_by,
+											sort_dir=sort_dir,
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens"
+									>
+										<span>{{ item.label }}: {{ item.value }}</span>
+										<span class="active-filter-chip-x">×</span>
+									</a>
+								{% elif item.key == 'breed_count' %}
+									<a
+										class="active-filter-chip"
+										href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by=sort_by,
+											sort_dir=sort_dir,
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+										) }}#available-chickens"
+									>
+										<span>{{ item.label }}: {{ item.value }}</span>
+										<span class="active-filter-chip-x">×</span>
+									</a>
+								{% elif item.key == 'ninuno' %}
+									<a
+										class="active-filter-chip"
+										href="{{ url_for(
+											'match_ultimate_page',
+											wallet_address=wallet,
+											selected_token_id=selected_token_id or None,
+											sort_by=sort_by,
+											sort_dir=sort_dir,
+											ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+											ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+											ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+											ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+											ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+											ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None
+										) }}#available-chickens"
+									>
+										<span>{{ item.label }}: {{ item.value }}</span>
+										<span class="active-filter-chip-x">×</span>
+									</a>
+								{% endif %}
+							{% endfor %}
+						</div>
+					</div>
+					{% endif %}
+
+				{% else %}
+					<div class="empty-state-card empty-state-card-wide">
+						<div class="empty-state-kicker">{{ available_empty_state.kicker }}</div>
+						<h3>{{ available_empty_state.title }}</h3>
+						<p>{{ available_empty_state.body }}</p>
+
+						{% if ultimate_original_available_count and ultimate_active_filters %}
+							<div class="empty-state-actions">
+								<a
+									class="link-btn secondary-link-btn"
+									href="{{ url_for(
+										'match_ultimate_page',
+										wallet_address=wallet,
+										selected_token_id=selected_token_id or None,
+										sort_by=sort_by,
+										sort_dir=sort_dir
+									) }}#available-chickens"
+								>
+									Clear all filters
+								</a>
+							</div>
+						{% endif %}
+					</div>
+				{% endif %}
+			</div>
+		</section>
+		<section class="breeding-section">
+			<div class="breeding-section-header">
+				<div>
+					<div class="breeding-section-kicker">Step 2</div>
+					<h2>Review selected chicken</h2>
 				</div>
+				<p class="breeding-section-note">
+					Review the selected chicken on the left and compare potential Ultimate matches on the right.
+				</p>
+			</div>
+
+			<div class="match-layout">
 				
 				<div class="panel breeding-panel" id="selected-chicken">
 					{% if selected_chicken %}
@@ -241,7 +934,19 @@
 							<h2 class="selected-chicken-title">Selected Chicken #{{ selected_chicken.token_id }}</h2>
 							<a
 								class="selected-chicken-clear-btn"
-								href="{{ url_for('match_ultimate_page', wallet_address=wallet, sort_by=sort_by, sort_dir=sort_dir) }}"
+								href="{{ url_for(
+									'match_ultimate_page',
+									wallet_address=wallet,
+									sort_by=sort_by,
+									sort_dir=sort_dir,
+									ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+									ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+									ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+									ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+									ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+									ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+									ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+								) }}"
 								title="Clear selected chicken"
 							>
 								×
@@ -258,8 +963,8 @@
 						</div>
 
 						<div class="selected-chicken-summary-grid">
-							<div><strong>Type:</strong> {{ selected_chicken.ultimate_type_display or "" }}</div>
 							<div><strong>Build:</strong> {{ selected_chicken.ultimate_build_display or "N/A" }}</div>
+							<div><strong>Build Count:</strong> {{ selected_chicken.ultimate_build_match_display or "N/A" }}</div>
 							<div><strong>Breed Count:</strong> {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else "" }}</div>
 							<div id="ninuno-{{ selected_chicken.token_id }}">
 								<strong>Ninuno %:</strong>
@@ -327,7 +1032,21 @@
 						<div class="selected-chicken-actions">
 							<a
 								class="link-btn selected-auto-match-btn"
-								href="{{ url_for('match_ultimate_page', wallet_address=wallet, selected_token_id=selected_chicken.token_id, sort_by=sort_by, sort_dir=sort_dir, auto_match=1) }}"
+								href="{{ url_for(
+									'match_ultimate_page',
+									wallet_address=wallet,
+									selected_token_id=selected_chicken.token_id,
+									sort_by=sort_by,
+									sort_dir=sort_dir,
+									ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+									ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+									ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+									ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+									ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+									ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+									ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None,
+									auto_match=1
+								) }}"
 							>
 								Auto Match
 							</a>
@@ -336,17 +1055,9 @@
 							<h2>Selected Chicken</h2>
 							<div class="empty-state-card">
 								<div class="empty-state-kicker">No selection</div>
-								<p>Select a chicken from the available list to review its build signals and stats here.</p>
+								<p>Select a chicken from the available list to review it here.</p>
 							</div>
 					{% endif %}
-				</div>
-			</section>
-			<section class="breeding-section">
-				<div class="breeding-section-header">
-					<div>
-						<div class="breeding-section-kicker">Step 3</div>
-					</div>
-					<p class="breeding-section-note">Compare build fit and best overall matches.</p>
 				</div>
 				<div class="panel breeding-panel">
 					<h2>Potential Ultimate Matches</h2>
@@ -358,11 +1069,10 @@
 										<tr>
 											<th></th>
 											<th>Chicken ID</th>
-											<th>Ultimate Type</th>
+											<th>IP</th>
 											<th>Build</th>
 											<th>Build Match</th>
 											<th>Build Complement</th>
-											<th>IP</th>
 											<th>Breed Count</th>
 											<th>Ninuno %</th>
 										</tr>
@@ -396,11 +1106,10 @@
 													<div class="chicken-id-card-text">#{{ row.candidate.token_id }}</div>
 												</div>
 											</td>
-											<td>{{ row.ultimate_type_display or "" }}</td>
+											<td>{{ row.candidate.ip if row.candidate.ip is not none else "" }}</td>
 											<td>{{ row.ultimate_build_display or "" }}</td>
 											<td>{{ row.candidate.ultimate_build_match_display or "" }}</td>
 											<td>{{ row.build_complement if row.build_complement is not none else "" }}</td>
-											<td>{{ row.candidate.ip if row.candidate.ip is not none else "" }}</td>
 											<td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
 											<td id="ninuno-{{ row.candidate.token_id }}">
 												{% if row.candidate.total_root_count %}
@@ -482,7 +1191,7 @@
 					{% else %}
 						<div class="empty-state-card empty-state-card-inline">
 						<div class="empty-state-kicker">Waiting for selection</div>
-						<p>Select a chicken first to load the best overall match candidates.</p>
+						<p>Select a chicken first to load potential Ultimate matches.</p>
 					</div>
 					{% endif %}
 				</div>
@@ -511,6 +1220,9 @@
                         <span class="planner-export-icon">XLS</span>
                         <span>Export Excel</span>
                     </a>
+					<a href="{{ url_for('planner_items_check', wallet_address=wallet, source_page='ultimate') }}" class="link-btn secondary-link-btn">
+						🤖 Prepare for Automation
+					</a>
                 </div>
             </div>
             {% if planner_queue %}
@@ -648,10 +1360,18 @@
         <div class="compare-body">
             <form method="GET" action="{{ url_for('match_ultimate_page') }}" class="filter-form auto-match-config-form">
                 <input type="hidden" name="wallet_address" value="{{ wallet }}">
+				{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
                 <input type="hidden" name="sort_by" value="{{ sort_by }}">
                 <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
                 <input type="hidden" name="auto_match" value="1">
                 <input type="hidden" name="auto_match_source" value="available">
+				<input type="hidden" name="ultimate_filter_type" value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}">
+				<input type="hidden" name="ultimate_filter_build" value="{{ ultimate_filter_build if ultimate_filter_build != 'all' else '' }}">
+				<input type="hidden" name="ultimate_filter_build_match" value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}">
+				<input type="hidden" name="ultimate_min_ip" value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}">
+				<input type="hidden" name="ultimate_filter_generation" value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}">
+				<input type="hidden" name="ultimate_filter_breed_count" value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}">
+				<input type="hidden" name="ultimate_filter_ninuno" value="{{ ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else '' }}">
 
                 <div class="auto-match-config-grid auto-match-config-grid-ultimate">
                     <div class="auto-match-field">
@@ -661,6 +1381,28 @@
                             <option value="multiple" {% if auto_match_mode == 'multiple' %}selected{% endif %}>Multiple</option>
                         </select>
                     </div>
+
+					<div class="auto-match-field">
+						<label><strong>Build</strong></label>
+						<select name="popup_build" id="ultimate-popup-build">
+							<option value="all" {% if popup_build == 'all' %}selected{% endif %}>All</option>
+							{% for option in ultimate_available_filter_options.build_options %}
+								<option value="{{ option.value }}" {% if popup_build == option.value %}selected{% endif %}>
+									{{ option.label }}
+								</option>
+							{% endfor %}
+						</select>
+					</div>
+					<div class="auto-match-field">
+						<label><strong>Minimum Build Count</strong></label>
+						<input
+							type="number"
+							name="popup_min_build_count"
+							id="ultimate-popup-min-build-count"
+							min="0"
+							value="{{ popup_min_build_count if popup_min_build_count is not none else '' }}"
+						>
+					</div>
 
                     <div class="auto-match-field">
                         <label><strong>Breed Count Difference</strong></label>
@@ -678,8 +1420,15 @@
 
                     <div class="auto-match-field multi-match-count-wrap">
                         <label><strong>Number of Matches</strong></label>
-                        <input type="number" name="popup_match_count" min="1" max="{{ available_pair_max }}" value="{{ popup_match_count if popup_match_count is not none else 1 }}">
-                        <div class="note">Max from current pool: {{ available_pair_max }}</div>
+						<input
+							type="number"
+							name="popup_match_count"
+							id="ultimate-popup-match-count"
+							min="1"
+							max="{{ available_pair_max }}"
+							value="{{ popup_match_count if popup_match_count is not none else 1 }}"
+						>
+						<div class="note">Max from current pool: <span id="ultimate-available-pair-max">{{ available_pair_max }}</span></div>
                     </div>
 
                     <div class="auto-match-field auto-match-submit-field">
@@ -718,7 +1467,7 @@
         <div class="compare-body">
             {% for row in multi_match_rows %}
             <div class="multi-match-row">
-				{% set pair_quality = build_ultimate_pair_quality(row) %}
+				{% set pair_quality = row.pair_quality or build_ultimate_pair_quality(row) %}
 				<div class="pair-quality-stamp-image-wrap">
 					<img
 						src="{{ url_for('static', filename='images/' ~ (
@@ -763,7 +1512,7 @@
                             <input type="hidden" name="right_token_id" value="{{ row.right.token_id }}">
                             <input type="hidden" name="left_item_name" value="{{ row.left_item.name if row.left_item else '' }}">
                             <input type="hidden" name="right_item_name" value="{{ row.right_item.name if row.right_item else '' }}">
-                            <input type="hidden" name="pair_quality" value="{{ build_ultimate_pair_quality(row) }}">
+                            <input type="hidden" name="pair_quality" value="{{ row.pair_quality or build_ultimate_pair_quality(row) }}">
                             <button type="submit" class="planner-add-btn planner-add-btn-center" title="Add to breeding planner">+</button>
                         </form>
 
@@ -850,18 +1599,31 @@
     </div>
 
     <div class="compare-template-store">
-        {% for row in potential_matches %}
-        {% set selected_item_candidates = get_ultimate_item_candidates(selected_chicken, row.candidate) %}
-        {% set candidate_item_candidates = get_ultimate_item_candidates(row.candidate, selected_chicken) %}
-        {% set selected_item, candidate_item = resolve_pair_item_recommendations(selected_item_candidates, candidate_item_candidates) %}
-        <template id="compare-ultimate-{{ row.candidate.token_id }}"
+		{% for row in potential_matches %}
+		{% set compare_build_type = selected_chicken.primary_build or row.candidate.primary_build or '' %}
+		{% set selected_item_candidates = get_ultimate_item_candidates(selected_chicken, row.candidate, compare_build_type) %}
+		{% set candidate_item_candidates = get_ultimate_item_candidates(row.candidate, selected_chicken, compare_build_type) %}
+		{% set selected_item, candidate_item = resolve_ultimate_pair_item_recommendations(selected_item_candidates, candidate_item_candidates) %}
+		<template id="compare-ultimate-{{ row.candidate.token_id }}"
             data-left-token-id="{{ selected_chicken.token_id }}"
             data-right-token-id="{{ row.candidate.token_id }}"
             data-left-item-name="{{ selected_item.name if selected_item else "" }}"
-            data-right-item-name="{{ candidate_item.name if candidate_item else "" }}"
-            data-pair-quality="{{ build_ultimate_pair_quality(row) }}">
+            data-right-item-name="{{ candidate_item.name if candidate_item else '' }}"
+            data-pair-quality="{{ build_ultimate_pair_quality({
+				'left': selected_chicken,
+				'right': row.candidate,
+				'selected_build': compare_build_type,
+				'left_item': selected_item,
+				'right_item': candidate_item
+			}) }}">
             <div class="compare-grid">
-				{% set pair_quality = build_ultimate_pair_quality(row) %}
+				{% set pair_quality = build_ultimate_pair_quality({
+					'left': selected_chicken,
+					'right': row.candidate,
+					'selected_build': compare_build_type,
+					'left_item': selected_item,
+					'right_item': candidate_item
+				}) %}
 				<div class="pair-quality-stamp-image-wrap pair-quality-stamp-image-wrap-compare">
 					<img
 						src="{{ url_for('static', filename='images/' ~ (
@@ -913,14 +1675,16 @@
 					</div>
 					<div class="compare-item-box compare-item-box-right">
 						<div class="compare-item-label">Recommended Item</div>
-						{% set item_image = get_item_image_url(selected_item.name) %}
+						{% set selected_item_name = selected_item.name if selected_item else 'No item recommended' %}
+						{% set selected_item_reason = selected_item.reason if selected_item else 'No item recommended for this chicken.' %}
+						{% set item_image = get_item_image_url(selected_item.name) if selected_item else '' %}
 						<div class="compare-item-inline compare-item-inline-right">
 							<div class="compare-item-text">
-								<div class="compare-item-name">{{ selected_item.name }}</div>
-								<div class="compare-item-reason">{{ selected_item.reason }}</div>
+								<div class="compare-item-name">{{ selected_item_name }}</div>
+								<div class="compare-item-reason">{{ selected_item_reason }}</div>
 							</div>
 							{% if item_image %}
-								<img src="{{ item_image }}" alt="{{ selected_item.name }}" class="compare-item-image">
+								<img src="{{ item_image }}" alt="{{ selected_item_name }}" class="compare-item-image">
 							{% endif %}
 						</div>
 					</div>
@@ -964,14 +1728,16 @@
 					</div>
 					<div class="compare-item-box">
 						<div class="compare-item-label">Recommended Item</div>
-						{% set item_image = get_item_image_url(candidate_item.name) %}
+						{% set candidate_item_name = candidate_item.name if candidate_item else 'No item recommended' %}
+						{% set candidate_item_reason = candidate_item.reason if candidate_item else 'No item recommended for this chicken.' %}
+						{% set item_image = get_item_image_url(candidate_item.name) if candidate_item else '' %}
 						<div class="compare-item-inline">
 							{% if item_image %}
-								<img src="{{ item_image }}" alt="{{ candidate_item.name }}" class="compare-item-image">
+								<img src="{{ item_image }}" alt="{{ candidate_item_name }}" class="compare-item-image">
 							{% endif %}
 							<div class="compare-item-text">
-								<div class="compare-item-name">{{ candidate_item.name }}</div>
-								<div class="compare-item-reason">{{ candidate_item.reason }}</div>
+								<div class="compare-item-name">{{ candidate_item_name }}</div>
+								<div class="compare-item-reason">{{ candidate_item_reason }}</div>
 							</div>
 						</div>
 					</div>
@@ -989,7 +1755,7 @@
 				<div class="compare-header-main">
 					<h3>No Auto-Match Found</h3>
 					<div class="match-disclaimer">
-{{ auto_match_empty_state.body }}
+						{{ auto_match_empty_state.body }}
 					</div>
 				</div>
 				<button
@@ -1062,6 +1828,95 @@
 		emptyModal.querySelectorAll("[data-close-auto-match-empty]").forEach(function (node) {
 			node.addEventListener("click", closeEmptyModal);
 		});
+	});
+	</script>
+	<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		document.querySelectorAll(".ip-column-filter-form").forEach(function (form) {
+			form.addEventListener("submit", function () {
+				form.querySelectorAll(".ip-filter-csv-source").forEach(function (checkbox) {
+					const targetId = checkbox.getAttribute("data-target-input");
+					if (!targetId) return;
+
+					const hiddenInput = form.querySelector("#" + targetId);
+					if (!hiddenInput) return;
+
+					const selectedValues = Array.from(
+						form.querySelectorAll('.ip-filter-csv-source[data-target-input="' + targetId + '"]:checked')
+					).map(function (node) {
+						return node.value;
+					});
+
+					hiddenInput.value = selectedValues.join(",");
+				});
+
+				const currentAction = form.getAttribute("action") || window.location.pathname;
+				form.setAttribute("action", currentAction.split("#")[0] + "#available-chickens");
+			});
+		});
+	});
+	</script>
+	<script>
+	document.addEventListener("DOMContentLoaded", function () {
+		const popupBuild = document.getElementById("ultimate-popup-build");
+		const popupMinBuildCount = document.getElementById("ultimate-popup-min-build-count");
+		const popupMatchCount = document.getElementById("ultimate-popup-match-count");
+		const pairMaxText = document.getElementById("ultimate-available-pair-max");
+		const tableRows = Array.from(document.querySelectorAll("#ultimate-available-table tbody tr.clickable-row"));
+
+		if (!popupBuild || !popupMinBuildCount || !popupMatchCount || !pairMaxText || !tableRows.length) {
+			return;
+		}
+
+		function getVisibleRows() {
+			return tableRows.filter(function (row) {
+				return row.offsetParent !== null;
+			});
+		}
+
+		function recomputeUltimateAvailablePairMax() {
+			const selectedBuild = String(popupBuild.value || "all").trim().toLowerCase();
+			const minBuildCountRaw = String(popupMinBuildCount.value || "").trim();
+			const minBuildCount = minBuildCountRaw === "" ? null : parseInt(minBuildCountRaw, 10);
+
+			let eligibleCount = 0;
+
+			getVisibleRows().forEach(function (row) {
+				const rowBuild = String(row.dataset.buildKey || "").trim().toLowerCase();
+				const rowBuildCount = parseInt(row.dataset.buildCount || "0", 10) || 0;
+
+				if (selectedBuild !== "all" && rowBuild !== selectedBuild) {
+					return;
+				}
+
+				if (minBuildCount !== null && rowBuildCount < minBuildCount) {
+					return;
+				}
+
+				eligibleCount += 1;
+			});
+
+			const pairMax = Math.max(0, Math.floor(eligibleCount / 2));
+
+			pairMaxText.textContent = String(pairMax);
+			popupMatchCount.max = String(pairMax);
+
+			const currentValue = parseInt(popupMatchCount.value || "1", 10) || 1;
+
+			if (pairMax === 0) {
+				popupMatchCount.value = "1";
+			} else if (currentValue > pairMax) {
+				popupMatchCount.value = String(pairMax);
+			} else if (currentValue < 1) {
+				popupMatchCount.value = "1";
+			}
+		}
+
+		popupBuild.addEventListener("change", recomputeUltimateAvailablePairMax);
+		popupMinBuildCount.addEventListener("input", recomputeUltimateAvailablePairMax);
+		popupMinBuildCount.addEventListener("change", recomputeUltimateAvailablePairMax);
+
+		recomputeUltimateAvailablePairMax();
 	});
 	</script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>

@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Planner Item Check</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0f1116;
+            color: #f5f7fb;
+            margin: 0;
+            padding: 24px;
+        }
+
+        .page-wrap {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+		.top-actions {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 20px;
+			width: 100%;
+		}
+
+		.top-actions-left,
+		.top-actions-right {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+		}
+
+		.top-actions-right {
+			margin-left: auto;
+		}
+
+		.action-button {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 10px 14px;
+			border-radius: 10px;
+			background: #1f2633;
+			color: #fff !important;
+			text-decoration: none !important;
+			border: 1px solid #2e3748;
+			font-size: 14px;
+			font-weight: 700;
+			line-height: 1;
+			white-space: nowrap;
+		}
+
+		.action-button:hover {
+			background: #283246;
+		}
+
+        .section-card {
+            background: #171b23;
+            border: 1px solid #2b3342;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 18px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+        }
+
+        .section-note {
+            font-size: 14px;
+            color: #b6c0cf;
+            margin: 0;
+        }
+
+        .summary-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .summary-badge {
+            background: #202735;
+            border: 1px solid #313b4f;
+            border-radius: 12px;
+            padding: 12px 14px;
+            min-width: 160px;
+        }
+
+        .summary-badge-label {
+            font-size: 12px;
+            color: #9fb0c8;
+            margin-bottom: 6px;
+        }
+
+        .summary-badge-value {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .status-ready {
+            color: #7ee787;
+        }
+
+        .status-missing {
+            color: #ff8f8f;
+        }
+
+        .status-unknown {
+            color: #ffd580;
+        }
+
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 14px;
+            margin-top: 16px;
+        }
+
+        .item-card {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            background: #1c2230;
+            border: 1px solid #2d3647;
+            border-radius: 14px;
+            padding: 14px;
+        }
+
+        .item-card img {
+            width: 64px;
+            height: 64px;
+            border-radius: 12px;
+            object-fit: cover;
+            background: #0f1116;
+        }
+
+        .item-card-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .item-name {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .item-meta {
+            font-size: 13px;
+            color: #c0cad8;
+            line-height: 1.5;
+        }
+
+        .item-status {
+            margin-top: 6px;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .pair-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .pair-card {
+            background: #1c2230;
+            border: 1px solid #2d3647;
+            border-radius: 14px;
+            padding: 14px;
+        }
+		<!--pair status section-->
+		.pair-head {
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-start;
+			gap: 16px;
+			margin-bottom: 12px;
+		}
+
+		.pair-head-grid,
+		.pair-items-grid {
+			display: grid;
+			grid-template-columns: 320px 28px 320px;
+			gap: 12px;
+			width: 668px; /* 320 + 28 + 320 */
+			max-width: 100%;
+			align-items: start;
+		}
+
+		.pair-head-grid {
+			flex: 1;
+		}
+
+		.pair-head-side {
+			font-weight: 700;
+			font-size: 15px;
+			color: #f5f7fb;
+			line-height: 1.2;
+		}
+
+		.pair-head-left {
+			text-align: center;
+		}
+
+		.pair-head-right {
+			text-align: center;
+		}
+
+		.pair-head-heart,
+		.pair-items-middle {
+			width: 28px;
+			text-align: center;
+		}
+
+		.pair-head-heart {
+			font-size: 16px;
+			line-height: 1;
+		}
+
+		.pair-overall-status {
+			font-size: 14px;
+			font-weight: 700;
+			min-width: 70px;
+			text-align: right;
+			padding-top: 2px;
+		}
+
+		.pair-items-side {
+			display: flex;
+		}
+
+		.pair-items-left {
+			justify-content: flex-start;
+		}
+
+		.pair-items-right {
+			justify-content: flex-start;
+		}
+
+		.pair-item-compact {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			background: #202735;
+			border: 1px solid #313b4f;
+			border-radius: 12px;
+			padding: 10px 12px;
+			width: 320px;
+			max-width: 320px;
+			box-sizing: border-box;
+		}
+
+		.pair-item-compact img {
+			width: 42px;
+			height: 42px;
+			border-radius: 10px;
+			object-fit: cover;
+			background: #0f1116;
+		}
+
+        .empty-note {
+            color: #b6c0cf;
+            font-size: 14px;
+        }
+
+        .error-box {
+            background: #3a1f24;
+            border: 1px solid #7d3640;
+            color: #ffd7db;
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 18px;
+        }
+
+        .success-box {
+            background: #13281a;
+            border: 1px solid #2f6b42;
+            color: #c9f7d7;
+            border-radius: 12px;
+            padding: 14px;
+            margin-top: 16px;
+        }
+
+        .warning-box {
+            background: #332814;
+            border: 1px solid #7a6030;
+            color: #ffe7b0;
+            border-radius: 12px;
+            padding: 14px;
+            margin-top: 16px;
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+
+	<div class="top-actions">
+	    <div class="top-actions-left">
+			{% if source_page == "gene" %}
+				<a class="action-button" href="{{ url_for('match_gene_page', wallet_address=wallet, skip_auto_open=1) }}">🔙 to Gene</a>
+			{% elif source_page == "ultimate" %}
+				<a class="action-button" href="{{ url_for('match_ultimate_page', wallet_address=wallet, skip_auto_open=1) }}">🔙 to Ultimate</a>
+			{% else %}
+				<a class="action-button" href="{{ url_for('match_ip_page', wallet_address=wallet, skip_auto_open=1) }}">🔙 to IP</a>
+			{% endif %}
+		</div>
+		<div class="top-actions-right">
+			{% if item_check_summary["overall_status"] == "ready" %}
+				<a class="action-button" href="{{ url_for('planner_script_generate', wallet_address=wallet, source_page=source_page) }}">💻 Generate Script</a>
+			{% endif %}
+		</div>
+	</div>
+    {% if error %}
+        <div class="error-box">{{ error }}</div>
+    {% endif %}
+
+    <div class="section-card">
+        <h1 class="section-title">Planner Required Items</h1>
+        <p class="section-note">
+            This page checks whether your wallet has enough recommended breeding items for the current planner queue.
+        </p>
+
+        <div class="summary-badges">
+            <div class="summary-badge">
+                <div class="summary-badge-label">Planner Pairs</div>
+                <div class="summary-badge-value">{{ planner_summary.count }}</div>
+            </div>
+            <div class="summary-badge">
+                <div class="summary-badge-label">Required Item Types</div>
+                <div class="summary-badge-value">{{ item_check_summary["total_item_types"] }}</div>
+            </div>
+            <div class="summary-badge">
+                <div class="summary-badge-label">Total Required</div>
+                <div class="summary-badge-value">{{ item_check_summary["total_required_count"] }}</div>
+            </div>
+            <div class="summary-badge">
+                <div class="summary-badge-label">Total Missing</div>
+                <div class="summary-badge-value">{{ item_check_summary["total_missing_count"] }}</div>
+            </div>
+            <div class="summary-badge">
+                <div class="summary-badge-label">Overall Status</div>
+                <div class="summary-badge-value
+                    {% if item_check_summary["overall_status"] == 'ready' %}status-ready{% elif item_check_summary["overall_status"] == 'missing' %}status-missing{% else %}status-unknown{% endif %}">
+                    {{ item_check_summary["overall_status"]|title }}
+                </div>
+            </div>
+        </div>
+
+        {% if item_check_summary["overall_status"] == 'ready' %}
+            <div class="success-box">
+                All recommended items are available in the wallet for the current planner queue.
+            </div>
+        {% elif item_check_summary["overall_status"] == 'missing' %}
+            <div class="warning-box">
+                Some recommended items are missing. Craft or acquire the missing items first before using automation.
+            </div>
+        {% else %}
+            <div class="warning-box">
+                Some items could not be verified yet. Review the list below before proceeding.
+            </div>
+        {% endif %}
+    </div>
+
+	{% if item_check_summary["missing_items"] %}
+		<div class="section-card">
+			<h2 class="section-title">Missing Items</h2>
+
+			<div class="items-grid">
+				{% for item in item_check_summary["missing_items"] %}
+					<div class="item-card">
+						<img src="{{ item.image }}" alt="{{ item.name }}">
+						<div class="item-card-body">
+							<div class="item-name">{{ item.name }}</div>
+							<div class="item-meta">
+								Token ID: {{ item.token_id or '-' }}<br>
+								Required: {{ item.required_count }}<br>
+								Wallet: {{ item.available_count }}<br>
+								Missing: {{ item.missing_count }}
+							</div>
+							<div class="item-status status-missing">Missing</div>
+						</div>
+					</div>
+				{% endfor %}
+			</div>
+		</div>
+	{% endif %}
+
+    <div class="section-card">
+        <h2 class="section-title">All Required Items</h2>
+
+        {% if item_check_summary["items"] %}
+            <div class="items-grid">
+                {% for item in item_check_summary["items"] %}
+                    <div class="item-card">
+                        <img src="{{ item.image }}" alt="{{ item.name }}">
+                        <div class="item-card-body">
+                            <div class="item-name">{{ item.name }}</div>
+                            <div class="item-meta">
+                                Token ID: {{ item.token_id or '-' }}<br>
+                                Required: {{ item.required_count }}<br>
+                                Wallet: {{ item.available_count }}<br>
+                                Missing: {{ item.missing_count }}
+                            </div>
+                            <div class="item-status
+                                {% if item.status == 'ready' %}status-ready{% elif item.status == 'missing' %}status-missing{% else %}status-unknown{% endif %}">
+								{{ "Available" if item.status == "ready" else ("Missing" if item.status == "missing" else "Unknown") }}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="empty-note">The planner does not have any recommended items yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="section-card">
+        <h2 class="section-title">Per Pair Status</h2>
+
+        {% if per_pair_status_rows %}
+            <div class="pair-list">
+                {% for pair in per_pair_status_rows %}
+                    <div class="pair-card">
+						<div class="pair-head">
+							<div class="pair-head-grid">
+								<div class="pair-head-side pair-head-left">#{{ pair["left_token_id"] }}</div>
+								<div class="pair-head-heart">💜</div>
+								<div class="pair-head-side pair-head-right">#{{ pair["right_token_id"] }}</div>
+							</div>
+
+							<div class="pair-overall-status {% if pair['overall_status'] == 'ready' %}status-ready{% elif pair['overall_status'] == 'missing' %}status-missing{% else %}status-unknown{% endif %}">
+								{{ pair["overall_status"]|title }}
+							</div>
+						</div>
+
+						{% if pair["items"] %}
+							{% set left_item = pair["items"][0] if pair["items"]|length > 0 else None %}
+							{% set right_item = pair["items"][1] if pair["items"]|length > 1 else None %}
+
+							<div class="pair-items-grid">
+								<div class="pair-items-side pair-items-left">
+									{% if left_item %}
+										<div class="pair-item pair-item-compact">
+											<img src="{{ left_item['image'] }}" alt="{{ left_item['name'] }}">
+											<div class="pair-item-text">
+												<div class="pair-item-name">{{ left_item["name"] }} x 1</div>
+												<div class="pair-item-status {% if left_item['status'] == 'ready' %}status-ready{% elif left_item['status'] == 'missing' %}status-missing{% else %}status-unknown{% endif %}">
+													{{ "Available" if left_item["status"] == "ready" else ("Missing" if left_item["status"] == "missing" else "Unknown") }}
+												</div>
+											</div>
+										</div>
+									{% endif %}
+								</div>
+
+								<div class="pair-items-middle"></div>
+
+								<div class="pair-items-side pair-items-right">
+									{% if right_item %}
+										<div class="pair-item pair-item-compact">
+											<img src="{{ right_item['image'] }}" alt="{{ right_item['name'] }}">
+											<div class="pair-item-text">
+												<div class="pair-item-name">{{ right_item["name"] }} x 1</div>
+												<div class="pair-item-status {% if right_item['status'] == 'ready' %}status-ready{% elif right_item['status'] == 'missing' %}status-missing{% else %}status-unknown{% endif %}">
+													{{ "Available" if right_item["status"] == "ready" else ("Missing" if right_item["status"] == "missing" else "Unknown") }}
+												</div>
+											</div>
+										</div>
+									{% endif %}
+								</div>
+							</div>
+						{% else %}
+							<div class="empty-note">No recommended items recorded for this pair.</div>
+						{% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="empty-note">No planner pairs found.</p>
+        {% endif %}
+    </div>
+
+</div>
+</body>
+</html>

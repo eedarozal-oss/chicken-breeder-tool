@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Chicken Saga Automation Script</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0f1116;
+            color: #f5f7fb;
+            margin: 0;
+            padding: 24px;
+        }
+
+        .page-wrap {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .top-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .top-actions-left,
+        .top-actions-right {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .top-actions a {
+            display: inline-block;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: #1f2633;
+            color: #fff;
+            text-decoration: none;
+            border: 1px solid #2e3748;
+            font-weight: 700;
+        }
+
+        .top-actions a:hover {
+            background: #283246;
+        }
+
+        .section-card {
+            background: #171b23;
+            border: 1px solid #2b3342;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 18px;
+        }
+
+        .section-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+        }
+
+        .section-subtitle {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0 0 12px 0;
+        }
+
+        .section-note {
+            font-size: 14px;
+            color: #b6c0cf;
+            margin: 0;
+            line-height: 1.7;
+        }
+
+        .bookmarklet-box {
+            background: #202735;
+            border: 1px solid #313b4f;
+            border-radius: 14px;
+            padding: 16px;
+            margin-top: 14px;
+        }
+
+        .bookmarklet-link-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            margin-top: 14px;
+        }
+
+        .bookmarklet-link {
+            display: inline-block;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: #2a3344;
+            color: #ffffff;
+            text-decoration: none;
+            border: 1px solid #3b4960;
+            font-weight: 700;
+        }
+
+        .bookmarklet-link:hover {
+            background: #324057;
+        }
+
+        .warning-box {
+            background: #332814;
+            border: 1px solid #7a6030;
+            color: #ffe7b0;
+            border-radius: 12px;
+            padding: 14px;
+            margin-top: 16px;
+        }
+
+        .small-note {
+            font-size: 13px;
+            color: #9fb0c8;
+            margin-top: 10px;
+            line-height: 1.6;
+        }
+
+        .planner-pairs {
+            margin-top: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .planner-pair-row {
+            background: #1c2230;
+            border: 1px solid #2d3647;
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-size: 14px;
+            color: #dce5f2;
+            line-height: 1.6;
+        }
+
+        .planner-pair-row strong {
+            color: #ffffff;
+        }
+
+        .empty-note {
+            font-size: 14px;
+            color: #b6c0cf;
+        }
+
+        .inline-link {
+            color: #d9e8ff;
+            text-decoration: underline;
+        }
+
+        .instruction-block p + p {
+            margin-top: 12px;
+        }
+		
+		.tutorial-media-wrap {
+			margin-top: 14px;
+			max-width: 580px;
+			margin-left: auto;
+			margin-right: auto;
+			border-radius: 14px;
+			overflow: hidden;
+			border: 1px solid #2b3342;
+			background: #141923;
+		}
+
+		.tutorial-media {
+			display: block;
+			width: 100%;
+			height: auto;
+			max-height: 260px;
+			object-fit: contain;
+			background: #141923;
+		}
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+
+    <div class="top-actions">
+        <div class="top-actions-left">
+			{% if source_page == "gene" %}
+				<a href="{{ url_for('match_gene_page', wallet_address=wallet, skip_auto_open=1, open_planner=1) }}">🔙 Back to Planner</a>
+			{% elif source_page == "ultimate" %}
+				<a href="{{ url_for('match_ultimate_page', wallet_address=wallet, skip_auto_open=1, open_planner=1) }}">🔙 Back to Planner</a>
+			{% else %}
+				<a href="{{ url_for('match_ip_page', wallet_address=wallet, skip_auto_open=1, open_planner=1) }}">🔙 Back to Planner</a>
+			{% endif %}
+        </div>
+
+        <div class="top-actions-right">
+            <a href="https://app.chickensaga.com/breeding" target="_blank" rel="noopener noreferrer">Open Chicken Saga</a>
+        </div>
+    </div>
+
+    <div class="section-card">
+        <h2 class="section-subtitle">How to Use This Script</h2>
+
+        <div class="instruction-block">
+            <p class="section-note">
+                Step 1 — Drag the bookmarklet below to your browser bookmarks bar.
+            </p>
+        </div>
+
+        <div class="bookmarklet-box">
+            <div class="bookmarklet-link-wrap">
+                <a class="bookmarklet-link" href="{{ bookmarklet_code }}">Apex Breeder Auto Fill</a>
+            </div>
+            <div class="small-note">
+                If your bookmarks bar is hidden, enable it first in your browser. Save the bookmark again whenever you generate an updated script.
+            </div>
+        </div>
+
+        <div class="instruction-block" style="margin-top:16px;">
+            <p class="section-note">
+                Step 2 — Open the Chicken Saga breeding page:
+                <a class="inline-link" href="https://app.chickensaga.com/breeding" target="_blank" rel="noopener noreferrer">Open Breeding Page</a>
+            </p>
+
+            <p class="section-note">
+                Step 3 — Switch the page to Mass Breeding.
+            </p>
+
+            <p class="section-note">
+                Step 4 — Click the saved bookmark from your bookmarks bar.
+            </p>
+
+            <p class="section-note">
+                Step 5 — Review all pairs and items before final breeding confirmation.
+            </p>
+        </div>
+
+        <div class="warning-box">
+            Final blockchain confirmation should still be reviewed manually.
+        </div>
+    </div>
+	<div class="section-card">
+        <h1 class="section-title">Chicken Saga Automation Script</h1>
+        <p class="section-note">
+            Save the bookmark once, then use it on the Chicken Saga Mass Breeding page.
+        </p>
+
+		<div class="tutorial-media-wrap">
+			<video
+				class="tutorial-media"
+				controls
+				autoplay
+				muted
+				loop
+				playsinline>
+				<source src="{{ url_for('static', filename='images/gifplanner.mp4') }}" type="video/mp4">
+				Your browser does not support the video tag.
+			</video>
+		</div>
+
+		<p class="small-note">
+			Quick walkthrough: save the bookmark, open Chicken Saga breeding, then click the saved bookmark.
+		</p>
+    </div>
+
+
+    <div class="section-card">
+        <h2 class="section-subtitle">Current Planner Queue</h2>
+
+        <p class="section-note" style="margin-bottom:14px;">
+            Planner pairs: <strong>{{ planner_summary.count }}</strong>
+        </p>
+
+        {% if planner_queue %}
+            <div class="planner-pairs">
+                {% for row in planner_queue %}
+                    <div class="planner-pair-row">
+                        <strong>#{{ row["left"]["token_id"] }}</strong>
+                        💜
+                        <strong>#{{ row["right"]["token_id"] }}</strong>
+                        {% if row["left_item"] or row["right_item"] %}
+                            <br>
+                            {% if row["left_item"] %}
+                                {{ row["left_item"]["name"] }}
+                            {% endif %}
+                            {% if row["left_item"] and row["right_item"] %} | {% endif %}
+                            {% if row["right_item"] %}
+                                {{ row["right_item"]["name"] }}
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="empty-note">No planner pairs found.</p>
+        {% endif %}
+    </div>
+
+</div>
+</body>
+</html>
