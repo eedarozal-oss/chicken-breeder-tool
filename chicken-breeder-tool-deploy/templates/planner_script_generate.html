@@ -202,15 +202,33 @@
     <div class="section-card">
         <h2 class="section-subtitle">How to Use This Script</h2>
 
-        <div class="instruction-block">
-            <p class="section-note">
-                Step 1 — Drag the bookmarklet below to your browser bookmarks bar.
-            </p>
-        </div>
+		<div class="instruction-block">
+			<p class="section-note">
+				{% if script_mode == "full" %}
+					Selected mode: Full Script. This will fill pairs and all recommended items.
+				{% elif script_mode == "partial" %}
+					Selected mode: Partial Script. This will fill pairs and only the recommended items currently available in your wallet.
+				{% else %}
+					Selected mode: Without Items. This will fill pairs only and skip all items.
+				{% endif %}
+			</p>
+
+			<p class="section-note" style="margin-top:12px;">
+				Step 1 — Drag the bookmarklet below to your browser bookmarks bar.
+			</p>
+		</div>
 
         <div class="bookmarklet-box">
             <div class="bookmarklet-link-wrap">
-                <a class="bookmarklet-link" href="{{ bookmarklet_code }}">Apex Breeder Auto Fill</a>
+                <a class="bookmarklet-link" href="{{ bookmarklet_code }}">
+					{% if script_mode == "full" %}
+						Apex Breeder Auto Fill - Full
+					{% elif script_mode == "partial" %}
+						Apex Breeder Auto Fill - Partial
+					{% else %}
+						Apex Breeder Auto Fill - No Items
+					{% endif %}
+				</a>
             </div>
             <div class="small-note">
                 If your bookmarks bar is hidden, enable it first in your browser. Save the bookmark again whenever you generate an updated script.
@@ -231,9 +249,15 @@
                 Step 4 — Click the saved bookmark from your bookmarks bar.
             </p>
 
-            <p class="section-note">
-                Step 5 — Review all pairs and items before final breeding confirmation.
-            </p>
+			<p class="section-note">
+				{% if script_mode == "no_items" %}
+					Step 5 — Review all pairs and manually add any items you still want before final breeding confirmation.
+				{% elif script_mode == "partial" %}
+					Step 5 — Review all pairs and confirm any skipped items before final breeding confirmation.
+				{% else %}
+					Step 5 — Review all pairs and items before final breeding confirmation.
+				{% endif %}
+			</p>
         </div>
 
         <div class="warning-box">
@@ -242,9 +266,15 @@
     </div>
 	<div class="section-card">
         <h1 class="section-title">Chicken Saga Automation Script</h1>
-        <p class="section-note">
-            Save the bookmark once, then use it on the Chicken Saga Mass Breeding page.
-        </p>
+		<p class="section-note">
+			{% if script_mode == "full" %}
+				This script will fill planner pairs and all recommended items.
+			{% elif script_mode == "partial" %}
+				This script will fill planner pairs and use only the recommended items currently available in your wallet.
+			{% else %}
+				This script will fill planner pairs only and will skip all items.
+			{% endif %}
+		</p>
 
 		<div class="tutorial-media-wrap">
 			<video
@@ -268,9 +298,20 @@
     <div class="section-card">
         <h2 class="section-subtitle">Current Planner Queue</h2>
 
-        <p class="section-note" style="margin-bottom:14px;">
-            Planner pairs: <strong>{{ planner_summary.count }}</strong>
-        </p>
+		<p class="section-note" style="margin-bottom:14px;">
+			Planner pairs: <strong>{{ planner_summary.count }}</strong>
+			<br>
+			Mode:
+			<strong>
+				{% if script_mode == "full" %}
+					Full Script
+				{% elif script_mode == "partial" %}
+					Partial Script
+				{% else %}
+					Without Items
+				{% endif %}
+			</strong>
+		</p>
 
         {% if planner_queue %}
             <div class="planner-pairs">

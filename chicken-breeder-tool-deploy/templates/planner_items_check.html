@@ -430,7 +430,11 @@
 		</div>
 		<div class="top-actions-right">
 			{% if item_check_summary["overall_status"] == "ready" %}
-				<a class="action-button" href="{{ url_for('planner_script_generate', wallet_address=wallet, source_page=source_page) }}">🖳 Generate Script</a>
+				<a class="action-button" href="{{ url_for('planner_script_generate', wallet_address=wallet, source_page=source_page, script_mode='full') }}">🖳 Generate Full Script</a>
+				<a class="action-button" href="{{ url_for('planner_script_generate', wallet_address=wallet, source_page=source_page, script_mode='no_items') }}">🖳 Generate No-Item Script</a>
+			{% else %}
+				<a class="action-button" href="{{ url_for('planner_script_generate', wallet_address=wallet, source_page=source_page, script_mode='partial') }}">🖳 Generate Partial Script</a>
+				<a class="action-button" href="{{ url_for('planner_script_generate', wallet_address=wallet, source_page=source_page, script_mode='no_items') }}">🖳 Generate No-Item Script</a>
 			{% endif %}
 		</div>
 	</div>
@@ -474,10 +478,10 @@
             <div class="success-box">
                 All recommended items are available in the wallet for the current planner queue.
             </div>
-        {% elif item_check_summary["overall_status"] == 'missing' %}
-            <div class="warning-box">
-                Some recommended items are missing. Craft or acquire the missing items first before using automation.
-            </div>
+		{% elif item_check_summary["overall_status"] == 'missing' %}
+			<div class="warning-box">
+				Some recommended items are missing. You can still continue with Partial Script or Without Items.
+			</div>
         {% else %}
             <div class="warning-box">
                 Some items could not be verified yet. Review the list below before proceeding.
@@ -631,15 +635,15 @@
 				<div class="automation-step-row">
 					<div class="automation-step-label automation-step-label-2">Step 2</div>
 					<div class="automation-step-content">
-						<div class="automation-step-title">Generate script</div>
+						<div class="automation-step-title">Generate the script you want to use</div>
 						<div class="automation-step-text">
-							Generate and run the Mass Breeding automation script.
+							Use Full Script if all items are ready, Partial Script if some items are missing, or Without Items to fill pairs only.
 						</div>
 					</div>
 				</div>
 
 				<div class="automation-note">
-					Note: Script generation is available only when all required items are complete.
+					Note: Full Script is available when all required items are complete. If items are missing, you can still generate a Partial Script or a Without Items script.
 				</div>
 			</div>
 
