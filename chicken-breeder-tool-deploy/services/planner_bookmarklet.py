@@ -246,28 +246,32 @@ javascript:(async()=>{{
     return null;
   }}
 
-  function getItemSlotButton(slotLabel) {{
-    const wrappers = visibleAll('div.flex.flex-col.items-center.gap-2');
-
-    for (const wrapper of wrappers) {{
+  function getItemSlotWrappers() {{
+    return visibleAll('div.flex.flex-col.items-center.gap-2').filter(wrapper => {{
       const t = textOf(wrapper).toLowerCase();
-
-      if (!t.includes((slotLabel || '').trim().toLowerCase())) {{
-        continue;
-      }}
-
-      const addBtn = visibleAll('button', wrapper).find(btn => textOf(btn).toLowerCase() === 'add item');
-      if (addBtn) {{
-        return addBtn;
-      }}
-    }}
-
-    return null;
+      return t.includes('parent 1 items') || t.includes('parent 2 items');
+    }});
   }}
 
-  async function openItemSlot(slotLabel) {{
-    const btn = getItemSlotButton(slotLabel);
-    if (!btn) throw new Error('Add Item button not found for ' + slotLabel);
+  function getItemSlotButtonByPairIndex(pairIndex, slotLabel) {{
+    const wrappers = getItemSlotWrappers();
+    const normalized = String(slotLabel || '').trim().toLowerCase();
+
+    const slotOffset = normalized === 'parent 2 items' ? 1 : 0;
+    const wrapperIndex = (pairIndex * 2) + slotOffset;
+    const wrapper = wrappers[wrapperIndex];
+
+    if (!wrapper) {{
+      return null;
+    }}
+
+    const addBtn = visibleAll('button', wrapper).find(btn => textOf(btn).toLowerCase() === 'add item');
+    return addBtn || null;
+  }}
+
+  async function openItemSlot(pairIndex, slotLabel) {{
+    const btn = getItemSlotButtonByPairIndex(pairIndex, slotLabel);
+    if (!btn) throw new Error('Add Item button not found for pair #' + (pairIndex + 1) + ' ' + slotLabel);
 
     btn.scrollIntoView({{ block: 'center', behavior: 'instant' }});
     btn.click();
@@ -309,10 +313,10 @@ javascript:(async()=>{{
     await sleep(500);
   }}
 
-  async function selectItemByName(itemName, slotLabel, strictItems) {{
+  async function selectItemByName(itemName, pairIndex, slotLabel, strictItems) {{
     if (!itemName) return false;
 
-    await openItemSlot(slotLabel);
+    await openItemSlot(pairIndex, slotLabel);
 
     let dialog = getItemDialog();
     if (!dialog) {{
@@ -395,7 +399,7 @@ javascript:(async()=>{{
     await sleep(1200);
   }}
 
-  async function fillPair(pair, strictItems) {{
+  async function fillPair(pair, pairIndex, strictItems) {{
     if (!pair || !pair.left_token_id || !pair.right_token_id) {{
       throw new Error('Planner pair is missing token IDs.');
     }}
@@ -403,8 +407,8 @@ javascript:(async()=>{{
     await fillChickenByToken(pair.left_token_id);
     await fillChickenByToken(pair.right_token_id);
 
-    await selectItemByName(pair.left_item_name, 'parent 1 items', strictItems);
-    await selectItemByName(pair.right_item_name, 'parent 2 items', strictItems);
+    await selectItemByName(pair.left_item_name, pairIndex, 'parent 1 items', strictItems);
+    await selectItemByName(pair.right_item_name, pairIndex, 'parent 2 items', strictItems);
   }}
 
   try {{
@@ -437,7 +441,7 @@ javascript:(async()=>{{
 
     for (let i = 0; i < pairCountToFill; i++) {{
       const pair = plannerPairs[i];
-      await fillPair(pair, strictItems);
+      await fillPair(pair, i, strictItems);
 
       if (i < pairCountToFill - 1) {{
         await clickAddPair();
