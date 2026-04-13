@@ -1480,12 +1480,12 @@
 				</div>
                 <div class="multi-match-side multi-match-side-boxed">
                     <h4>Chicken #{{ row.left.token_id }}</h4>
-                    <div class="multi-match-details-grid">
-                        <div><strong>Type</strong><span>{{ row.left.ultimate_type_display or '' }}</span></div>
-                        <div><strong>IP</strong><span>{{ row.left.ip or '' }}</span></div>
-                        <div><strong>Build</strong><span>{{ row.left.ultimate_build_display or 'No Build' }}</span></div>
-                        <div><strong>Build Count</strong><span>{{ row.left.ultimate_build_match_display or 'N/A' }}</span></div>
-                    </div>
+					<div class="multi-match-details-grid">
+						<div><strong>IP</strong><span>{{ row.left.ip or '' }}</span></div>
+						<div><strong>Build</strong><span>{{ row.left.ultimate_build_match_display or 'N/A' }}{% if row.left.ultimate_build_display %} ({{ row.left.ultimate_build_display }}){% endif %}</span></div>
+						<div><strong>Added Traits</strong><span>+{{ row.left_adds_missing_traits if row.left_adds_missing_traits is not none else 0 }}</span></div>
+						<div><strong>Ninuno %</strong><span>{{ row.left.ownership_percent if row.left.ownership_percent is not none else 0 }}%</span></div>
+					</div>
                     <div class="multi-match-item-bar">
                         <div class="multi-match-item-inner multi-match-item-inner-right">
                             Recommended item: {{ row.left_item.name if row.left_item else 'No item recommended' }}
@@ -1531,12 +1531,12 @@
 
                 <div class="multi-match-side multi-match-side-boxed">
                     <h4>Chicken #{{ row.right.token_id }}</h4>
-                    <div class="multi-match-details-grid">
-                        <div><strong>Type</strong><span>{{ row.right.ultimate_type_display or '' }}</span></div>
-                        <div><strong>IP</strong><span>{{ row.right.ip or '' }}</span></div>
-                        <div><strong>Build</strong><span>{{ row.right.ultimate_build_display or 'No Build' }}</span></div>
-                        <div><strong>Build Count</strong><span>{{ row.right.ultimate_build_match_display or 'N/A' }}</span></div>
-                    </div>
+					<div class="multi-match-details-grid">
+						<div><strong>IP</strong><span>{{ row.right.ip or '' }}</span></div>
+						<div><strong>Build</strong><span>{{ row.right.ultimate_build_match_display or 'N/A' }}{% if row.right.ultimate_build_display %} ({{ row.right.ultimate_build_display }}){% endif %}</span></div>
+						<div><strong>Added Traits</strong><span>+{{ row.right_adds_missing_traits if row.right_adds_missing_traits is not none else 0 }}</span></div>
+						<div><strong>Ninuno %</strong><span>{{ row.right.ownership_percent if row.right.ownership_percent is not none else 0 }}%</span></div>
+					</div>
                     <div class="multi-match-item-bar">
                         {% set right_item_image = get_item_image_url(row.right_item.name) if row.right_item else '' %}
                         {% if right_item_image %}
