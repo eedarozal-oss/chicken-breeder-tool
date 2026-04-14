@@ -2482,6 +2482,12 @@ body.modal-open {
         linear-gradient(180deg, rgba(13, 25, 42, 0.96) 0%, rgba(7, 15, 26, 0.96) 100%);
 }
 
+.breeding-page-ultimate .build-type-guide {
+    border-color: rgba(177, 124, 255, 0.18);
+    background: rgba(71, 38, 112, 0.18);
+    color: #f0e6ff;
+}
+
 .breeding-page-ultimate .details-card {
     border-color: rgba(177, 124, 255, 0.16);
 }
