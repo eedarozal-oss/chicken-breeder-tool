@@ -1,3 +1,5 @@
+import json
+
 from datetime import datetime, timezone
 from services.db.connection import get_connection
 
@@ -75,10 +77,18 @@ def upsert_chicken(record: dict):
                 primary_build_match_count,
                 primary_build_match_total,
 
+                primary_build_matched_slots,
+                primary_build_missing_slots,
+                primary_build_evaluations,
+
                 recessive_build,
                 recessive_build_match_count,
                 recessive_build_match_total,
                 recessive_build_repeat_bonus,
+
+                recessive_build_matched_slots,
+                recessive_build_missing_slots,
+                recessive_build_evaluations,
 
                 ultimate_type,
 
@@ -160,10 +170,18 @@ def upsert_chicken(record: dict):
                 :primary_build_match_count,
                 :primary_build_match_total,
 
+                :primary_build_matched_slots,
+                :primary_build_missing_slots,
+                :primary_build_evaluations,
+
                 :recessive_build,
                 :recessive_build_match_count,
                 :recessive_build_match_total,
                 :recessive_build_repeat_bonus,
+
+                :recessive_build_matched_slots,
+                :recessive_build_missing_slots,
+                :recessive_build_evaluations,
 
                 :ultimate_type,
 
@@ -244,10 +262,18 @@ def upsert_chicken(record: dict):
                 primary_build_match_count = COALESCE(excluded.primary_build_match_count, chickens.primary_build_match_count),
                 primary_build_match_total = COALESCE(excluded.primary_build_match_total, chickens.primary_build_match_total),
 
+                primary_build_matched_slots = COALESCE(excluded.primary_build_matched_slots, chickens.primary_build_matched_slots),
+                primary_build_missing_slots = COALESCE(excluded.primary_build_missing_slots, chickens.primary_build_missing_slots),
+                primary_build_evaluations = COALESCE(excluded.primary_build_evaluations, chickens.primary_build_evaluations),
+
                 recessive_build = COALESCE(excluded.recessive_build, chickens.recessive_build),
                 recessive_build_match_count = COALESCE(excluded.recessive_build_match_count, chickens.recessive_build_match_count),
                 recessive_build_match_total = COALESCE(excluded.recessive_build_match_total, chickens.recessive_build_match_total),
                 recessive_build_repeat_bonus = COALESCE(excluded.recessive_build_repeat_bonus, chickens.recessive_build_repeat_bonus),
+
+                recessive_build_matched_slots = COALESCE(excluded.recessive_build_matched_slots, chickens.recessive_build_matched_slots),
+                recessive_build_missing_slots = COALESCE(excluded.recessive_build_missing_slots, chickens.recessive_build_missing_slots),
+                recessive_build_evaluations = COALESCE(excluded.recessive_build_evaluations, chickens.recessive_build_evaluations),
 
                 ultimate_type = COALESCE(excluded.ultimate_type, chickens.ultimate_type),
 
@@ -329,10 +355,18 @@ def upsert_chicken(record: dict):
                 "primary_build_match_count": record.get("primary_build_match_count"),
                 "primary_build_match_total": record.get("primary_build_match_total"),
 
+                "primary_build_matched_slots": json.dumps(record.get("primary_build_matched_slots") or []),
+                "primary_build_missing_slots": json.dumps(record.get("primary_build_missing_slots") or []),
+                "primary_build_evaluations": json.dumps(record.get("primary_build_evaluations") or {}),
+
                 "recessive_build": record.get("recessive_build"),
                 "recessive_build_match_count": record.get("recessive_build_match_count"),
                 "recessive_build_match_total": record.get("recessive_build_match_total"),
                 "recessive_build_repeat_bonus": record.get("recessive_build_repeat_bonus"),
+
+                "recessive_build_matched_slots": json.dumps(record.get("recessive_build_matched_slots") or []),
+                "recessive_build_missing_slots": json.dumps(record.get("recessive_build_missing_slots") or []),
+                "recessive_build_evaluations": json.dumps(record.get("recessive_build_evaluations") or {}),
 
                 "ultimate_type": record.get("ultimate_type"),
 

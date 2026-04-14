@@ -82,10 +82,18 @@ def init_db():
                 primary_build_match_count INTEGER,
                 primary_build_match_total INTEGER,
 
+                primary_build_matched_slots TEXT,
+                primary_build_missing_slots TEXT,
+                primary_build_evaluations TEXT,
+
                 recessive_build TEXT,
                 recessive_build_match_count INTEGER,
                 recessive_build_match_total INTEGER,
                 recessive_build_repeat_bonus INTEGER,
+
+                recessive_build_matched_slots TEXT,
+                recessive_build_missing_slots TEXT,
+                recessive_build_evaluations TEXT,
 
                 ultimate_type TEXT,
 
@@ -181,10 +189,18 @@ def init_db():
         ensure_column(conn, "chickens", "primary_build_match_count", "INTEGER")
         ensure_column(conn, "chickens", "primary_build_match_total", "INTEGER")
 
+        ensure_column(conn, "chickens", "primary_build_matched_slots", "TEXT")
+        ensure_column(conn, "chickens", "primary_build_missing_slots", "TEXT")
+        ensure_column(conn, "chickens", "primary_build_evaluations", "TEXT")
+
         ensure_column(conn, "chickens", "recessive_build", "TEXT")
         ensure_column(conn, "chickens", "recessive_build_match_count", "INTEGER")
         ensure_column(conn, "chickens", "recessive_build_match_total", "INTEGER")
         ensure_column(conn, "chickens", "recessive_build_repeat_bonus", "INTEGER")
+
+        ensure_column(conn, "chickens", "recessive_build_matched_slots", "TEXT")
+        ensure_column(conn, "chickens", "recessive_build_missing_slots", "TEXT")
+        ensure_column(conn, "chickens", "recessive_build_evaluations", "TEXT")
 
         ensure_column(conn, "chickens", "ultimate_type", "TEXT")
 
