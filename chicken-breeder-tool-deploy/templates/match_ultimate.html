@@ -138,7 +138,21 @@
 							</button>
 						</div>
 					</div>
-
+					{% if ultimate_filter_build and ultimate_filter_build != 'all' %}
+					<div class="build-type-guide">
+						{% if ultimate_filter_build == 'killua' %}
+							Showing <strong>Killua</strong> builds. Focus: <strong>high damage</strong> and <strong>high speed</strong>.
+						{% elif ultimate_filter_build == 'shanks' %}
+							Showing <strong>Shanks</strong> builds. Focus: <strong>high defense</strong>, <strong>evasion</strong>, and <strong>HP</strong>.
+						{% elif ultimate_filter_build == 'levi' %}
+							Showing <strong>Levi</strong> builds. Focus: <strong>balanced stats</strong> and a more <strong>all-rounder setup</strong>.
+						{% elif ultimate_filter_build == 'hybrid 1' %}
+							Showing <strong>Hybrid 1</strong> builds. Shared-trait fallback build using <strong>comb</strong> and <strong>eyes</strong>. Compatible main builds: <strong>Killua</strong>, <strong>Shanks</strong>, and <strong>Levi</strong>.
+						{% elif ultimate_filter_build == 'hybrid 2' %}
+							Showing <strong>Hybrid 2</strong> builds. Shared-trait fallback build using <strong>comb</strong>, <strong>eyes</strong>, and <strong>wings</strong>. Compatible main builds: <strong>Killua</strong> and <strong>Levi</strong>.
+						{% endif %}
+					</div>
+					{% endif %}
 					<div class="table-wrap limited-table ip-available-table">
 						<table id="ultimate-available-table">
 							<thead>
@@ -1061,6 +1075,22 @@
 				</div>
 				<div class="panel breeding-panel">
 					<h2>Potential Ultimate Matches</h2>
+					{% if selected_chicken and selected_chicken.ultimate_build_display %}
+						<div class="build-type-guide">
+							Target Build: <strong>{{ selected_chicken.ultimate_build_display }}</strong>.
+							{% if selected_chicken.ultimate_build_key == 'killua' or selected_chicken.primary_build == 'killua' %}
+								Focus: <strong>high damage</strong> and <strong>high speed</strong>.
+							{% elif selected_chicken.ultimate_build_key == 'shanks' or selected_chicken.primary_build == 'shanks' %}
+								Focus: <strong>high defense</strong>, <strong>evasion</strong>, and <strong>HP</strong>.
+							{% elif selected_chicken.ultimate_build_key == 'levi' or selected_chicken.primary_build == 'levi' %}
+								Focus: <strong>balanced stats</strong> and a more <strong>all-rounder setup</strong>.
+							{% elif selected_chicken.ultimate_build_key == 'hybrid 1' or selected_chicken.primary_build == 'hybrid 1' %}
+								Shared-trait fallback build using <strong>comb</strong> and <strong>eyes</strong>. Compatible main builds: <strong>Killua</strong>, <strong>Shanks</strong>, and <strong>Levi</strong>.
+							{% elif selected_chicken.ultimate_build_key == 'hybrid 2' or selected_chicken.primary_build == 'hybrid 2' %}
+								Shared-trait fallback build using <strong>comb</strong>, <strong>eyes</strong>, and <strong>wings</strong>. Compatible main builds: <strong>Killua</strong> and <strong>Levi</strong>.
+							{% endif %}
+						</div>
+					{% endif %}
 					{% if selected_chicken %}
 						{% if potential_matches %}
 							<div class="table-wrap">
@@ -1864,6 +1894,32 @@
 		if (!popupBuild || !popupMinBuildCount || !popupMatchCount || !pairMaxText || !tableRows.length) {
 			return;
 		}
+		
+		function getUltimateBuildCompatibility(buildKey) {
+			const key = String(buildKey || "").trim().toLowerCase();
+
+			const compatibility = {
+				"killua": new Set(["killua", "hybrid 1", "hybrid 2"]),
+				"shanks": new Set(["shanks", "hybrid 1"]),
+				"levi": new Set(["levi", "hybrid 1", "hybrid 2"]),
+				"hybrid 1": new Set(["killua", "shanks", "levi", "hybrid 1"]),
+				"hybrid 2": new Set(["killua", "levi", "hybrid 2"]),
+			};
+
+			return compatibility[key] || new Set();
+		}
+
+		function ultimateBuildsAreCompatible(selectedBuild, rowBuild) {
+			const left = String(selectedBuild || "").trim().toLowerCase();
+			const right = String(rowBuild || "").trim().toLowerCase();
+
+			if (!left || !right) return false;
+
+			const leftCompatible = getUltimateBuildCompatibility(left);
+			const rightCompatible = getUltimateBuildCompatibility(right);
+
+			return leftCompatible.has(right) && rightCompatible.has(left);
+		}
 
 		function getVisibleRows() {
 			return tableRows.filter(function (row) {
@@ -1882,7 +1938,7 @@
 				const rowBuild = String(row.dataset.buildKey || "").trim().toLowerCase();
 				const rowBuildCount = parseInt(row.dataset.buildCount || "0", 10) || 0;
 
-				if (selectedBuild !== "all" && rowBuild !== selectedBuild) {
+				if (selectedBuild !== "all" && !ultimateBuildsAreCompatible(selectedBuild, rowBuild)) {
 					return;
 				}
 

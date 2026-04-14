@@ -47,7 +47,7 @@
 					<div class="breeding-hero-side-label">Mode</div>
 					<div class="breeding-hero-side-value">Gene</div>
 					<div class="breeding-hero-side-note">
-						Review available chickens, check their best build fit, and compare same-build pairings.
+						Review available chickens, check their best build fit, and compare compatible gene pairings.
 					</div>
 				</div>
 
@@ -56,7 +56,7 @@
 					<ol class="breeding-hero-steps-list" aria-label="Gene breeding workflow">
 						<li><span>Review available chickens</span></li>
 						<li><span>Select a chicken</span></li>
-						<li><span>Compare same-build matches</span></li>
+						<li><span>Compare compatible matches</span></li>
 					</ol>
 				</div>
 			</div>
@@ -162,6 +162,21 @@
 					</button>
 				</div>
 			</div>
+			{% if gene_filter_build and gene_filter_build != 'all' %}
+			<div class="build-type-guide">
+				{% if gene_filter_build == 'killua' %}
+					Showing <strong>Killua</strong> builds. Focus: <strong>high damage</strong> and <strong>high speed</strong>.
+				{% elif gene_filter_build == 'shanks' %}
+					Showing <strong>Shanks</strong> builds. Focus: <strong>high defense</strong>, <strong>evasion</strong>, and <strong>HP</strong>.
+				{% elif gene_filter_build == 'levi' %}
+					Showing <strong>Levi</strong> builds. Focus: <strong>balanced stats</strong> and a more <strong>all-rounder setup</strong>.
+				{% elif gene_filter_build == 'hybrid 1' %}
+					Showing <strong>Hybrid 1</strong> builds. Shared-trait fallback build using <strong>comb</strong> and <strong>eyes</strong>. Compatible main builds: <strong>Killua</strong>, <strong>Shanks</strong>, and <strong>Levi</strong>.
+				{% elif gene_filter_build == 'hybrid 2' %}
+					Showing <strong>Hybrid 2</strong> builds. Shared-trait fallback build using <strong>comb</strong>, <strong>eyes</strong>, and <strong>wings</strong>. Compatible main builds: <strong>Killua</strong> and <strong>Levi</strong>.
+				{% endif %}
+			</div>
+			{% endif %}
 				<div class="table-wrap limited-table ip-available-table">
 					<table id="gene-available-table">
 						<thead>
@@ -1332,7 +1347,18 @@
 					<h2>Potential Gene Matches</h2>
 					{% if selected_chicken and selected_chicken.build_display %}
 						<div class="build-type-guide">
-							Target Build: <strong>{{ selected_chicken.build_display }}</strong>
+							Target Build: <strong>{{ selected_chicken.build_display }}</strong>.
+							{% if selected_chicken.build_type == 'killua' %}
+								Focus: <strong>high damage</strong> and <strong>high speed</strong>.
+							{% elif selected_chicken.build_type == 'shanks' %}
+								Focus: <strong>high defense</strong>, <strong>evasion</strong>, and <strong>HP</strong>.
+							{% elif selected_chicken.build_type == 'levi' %}
+								Focus: <strong>balanced stats</strong> and a more <strong>all-rounder setup</strong>.
+							{% elif selected_chicken.build_type == 'hybrid 1' %}
+								Shared-trait fallback build using <strong>comb</strong> and <strong>eyes</strong>. Compatible main builds: <strong>Killua</strong>, <strong>Shanks</strong>, and <strong>Levi</strong>.
+							{% elif selected_chicken.build_type == 'hybrid 2' %}
+								Shared-trait fallback build using <strong>comb</strong>, <strong>eyes</strong>, and <strong>wings</strong>. Compatible main builds: <strong>Killua</strong> and <strong>Levi</strong>.
+							{% endif %}
 						</div>
 					{% endif %}
 					{% if selected_chicken %}
@@ -2071,97 +2097,7 @@
 		</div>
 	</div>
 {% endif %}
-	
-	<script>
-	document.addEventListener("DOMContentLoaded", function () {
-		const statusBox = document.getElementById("gene-batch-status");
-		const toggleBtn = document.getElementById("toggle-gene-batch");
 
-		if (!statusBox || !toggleBtn) return;
-
-		const wallet = statusBox.dataset.wallet;
-		const selectedTokenId = statusBox.dataset.selectedTokenId || "";
-		const pauseKey = `gene-batch-paused-${wallet}`;
-		let running = localStorage.getItem(pauseKey) !== "1";
-		let timerId = null;
-
-		function setRunning(next) {
-			running = next;
-			toggleBtn.textContent = running ? "Stop Recessive Check" : "Resume Recessive Check";
-			statusBox.dataset.running = running ? "1" : "0";
-
-			if (running) {
-				statusBox.textContent = "Recessive gene data is loading in the background...";
-				scheduleNext(0);
-			} else {
-				statusBox.textContent = "Recessive gene background loading is paused.";
-				if (timerId) {
-					clearTimeout(timerId);
-					timerId = null;
-				}
-			}
-		}
-
-		function scheduleNext(delayMs) {
-			if (!running) return;
-			if (timerId) clearTimeout(timerId);
-			timerId = setTimeout(runBatch, delayMs);
-		}
-
-		async function runBatch() {
-			if (!running) return;
-
-			const formData = new URLSearchParams();
-			formData.append("wallet_address", wallet);
-			formData.append("selected_token_id", selectedTokenId);
-
-			try {
-				const response = await fetch("{{ url_for('process_gene_batch') }}", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/x-www-form-urlencoded",
-					},
-					body: formData.toString(),
-				});
-
-				const data = await response.json();
-
-				if (!data.ok) {
-					statusBox.textContent = "Background loading stopped due to an error.";
-					running = false;
-					toggleBtn.textContent = "Resume Recessive Check";
-					return;
-				}
-
-				if ((data.remaining || 0) > 0) {
-					statusBox.style.display = "";
-					toggleBtn.style.display = "";
-					statusBox.textContent =
-						`Recessive gene data is loading in the background. Loaded ${data.loaded || 0} chickens this round. ${data.remaining || 0} still remaining.`;
-					scheduleNext(2500);
-				} else {
-					running = false;
-					localStorage.removeItem(pauseKey);
-					statusBox.textContent = "";
-					statusBox.style.display = "none";
-					toggleBtn.style.display = "none";
-				}
-			} catch (err) {
-				statusBox.textContent = "Background loading stopped due to a network error.";
-				running = false;
-				toggleBtn.textContent = "Resume Recessive Check";
-			}
-		}
-
-		toggleBtn.addEventListener("click", function () {
-			running = !running;
-			localStorage.setItem(pauseKey, running ? "0" : "1");
-			setRunning(running);
-		});
-
-		setRunning(running);
-	});
-	</script>
 	<script>
 	document.addEventListener("DOMContentLoaded", function () {
 		document.querySelectorAll(".clickable-row[data-href]").forEach(function (row) {
@@ -2345,7 +2281,33 @@
 		if (!popupBuild || !popupMinBuildCount || !popupMatchCount || !pairMaxText || !tableRows.length) {
 			return;
 		}
+		
+		function getGeneBuildCompatibility(buildKey) {
+			const key = String(buildKey || "").trim().toLowerCase();
 
+			const compatibility = {
+				"killua": new Set(["killua", "hybrid 1", "hybrid 2"]),
+				"shanks": new Set(["shanks", "hybrid 1"]),
+				"levi": new Set(["levi", "hybrid 1", "hybrid 2"]),
+				"hybrid 1": new Set(["killua", "shanks", "levi", "hybrid 1"]),
+				"hybrid 2": new Set(["killua", "levi", "hybrid 2"]),
+			};
+
+			return compatibility[key] || new Set();
+		}
+
+		function geneBuildsAreCompatible(selectedBuild, rowBuild) {
+			const left = String(selectedBuild || "").trim().toLowerCase();
+			const right = String(rowBuild || "").trim().toLowerCase();
+
+			if (!left || !right) return false;
+
+			const leftCompatible = getGeneBuildCompatibility(left);
+			const rightCompatible = getGeneBuildCompatibility(right);
+
+			return leftCompatible.has(right) && rightCompatible.has(left);
+		}
+		
 		function getVisibleRows() {
 			return tableRows.filter(function (row) {
 				return row.offsetParent !== null;
@@ -2363,7 +2325,7 @@
 				const rowBuild = String(row.dataset.buildKey || "").trim().toLowerCase();
 				const rowBuildCount = parseInt(row.dataset.buildCount || "0", 10) || 0;
 
-				if (selectedBuild !== "all" && rowBuild !== selectedBuild) {
+				if (selectedBuild !== "all" && !geneBuildsAreCompatible(selectedBuild, rowBuild)) {
 					return;
 				}
 
