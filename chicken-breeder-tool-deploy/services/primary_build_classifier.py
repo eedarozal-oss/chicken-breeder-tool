@@ -28,7 +28,7 @@ def classify_primary_build(chicken):
     evaluations = evaluate_all_builds(primary_traits)
     qualified = select_qualified_build(
         evaluations,
-        min_matches=5,
+        min_matches=3,
         traits=primary_traits,
     )
 
