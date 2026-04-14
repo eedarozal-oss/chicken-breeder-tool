@@ -76,11 +76,11 @@ ULTIMATE_ITEM_PRIORITY_ORDER = [
 ULTIMATE_TYPE_ORDER = ["both", "gene_only", "ip_only"]
 
 ULTIMATE_BUILD_PRIORITY_SLOTS = {
-    "damager": ["beak"],
-    "tank": ["wings"],
-    "ninja": ["tail"],
-    "runner": ["feet"],
-    "jack": ["beak", "wings", "tail", "feet", "body"],
+    "killua": ["beak", "tail", "feet", "body"],
+    "shanks": ["beak", "wings", "tail", "feet", "body"],
+    "levi": ["beak", "tail", "feet", "body"],
+    "hybrid 2": ["wings"],
+    "hybrid 1": [],
 }
 
 def needs_ultimate_primary_build_refresh(chicken, safe_int_fn):
@@ -122,7 +122,7 @@ def refresh_ultimate_primary_builds_if_needed(chickens, upsert_chicken_fn, safe_
         refreshed = dict(chicken)
 
         evaluations = evaluate_all_builds(refreshed)
-        selected = select_qualified_build(evaluations, min_matches=3)
+        selected = select_qualified_build(evaluations, min_matches=3, traits=refreshed)
 
         if selected:
             refreshed["primary_build"] = selected.get("build") or ""
@@ -441,6 +441,31 @@ def get_combined_build_coverage(left, right, build_name):
 def get_ultimate_build_priority_slots(build_name):
     return list(ULTIMATE_BUILD_PRIORITY_SLOTS.get(str(build_name or "").strip().lower(), []))
 
+def get_ultimate_build_compatibility(build_type):
+    build_key = str(build_type or "").strip().lower()
+
+    compatibility = {
+        "killua": {"killua", "hybrid 1", "hybrid 2"},
+        "shanks": {"shanks", "hybrid 1"},
+        "levi": {"levi", "hybrid 1", "hybrid 2"},
+        "hybrid 1": {"killua", "shanks", "levi", "hybrid 1"},
+        "hybrid 2": {"killua", "levi", "hybrid 2"},
+    }
+
+    return set(compatibility.get(build_key, {build_key} if build_key else set()))
+
+
+def ultimate_builds_are_compatible(source_build, candidate_build):
+    source_key = str(source_build or "").strip().lower()
+    candidate_key = str(candidate_build or "").strip().lower()
+
+    if not source_key or not candidate_key:
+        return False
+
+    source_compatible = get_ultimate_build_compatibility(source_key)
+    candidate_compatible = get_ultimate_build_compatibility(candidate_key)
+
+    return candidate_key in source_compatible and source_key in candidate_compatible
 
 def build_ultimate_build_priority_metrics(left, right, build_name):
     build_name = str(build_name or "").strip().lower()
@@ -645,8 +670,6 @@ def get_ultimate_build_target_cap(build_name, build_metrics=None):
         total = safe_int(build_metrics.get("combined_total"), default=0) or 0
 
     if total <= 0:
-        if build_name == "tank":
-            return 5
         return 5
 
     return min(5, total)
@@ -848,7 +871,7 @@ def is_valid_ultimate_pair(selected, candidate):
     if not selected_build or not candidate_build:
         return False
 
-    if selected_build != candidate_build:
+    if not ultimate_builds_are_compatible(selected_build, candidate_build):
         return False
 
     supports = build_pair_supports(selected, candidate, selected_build)

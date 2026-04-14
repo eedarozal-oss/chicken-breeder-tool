@@ -1,4 +1,4 @@
-ULTIMATE_BUILD_ORDER = ["damager", "runner", "ninja", "tank", "jack"]
+ULTIMATE_BUILD_ORDER = ["killua", "shanks", "levi", "hybrid 2", "hybrid 1"]
 ULTIMATE_TYPE_ORDER = ["both", "gene_only", "ip_only"]
 
 
@@ -80,6 +80,31 @@ def normalize_ultimate_build_value(value):
     raw = str(value or "").strip().lower()
     return raw if raw in ULTIMATE_BUILD_ORDER else ""
 
+def get_ultimate_build_compatibility(build_key):
+    key = str(build_key or "").strip().lower()
+
+    compatibility = {
+        "killua": {"killua", "hybrid 1", "hybrid 2"},
+        "shanks": {"shanks", "hybrid 1"},
+        "levi": {"levi", "hybrid 1", "hybrid 2"},
+        "hybrid 1": {"killua", "shanks", "levi", "hybrid 1"},
+        "hybrid 2": {"killua", "levi", "hybrid 2"},
+    }
+
+    return compatibility.get(key, {key} if key else set())
+
+
+def ultimate_available_builds_are_compatible(selected_build, chicken_build):
+    selected_key = str(selected_build or "").strip().lower()
+    chicken_key = str(chicken_build or "").strip().lower()
+
+    if not selected_key or not chicken_key:
+        return False
+
+    selected_compatible = get_ultimate_build_compatibility(selected_key)
+    chicken_compatible = get_ultimate_build_compatibility(chicken_key)
+
+    return chicken_key in selected_compatible and selected_key in chicken_compatible
 
 def get_ultimate_build_display(value):
     normalized = normalize_ultimate_build_value(value)
@@ -223,7 +248,8 @@ def chicken_matches_ultimate_available_filters(
         return False
 
     if selected_build != "all":
-        if str(chicken.get("ultimate_build_key") or "") != selected_build:
+        chicken_build = str(chicken.get("ultimate_build_key") or "").strip().lower()
+        if not ultimate_available_builds_are_compatible(selected_build, chicken_build):
             return False
 
     build_match_value = safe_int(chicken.get("ultimate_build_match_count"))

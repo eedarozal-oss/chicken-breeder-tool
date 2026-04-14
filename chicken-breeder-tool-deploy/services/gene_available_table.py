@@ -1,4 +1,4 @@
-GENE_BUILD_ORDER = ["damager", "runner", "ninja", "tank", "jack"]
+GENE_BUILD_ORDER = ["killua", "shanks", "levi", "hybrid 2", "hybrid 1"]
 GENE_BUILD_SOURCE_ORDER = ["primary", "recessive", "both"]
 
 
@@ -18,9 +18,10 @@ def parse_csv_query_values(raw_value):
     return values
 
 
-def normalize_gene_available_build_filter(value):
+def normalize_gene_available_build_filter(value, build_order=None):
+    allowed_builds = [str(item or "").strip().lower() for item in (build_order or []) if str(item or "").strip()]
     value = str(value or "").strip().lower()
-    return value if value in GENE_BUILD_ORDER else "all"
+    return value if value in allowed_builds else "all"
 
 
 def normalize_gene_available_ninuno_filter(value):
@@ -50,9 +51,10 @@ def get_chicken_type_display(value):
     return "Ordinary"
 
 
-def get_gene_build_display(value):
+def get_gene_build_display(value, build_order=None):
+    allowed_builds = [str(item or "").strip().lower() for item in (build_order or []) if str(item or "").strip()]
     value = str(value or "").strip().lower()
-    return value.title() if value in GENE_BUILD_ORDER else ""
+    return value.title() if value in allowed_builds else ""
 
 
 def normalize_gene_build_source_value(value):
@@ -63,15 +65,44 @@ def normalize_gene_build_source_value(value):
         return raw
     return ""
 
-
 def get_gene_build_source_display(value):
     normalized = normalize_gene_build_source_value(value)
     if normalized == "both":
         return "Both"
     return normalized.title() if normalized else ""
 
+def get_gene_build_compatibility(build_key):
+    key = str(build_key or "").strip().lower()
 
-def enrich_gene_available_chicken_row(chicken, enrich_chicken_media, get_best_available_gene_build_info):
+    compatibility = {
+        "killua": {"killua", "hybrid 1", "hybrid 2"},
+        "shanks": {"shanks", "hybrid 1"},
+        "levi": {"levi", "hybrid 1", "hybrid 2"},
+        "hybrid 1": {"killua", "shanks", "levi", "hybrid 1"},
+        "hybrid 2": {"killua", "levi", "hybrid 2"},
+    }
+
+    return compatibility.get(key, {key} if key else set())
+
+
+def gene_available_builds_are_compatible(selected_build, chicken_build):
+    selected_key = str(selected_build or "").strip().lower()
+    chicken_key = str(chicken_build or "").strip().lower()
+
+    if not selected_key or not chicken_key:
+        return False
+
+    selected_compatible = get_gene_build_compatibility(selected_key)
+    chicken_compatible = get_gene_build_compatibility(chicken_key)
+
+    return chicken_key in selected_compatible and selected_key in chicken_compatible
+
+def enrich_gene_available_chicken_row(
+    chicken,
+    enrich_chicken_media,
+    get_best_available_gene_build_info,
+    build_order=None,
+):
     row = enrich_chicken_media(dict(chicken or {}))
 
     best_info = get_best_available_gene_build_info(row)
@@ -84,7 +115,7 @@ def enrich_gene_available_chicken_row(chicken, enrich_chicken_media, get_best_av
     row["type_display"] = get_chicken_type_display(row.get("type_normalized"))
 
     row["gene_build_key"] = gene_build_key
-    row["gene_build_display"] = get_gene_build_display(gene_build_key)
+    row["gene_build_display"] = get_gene_build_display(gene_build_key, build_order=build_order)
     row["gene_build_source"] = gene_build_source
     row["gene_build_source_display"] = get_gene_build_source_display(gene_build_source)
     row["gene_build_match_count"] = gene_build_match_count
@@ -116,7 +147,7 @@ def enrich_gene_available_chicken_row(chicken, enrich_chicken_media, get_best_av
     return row
 
 
-def build_gene_available_filter_options(rows, safe_int):
+def build_gene_available_filter_options(rows, safe_int, build_order=None):
     rows = list(rows or [])
 
     type_options = []
@@ -124,9 +155,22 @@ def build_gene_available_filter_options(rows, safe_int):
         if any(str(row.get("type_normalized") or "") == value for row in rows):
             type_options.append({"value": value, "label": get_chicken_type_display(value)})
 
+    resolved_build_order = [
+        str(item or "").strip().lower()
+        for item in (build_order or [])
+        if str(item or "").strip()
+    ]
+
+    available_builds = {
+        str(row.get("gene_build_key") or "").strip().lower()
+        for row in rows
+        if str(row.get("gene_build_key") or "").strip()
+    }
+
     build_options = [
-        {"value": value, "label": get_gene_build_display(value)}
-        for value in GENE_BUILD_ORDER
+        {"value": value, "label": get_gene_build_display(value, build_order=resolved_build_order)}
+        for value in resolved_build_order
+        if value in available_builds
     ]
 
     build_match_values = sorted({
@@ -186,6 +230,7 @@ def chicken_matches_gene_available_filters(
     selected_generations=None,
     selected_breed_counts=None,
     ninuno_mode="all",
+    build_order=None,
 ):
     selected_types = set(selected_types or [])
     selected_build_matches = set(selected_build_matches or [])
@@ -193,14 +238,14 @@ def chicken_matches_gene_available_filters(
     selected_instincts = {str(value or "").strip().lower() for value in (selected_instincts or []) if str(value or "").strip()}
     selected_generations = set(selected_generations or [])
     selected_breed_counts = set(selected_breed_counts or [])
-    selected_build = normalize_gene_available_build_filter(selected_build)
+    selected_build = normalize_gene_available_build_filter(selected_build, build_order=build_order)
     ninuno_mode = normalize_gene_available_ninuno_filter(ninuno_mode)
 
     if selected_types and str(chicken.get("type_normalized") or "") not in selected_types:
         return False
 
-    chicken_build = str(chicken.get("gene_build_key") or "")
-    if selected_build != "all" and chicken_build != selected_build:
+    chicken_build = str(chicken.get("gene_build_key") or "").strip().lower()
+    if selected_build != "all" and not gene_available_builds_are_compatible(selected_build, chicken_build):
         return False
 
     build_match_value = safe_int(chicken.get("gene_build_match_count"))
@@ -248,15 +293,20 @@ def build_gene_active_filters(
     selected_generations=None,
     selected_breed_counts=None,
     ninuno_mode="all",
+    build_order=None,
 ):
     filters = []
 
     if selected_types:
         filters.append({"key": "type", "label": "Type", "value": ", ".join(get_chicken_type_display(v) for v in selected_types)})
 
-    selected_build = normalize_gene_available_build_filter(selected_build)
+    selected_build = normalize_gene_available_build_filter(selected_build, build_order=build_order)
     if selected_build != "all":
-        filters.append({"key": "build", "label": "Build", "value": get_gene_build_display(selected_build)})
+        filters.append({
+            "key": "build",
+            "label": "Build",
+            "value": get_gene_build_display(selected_build, build_order=build_order),
+        })
 
     if selected_build_matches:
         filters.append({"key": "build_match", "label": "Build Match", "value": ", ".join(str(v) for v in selected_build_matches)})
@@ -286,7 +336,14 @@ def build_gene_active_filters(
     return filters
 
 
-def sort_gene_available_chickens(rows, sort_by="build", sort_dir="asc", sort_key_int=None, sort_key_text=None):
+def sort_gene_available_chickens(
+    rows,
+    sort_by="build",
+    sort_dir="asc",
+    sort_key_int=None,
+    sort_key_text=None,
+    build_order=None,
+):
     rows = list(rows or [])
     reverse = sort_dir == "desc"
 
@@ -301,7 +358,13 @@ def sort_gene_available_chickens(rows, sort_by="build", sort_dir="asc", sort_key
         def sort_key_text(value):
             return str(value or "").strip().lower()
 
-    build_rank = {value: index for index, value in enumerate(GENE_BUILD_ORDER)}
+    resolved_build_order = [
+        str(item or "").strip().lower()
+        for item in (build_order or [])
+        if str(item or "").strip()
+    ]
+    build_rank = {value: index for index, value in enumerate(resolved_build_order)}
+    
     source_rank = {value: index for index, value in enumerate(GENE_BUILD_SOURCE_ORDER)}
 
     if sort_by == "token_id":

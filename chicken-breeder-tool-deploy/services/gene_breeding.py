@@ -34,11 +34,9 @@ DUPLICATE_ALLOWED_ITEMS = {
 }
 
 BUILD_INSTINCT_TIERS = {
-    "damager": ["reckless", "aggressive", "blazing"],
-    "runner": ["blazing", "swift", "reckless"],
-    "ninja": ["aggressive", "reckless", "blazing"],
-    "tank": ["enduring", "steadfast", "bulwark"],
-    "jack": ["balanced", "adaptive", "vicious", "unyielding", "versatile"],
+    "killua": ["aggressive", "swift", "reckless", "elusive", "relentless", "blazing"],
+    "shanks": ["steadfast", "stalwart", "resolute", "tenacious", "bulwark", "enduring"],
+    "levi": ["balanced", "unyielding", "vicious", "adaptive", "versatile"],
 }
 
 GENE_PRIMARY_MIN_MATCH = 2
@@ -46,12 +44,38 @@ GENE_PRIMARY_QUALIFIED_MATCH = 5
 GENE_RECESSIVE_MIN_MATCH = 4
 
 GENE_PRIORITY_SLOTS = {
-    "damager": ["beak"],
-    "tank": ["wings"],
-    "ninja": ["tail"],
-    "runner": ["feet"],
-    "jack": ["beak", "wings", "tail", "feet", "body"],
+    "killua": ["beak", "tail", "feet", "body"],
+    "shanks": ["beak", "wings", "tail", "feet", "body"],
+    "levi": ["beak", "tail", "feet", "body"],
+    "hybrid 2": ["wings"],
+    "hybrid 1": [],
 }
+
+def get_gene_build_compatibility(build_type):
+    build_key = str(build_type or "").strip().lower()
+
+    compatibility = {
+        "killua": {"killua", "hybrid 1", "hybrid 2"},
+        "shanks": {"shanks", "hybrid 1"},
+        "levi": {"levi", "hybrid 1", "hybrid 2"},
+        "hybrid 1": {"killua", "shanks", "levi", "hybrid 1"},
+        "hybrid 2": {"killua", "levi", "hybrid 2"},
+    }
+
+    return set(compatibility.get(build_key, {build_key} if build_key else set()))
+
+
+def gene_builds_are_compatible(source_build, candidate_build):
+    source_key = str(source_build or "").strip().lower()
+    candidate_key = str(candidate_build or "").strip().lower()
+
+    if not source_key or not candidate_key:
+        return False
+
+    source_compatible = get_gene_build_compatibility(source_key)
+    candidate_compatible = get_gene_build_compatibility(candidate_key)
+
+    return candidate_key in source_compatible and source_key in candidate_compatible
 
 def get_gene_priority_slots(build_type):
     return list(GENE_PRIORITY_SLOTS.get(str(build_type or "").strip().lower(), []))
@@ -164,6 +188,9 @@ def get_instinct_tier_rank(instinct_name, build_type):
 def build_prefers_instinct(chicken, build_type):
     build_source = str((chicken or {}).get("build_source_display") or "").strip().lower()
     if build_source != "primary":
+        return False
+
+    if str(build_type or "").strip().lower() not in BUILD_INSTINCT_TIERS:
         return False
 
     return get_instinct_tier_rank((chicken or {}).get("instinct"), build_type) <= len(
@@ -351,8 +378,9 @@ def recommend_gene_item(parent, other_parent, build_type):
             "reason": reason,
         }
 
+    instinct_tiers = BUILD_INSTINCT_TIERS.get(str(build_type or "").strip().lower(), [])
     instinct_rank = get_instinct_tier_rank((parent or {}).get("instinct"), build_type)
-    if instinct_rank <= len(BUILD_INSTINCT_TIERS.get(str(build_type or "").strip().lower(), [])):
+    if instinct_tiers and instinct_rank <= len(instinct_tiers):
         return {
             "name": "St. Elmo's Fire",
             "reason": "Best when no trait edge is available and this parent has a strong instinct fit for the target build.",
@@ -400,8 +428,9 @@ def get_gene_item_candidates(parent, other_parent, build_type):
             }
         )
 
+    instinct_tiers = BUILD_INSTINCT_TIERS.get(str(build_type or "").strip().lower(), [])
     instinct_rank = get_instinct_tier_rank((parent or {}).get("instinct"), build_type)
-    if instinct_rank <= len(BUILD_INSTINCT_TIERS.get(str(build_type or "").strip().lower(), [])):
+    if instinct_tiers and instinct_rank <= len(instinct_tiers):
         candidates.append(
             {
                 "name": "St. Elmo's Fire",
@@ -745,7 +774,10 @@ def build_gene_potential_matches(selected_chicken, breedable_chickens, build_typ
         row
         for row in (breedable_chickens or [])
         if str(row.get("token_id") or "").strip() != selected_token_id
-        and str(row.get("build_type") or "").strip().lower() == selected_build_type
+        and gene_builds_are_compatible(
+            selected_build_type,
+            str(row.get("build_type") or "").strip().lower(),
+        )
         and not is_parent_offspring(selected_chicken, row)
         and not is_full_siblings(selected_chicken, row)
         and is_generation_gap_allowed(
@@ -859,7 +891,7 @@ def build_gene_available_auto_candidates_same_build(
 
         for candidate in (breedable_chickens or [])[index + 1:]:
             candidate_build = str(candidate.get("build_type") or "").strip().lower()
-            if candidate_build != source_build:
+            if not gene_builds_are_compatible(source_build, candidate_build):
                 continue
 
             if not chicken_passes_auto_ninuno_filter(candidate, ninuno_mode):
@@ -891,16 +923,30 @@ def build_gene_available_auto_candidates_same_build(
             forward = build_gene_potential_matches(source, [source, candidate], source_build)
             reverse = build_gene_potential_matches(candidate, [source, candidate], source_build)
 
-            if forward:
+            if forward and reverse:
+                forward_rank = tuple(forward[0].get("ranking") or ())
+                reverse_rank = tuple(reverse[0].get("ranking") or ())
+
+                if forward_rank <= reverse_rank:
+                    chosen_left = dict(source)
+                    chosen_right = dict(candidate)
+                    chosen_match = forward[0]
+                    chosen_build = str(chosen_match.get("build_type") or source_build).strip().lower()
+                else:
+                    chosen_left = dict(candidate)
+                    chosen_right = dict(source)
+                    chosen_match = reverse[0]
+                    chosen_build = str(chosen_match.get("build_type") or candidate_build).strip().lower()
+            elif forward:
                 chosen_left = dict(source)
                 chosen_right = dict(candidate)
                 chosen_match = forward[0]
-                chosen_build = source_build
+                chosen_build = str(chosen_match.get("build_type") or source_build).strip().lower()
             elif reverse:
                 chosen_left = dict(candidate)
                 chosen_right = dict(source)
                 chosen_match = reverse[0]
-                chosen_build = source_build
+                chosen_build = str(chosen_match.get("build_type") or candidate_build).strip().lower()
             else:
                 continue
 
@@ -1018,7 +1064,7 @@ def pick_best_gene_auto_match_from_pool(
     popup_breed_diff=None,
     popup_ninuno="all",
 ):
-    build_order = ["damager", "runner", "ninja", "tank", "jack"]
+    build_order = ["killua", "shanks", "levi", "hybrid 2", "hybrid 1"]
 
     pool = list(breedable_chickens or [])
 
@@ -1043,7 +1089,10 @@ def pick_best_gene_auto_match_from_pool(
     for build_type in build_order:
         build_pool = [
             row for row in pool
-            if str(row.get("build_type") or "").strip().lower() == build_type
+            if gene_builds_are_compatible(
+                build_type,
+                str(row.get("build_type") or "").strip().lower(),
+            )
         ]
 
         if len(build_pool) < 2:

@@ -26,7 +26,11 @@ def determine_ultimate_type(ip_value, primary_build):
 def classify_primary_build(chicken):
     primary_traits = build_trait_map(chicken)
     evaluations = evaluate_all_builds(primary_traits)
-    qualified = select_qualified_build(evaluations, min_matches=5)
+    qualified = select_qualified_build(
+        evaluations,
+        min_matches=5,
+        traits=primary_traits,
+    )
 
     if not qualified:
         return {

@@ -1,4 +1,4 @@
-BUILD_PRIORITY = ["jack", "damager", "runner", "ninja", "tank"]
+BUILD_PRIORITY = ["killua", "shanks", "levi", "hybrid 2", "hybrid 1"]
 
 TRAIT_SLOTS = [
     "beak",
@@ -11,56 +11,41 @@ TRAIT_SLOTS = [
 ]
 
 BUILD_RULES = {
-    "damager": {
-        "label": "Damager",
+    "killua": {
+        "label": "Killua",
         "slots": {
-            "beak": ["Wormtongue", "Raven", "Ironclad", "Piercing Fang"],
+            "beak": [
+                "Haki",
+                "Nightwave",
+                "Touca",
+                "Blade Spire",
+                "Wormtongue",
+                "Raven",
+                "Ironclad",
+                "Piercing Fang",
+            ],
             "comb": ["Yugi", "Super Sayang 1", "Killua", "Sakuragi"],
             "eyes": ["Diwata", "Maxx", "Retokada", "Yinyang"],
             "feet": ["Mahiwaga", "Luntian", "Makopa", "Sibat"],
             "wings": ["Slenduh", "Awra"],
-            "tail": ["Abaniko", "Onagadori"],
-            "body": ["Jordi"],
-        },
-    },
-    "tank": {
-        "label": "Tank",
-        "slots": {
-            "beak": ["Radiant", "Flare", "Ashfire", "Boneblade"],
-            "comb": ["Yugi", "Super Sayang 1", "Killua", "Sakuragi"],
-            "eyes": [],
-            "feet": ["Onyx", "Chernobyl", "Paleclaws", "Catriona"],
-            "wings": ["Slenduh", "Awra"],
-            "tail": [],
-            "body": ["Hoeltaf"],
-        },
-    },
-    "runner": {
-        "label": "Runner",
-        "slots": {
-            "beak": ["Haki", "Nightwave", "Touca", "Blade Spire"],
-            "comb": ["Yugi", "Super Sayang 1", "Killua", "Sakuragi"],
-            "eyes": ["Diwata", "Maxx", "Retokada", "Yinyang"],
-            "feet": ["Mahiwaga", "Luntian", "Makopa", "Sibat"],
-            "wings": ["Slenduh", "Awra"],
-            "tail": ["Abaniko", "Onagadori"],
-            "body": ["Jordi"],
-        },
-    },
-    "ninja": {
-        "label": "Ninja",
-        "slots": {
-            "beak": ["Wormtongue", "Raven", "Ironclad", "Piercing Fang"],
-            "comb": ["Yugi", "Super Sayang 1", "Killua", "Sakuragi"],
-            "eyes": ["Diwata", "Maxx", "Retokada", "Yinyang"],
-            "feet": ["Onyx", "Chernobyl", "Paleclaws", "Catriona"],
-            "wings": ["Slenduh", "Awra"],
-            "tail": ["Abaniko", "Onagadori", "Starjeatl", "Carota", "Agave", "Rengoku"],
+            "tail": ["Starjeatl", "Carota"],
             "body": ["Wickid", "Jordi"],
         },
     },
-    "jack": {
-        "label": "Jack",
+    "shanks": {
+        "label": "Shanks",
+        "slots": {
+            "beak": ["Radiant", "Flare", "Ashfire", "Boneblade"],
+            "comb": ["Yugi", "Super Sayang 1", "Killua", "Sakuragi"],
+            "eyes": ["Diwata", "Maxx", "Retokada", "Yinyang"],
+            "feet": ["Onyx", "Chernobyl", "Paleclaws", "Catriona"],
+            "wings": ["Mandingo", "Helena"],
+            "tail": ["Agave", "Rengoku"],
+            "body": ["Badwitch", "Chummiest"],
+        },
+    },
+    "levi": {
+        "label": "Levi",
         "slots": {
             "beak": ["Aurora", "Verdant", "Greenbill", "Bluelip"],
             "comb": ["Yugi", "Super Sayang 1", "Killua", "Sakuragi"],
@@ -69,6 +54,30 @@ BUILD_RULES = {
             "wings": ["Slenduh", "Awra"],
             "tail": ["Abaniko", "Onagadori"],
             "body": ["Emilia"],
+        },
+    },
+    "hybrid 2": {
+        "label": "Hybrid 2",
+        "slots": {
+            "beak": [],
+            "comb": ["Yugi", "Super Sayang 1", "Killua", "Sakuragi"],
+            "eyes": ["Diwata", "Maxx", "Retokada", "Yinyang"],
+            "feet": [],
+            "wings": ["Slenduh", "Awra"],
+            "tail": [],
+            "body": [],
+        },
+    },
+    "hybrid 1": {
+        "label": "Hybrid 1",
+        "slots": {
+            "beak": [],
+            "comb": ["Yugi", "Super Sayang 1", "Killua", "Sakuragi"],
+            "eyes": ["Diwata", "Maxx", "Retokada", "Yinyang"],
+            "feet": [],
+            "wings": [],
+            "tail": [],
+            "body": [],
         },
     },
 }

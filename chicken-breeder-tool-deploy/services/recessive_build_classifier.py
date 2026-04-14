@@ -6,7 +6,11 @@ from services.recessive_bonus import calculate_recessive_repeat_bonus
 def classify_recessive_build(chicken):
     h1_traits = build_trait_map(chicken, suffix="_h1")
     evaluations = evaluate_all_builds(h1_traits)
-    qualified = select_qualified_build(evaluations, min_matches=4)
+    qualified = select_qualified_build(
+        evaluations,
+        min_matches=4,
+        traits=h1_traits,
+    )
 
     if not qualified:
         return {

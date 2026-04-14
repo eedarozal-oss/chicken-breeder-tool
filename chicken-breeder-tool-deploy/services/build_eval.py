@@ -24,6 +24,46 @@ def get_required_slots(build_name):
 def get_required_slot_count(build_name):
     return len(get_required_slots(build_name))
 
+MAIN_BUILD_UNIQUE_SLOTS = {
+    "killua": ["beak", "tail", "feet", "body"],
+    "shanks": ["beak", "wings", "tail", "feet", "body"],
+    "levi": ["beak", "tail", "feet", "body"],
+}
+
+
+def has_unique_build_trait(traits, build_name):
+    config = BUILD_RULES.get(build_name) or {}
+    slots = (config.get("slots") or {})
+    unique_slots = MAIN_BUILD_UNIQUE_SLOTS.get(str(build_name or "").strip().lower(), [])
+
+    for slot in unique_slots:
+        allowed = slots.get(slot, [])
+        if not allowed:
+            continue
+
+        if trait_matches_allowed_value((traits or {}).get(slot), allowed):
+            return True
+
+    return False
+
+
+def get_main_builds_with_unique_traits(traits):
+    matched = []
+
+    for build_name in ["killua", "shanks", "levi"]:
+        if has_unique_build_trait(traits, build_name):
+            matched.append(build_name)
+
+    return matched
+
+def qualifies_for_hybrid_2(traits):
+    hybrid_eval = evaluate_build(traits, "hybrid 2")
+    return hybrid_eval.get("match_count", 0) == hybrid_eval.get("match_total", 0) and hybrid_eval.get("match_total", 0) > 0
+
+
+def qualifies_for_hybrid_1(traits):
+    hybrid_eval = evaluate_build(traits, "hybrid 1")
+    return hybrid_eval.get("match_count", 0) == hybrid_eval.get("match_total", 0) and hybrid_eval.get("match_total", 0) > 0
 
 def evaluate_build(traits, build_name):
     config = BUILD_RULES.get(build_name)
@@ -64,42 +104,57 @@ def evaluate_all_builds(traits):
     return {build_name: evaluate_build(traits, build_name) for build_name in BUILD_RULES}
 
 
-def select_qualified_build(evaluations, min_matches):
-    qualified = []
+def select_qualified_build(evaluations, min_matches, traits=None):
+    traits = dict(traits or {})
 
-    for build_name in BUILD_PRIORITY:
-        result = evaluations.get(build_name)
-        if not result:
-            continue
+    main_builds_with_unique = get_main_builds_with_unique_traits(traits)
 
-        match_count = result.get("match_count", 0) or 0
-        match_total = result.get("match_total", 0) or 0
+    if main_builds_with_unique:
+        qualified = []
 
-        if match_count < min_matches or match_total <= 0:
-            continue
+        for build_name in main_builds_with_unique:
+            result = evaluations.get(build_name)
+            if not result:
+                continue
 
-        completion_ratio = match_count / match_total
+            match_count = result.get("match_count", 0) or 0
+            match_total = result.get("match_total", 0) or 0
 
-        qualified.append({
-            "build_name": build_name,
-            "result": result,
-            "match_count": match_count,
-            "completion_ratio": completion_ratio,
-            "priority_index": BUILD_PRIORITY.index(build_name),
-        })
+            if match_count < min_matches or match_total <= 0:
+                continue
 
-    if not qualified:
-        return None
+            completion_ratio = match_count / match_total
 
-    qualified.sort(
-        key=lambda item: (
-            -item["match_count"],
-            -item["completion_ratio"],
-            item["priority_index"],
-        )
-    )
+            qualified.append({
+                "build_name": build_name,
+                "result": result,
+                "match_count": match_count,
+                "completion_ratio": completion_ratio,
+                "priority_index": BUILD_PRIORITY.index(build_name),
+            })
 
-    return qualified[0]["result"]
+        if qualified:
+            qualified.sort(
+                key=lambda item: (
+                    -item["match_count"],
+                    -item["completion_ratio"],
+                    item["priority_index"],
+                )
+            )
+            return qualified[0]["result"]
+
+    if not main_builds_with_unique:
+        if qualifies_for_hybrid_2(traits):
+            result = evaluations.get("hybrid 2")
+            if result and (result.get("match_count", 0) or 0) >= min_matches:
+                return result
+
+        if qualifies_for_hybrid_1(traits):
+            result = evaluations.get("hybrid 1")
+            if result and (result.get("match_count", 0) or 0) >= min_matches:
+                return result
+
+    return None
 
 
 def count_added_missing_traits(selected_result, candidate_result):
