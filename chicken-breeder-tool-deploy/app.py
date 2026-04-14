@@ -22,7 +22,7 @@ from services.family_roots import (
 from services.chicken_enricher import enrich_chicken_records
 from services.build_eval import evaluate_build, count_added_missing_traits
 from services.wallet_access import get_wallet_access_expiry_display
-from services.primary_build_classifier import classify_primary_build
+from services.gene_classifier import classify_gene_profile
 from services.database import (
     init_db,
     upsert_chicken,
@@ -82,7 +82,6 @@ from services.ultimate_breeding import (
     get_ultimate_item_candidates,
     resolve_ultimate_pair_item_recommendations,
     build_ultimate_pair_quality_from_items,
-    refresh_ultimate_primary_builds_if_needed,
     pick_best_ultimate_auto_match as service_pick_best_ultimate_auto_match,
     build_ultimate_available_auto_candidates as service_build_ultimate_available_auto_candidates,
 )
@@ -110,6 +109,7 @@ from services.ip_available_table import (
 )
 
 from services.gene_available_table import (
+    GENE_BUILD_ORDER,
     parse_csv_query_values as parse_gene_csv_query_values,
     normalize_gene_available_build_filter,
     normalize_gene_available_ninuno_filter,
@@ -419,10 +419,11 @@ def enrich_missing_recessive_data_in_batches(chickens, wallet, page_key, batch_s
     loaded_count = 0
 
     for chicken in enriched:
-        upsert_chicken(chicken)
-        if chicken.get("gene_profile_loaded"):
+        refreshed = apply_gene_profile_classification(chicken)
+        upsert_chicken(refreshed)
+        if refreshed.get("gene_profile_loaded"):
             loaded_count += 1
-
+            
     if remaining:
         next_cursor = cursor + remaining_slots
         if next_cursor >= len(remaining):
@@ -491,6 +492,28 @@ def safe_int(value, default=None):
     except (TypeError, ValueError):
         return default
 
+def apply_gene_profile_classification(record):
+    row = dict(record or {})
+    gene_profile = classify_gene_profile(row)
+
+    row.update({
+        "primary_build": gene_profile.get("primary_build"),
+        "primary_build_match_count": gene_profile.get("primary_build_match_count"),
+        "primary_build_match_total": gene_profile.get("primary_build_match_total"),
+        "primary_build_matched_slots": gene_profile.get("primary_build_matched_slots") or [],
+        "primary_build_missing_slots": gene_profile.get("primary_build_missing_slots") or [],
+        "primary_build_evaluations": gene_profile.get("primary_build_evaluations") or {},
+        "recessive_build": gene_profile.get("recessive_build"),
+        "recessive_build_match_count": gene_profile.get("recessive_build_match_count"),
+        "recessive_build_match_total": gene_profile.get("recessive_build_match_total"),
+        "recessive_build_matched_slots": gene_profile.get("recessive_build_matched_slots") or [],
+        "recessive_build_missing_slots": gene_profile.get("recessive_build_missing_slots") or [],
+        "recessive_build_repeat_bonus": gene_profile.get("recessive_build_repeat_bonus", 0) or 0,
+        "recessive_build_evaluations": gene_profile.get("recessive_build_evaluations") or {},
+        "ultimate_type": gene_profile.get("ultimate_type"),
+    })
+
+    return row
 
 def require_authorized_wallet(wallet):
     wallet = (wallet or "").strip().lower()
@@ -528,14 +551,7 @@ def sync_wallet_data(wallet):
         token_id = str(record.get("token_id") or "").strip()
         merge_static_chicken_cache(record, static_lookup.get(token_id))
 
-        primary_build_data = classify_primary_build(record)
-        record.update({
-            "primary_build": primary_build_data.get("primary_build"),
-            "primary_build_match_count": primary_build_data.get("primary_build_match_count"),
-            "primary_build_match_total": primary_build_data.get("primary_build_match_total"),
-            "ultimate_type": primary_build_data.get("ultimate_type"),
-        })
-
+        record = apply_gene_profile_classification(record)
         upsert_chicken(record)
 
     chickens = get_chickens_by_wallet(wallet)
@@ -577,7 +593,7 @@ def get_wallet_chickens(wallet, ensure_loaded=False, force_refresh=False):
 
 
 def needs_gene_enrichment(chicken):
-    return not chicken.get("primary_build") and not chicken.get("recessive_build")
+    return is_breedable(chicken) and needs_recessive_enrichment(chicken)
 
 
 def enrich_missing_gene_data_in_batches(chickens, wallet, page_key, batch_size=5, prioritized_token_id=None):
@@ -629,8 +645,9 @@ def enrich_missing_gene_data_in_batches(chickens, wallet, page_key, batch_size=5
     enriched = enrich_chicken_records(selected_batch)
 
     for chicken in enriched:
-        upsert_chicken(chicken)
-
+        refreshed = apply_gene_profile_classification(chicken)
+        upsert_chicken(refreshed)
+        
     if remaining:
         next_cursor = cursor + remaining_slots
         if next_cursor >= len(remaining):
@@ -1140,7 +1157,7 @@ def enrich_gene_display(chicken, build_type):
     return enrich_chicken_media(row)
 
 def get_best_available_gene_build_info(chicken):
-    build_options = ["damager", "runner", "ninja", "tank", "jack"]
+    build_options = ["killua", "shanks", "levi", "hybrid 2", "hybrid 1"]
     best_info = {
         "build_key": "",
         "build_label": "",
@@ -2174,7 +2191,10 @@ def match_gene_page():
         gene_sort_dir = "asc"
 
     gene_filter_type_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_type")))
-    gene_filter_build = normalize_gene_available_build_filter(request.args.get("gene_filter_build"))
+    gene_filter_build = normalize_gene_available_build_filter(
+        request.args.get("gene_filter_build"),
+        build_order=GENE_BUILD_ORDER,
+    )
     gene_filter_build_match_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_build_match")))
     gene_filter_build_source_values = normalize_gene_available_source_values(
         parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_build_source")))
@@ -2223,7 +2243,7 @@ def match_gene_page():
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-
+                        
             access_expiry = get_wallet_access_expiry_display(wallet)
             wallet_summary = build_wallet_summary(
                 wallet=wallet,
@@ -2239,9 +2259,16 @@ def match_gene_page():
             gene_enrichment_remaining = batch_result["remaining"]
             
             all_breedable = [
-                enrich_gene_available_chicken_row(row, enrich_chicken_media, get_best_available_gene_build_info)
-                for row in chickens if is_breedable(row)
+                enrich_gene_available_chicken_row(
+                    row,
+                    enrich_chicken_media,
+                    get_best_available_gene_build_info,
+                    build_order=GENE_BUILD_ORDER,
+                )
+                for row in chickens
+                if is_breedable(row)
             ]
+            
             gene_original_available_pool = filter_out_planner_tokens(all_breedable, wallet)
 
             gene_original_available_pool = [
@@ -2256,7 +2283,11 @@ def match_gene_page():
                     if row.get("is_complete") and float(row.get("ownership_percent") or 0) == 100.0
                 ]
 
-            gene_available_filter_options = build_gene_available_filter_options(gene_original_available_pool, safe_int)
+            gene_available_filter_options = build_gene_available_filter_options(
+                gene_original_available_pool,
+                safe_int,
+                build_order=GENE_BUILD_ORDER,
+            )
 
             breedable_chickens = [
                 row for row in gene_original_available_pool
@@ -2272,6 +2303,7 @@ def match_gene_page():
                     selected_generations=gene_filter_generation_values,
                     selected_breed_counts=gene_filter_breed_count_values,
                     ninuno_mode=gene_filter_ninuno,
+                    build_order=GENE_BUILD_ORDER,
                 )
             ]
 
@@ -2279,6 +2311,7 @@ def match_gene_page():
                 breedable_chickens,
                 sort_by=gene_sort_by,
                 sort_dir=gene_sort_dir,
+                build_order=GENE_BUILD_ORDER,
             )
 
             available_empty_state = make_empty_state(
@@ -2421,6 +2454,7 @@ def match_gene_page():
             selected_generations=gene_filter_generation_values,
             selected_breed_counts=gene_filter_breed_count_values,
             ninuno_mode=gene_filter_ninuno,
+            build_order=GENE_BUILD_ORDER,
         ),
         gene_original_available_count=len(gene_original_available_pool),
         ninuno_100_only=ninuno_100_only,
@@ -2530,15 +2564,6 @@ def match_ultimate_page():
     if wallet:
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-
-            recalculated_primary_builds = refresh_ultimate_primary_builds_if_needed(
-                chickens=chickens,
-                upsert_chicken_fn=upsert_chicken,
-                safe_int_fn=safe_int,
-            )
-
-            if recalculated_primary_builds:
-                chickens = get_wallet_chickens(wallet, ensure_loaded=False)
 
             access_expiry = get_wallet_access_expiry_display(wallet)
             wallet_summary = build_wallet_summary(
