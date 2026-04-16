@@ -127,6 +127,26 @@
 		</div>
 		{% endif %}
 
+		{% set toggle_market_url = url_for(
+			'match_gene_page',
+			wallet_address=wallet,
+			selected_token_id=selected_token_id or None,
+			ninuno_100_only=1 if ninuno_100_only else 0,
+			sort_by=sort_by,
+			sort_dir=sort_dir,
+			market_open=0 if market_open else 1,
+			gene_filter_type=','.join(gene_filter_type_values) if gene_filter_type_values else None,
+			gene_filter_build=gene_filter_build if gene_filter_build != 'all' else None,
+			gene_filter_build_match=','.join(gene_filter_build_match_values) if gene_filter_build_match_values else None,
+			gene_filter_build_source=','.join(gene_filter_build_source_values) if gene_filter_build_source_values else None,
+			gene_filter_instinct=','.join(gene_filter_instinct_values) if gene_filter_instinct_values else None,
+			gene_min_ip=gene_min_ip if gene_min_ip is not none else None,
+			gene_filter_generation=','.join(gene_filter_generation_values) if gene_filter_generation_values else None,
+			gene_filter_breed_count=','.join(gene_filter_breed_count_values) if gene_filter_breed_count_values else None,
+			gene_filter_ninuno=gene_filter_ninuno if gene_filter_ninuno != 'all' else None
+		) ~ '#available-chickens' %}
+		{% include "_featured_market_toggle.html" %}
+
         <section class="breeding-section">
             <div class="breeding-section-header">
                 <div>

@@ -104,6 +104,23 @@
             <div class="error">{{ error }}</div>
         {% endif %}
 
+		{% set toggle_market_url = url_for(
+			'match_ip_page',
+			wallet_address=wallet,
+			selected_token_id=selected_token_id or None,
+			min_ip=min_ip,
+			ip_diff=ip_diff,
+			ninuno_100_only=1 if ninuno_100_only else 0,
+			sort_by=sort_by,
+			sort_dir=sort_dir,
+			market_open=0 if market_open else 1,
+			ip_filter_type=','.join(ip_filter_type_values) if ip_filter_type_values else None,
+			ip_filter_generation=','.join(ip_filter_generation_values) if ip_filter_generation_values else None,
+			ip_filter_breed_count=','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else None,
+			ip_filter_ninuno=ip_filter_ninuno if ip_filter_ninuno != 'all' else None
+		) ~ '#available-chickens' %}
+		{% include "_featured_market_toggle.html" %}
+
         <section class="breeding-section">
             <div class="breeding-section-header">
                 <div>

@@ -1,0 +1,178 @@
+{% if show_featured_market_bar %}
+<section class="featured-market-shell">
+	<div class="loading-shell" id="featured-market-shell">
+		<div class="loading-shell-live">
+			<div class="panel featured-market-panel {% if market_open %}is-open{% endif %}">
+				<a
+					class="featured-market-toggle"
+					href="{{ toggle_market_url }}"
+					data-loading-shell-trigger="#featured-market-shell"
+				>
+					<div class="featured-market-toggle-copy">
+						<div class="featured-market-toggle-kicker">Exclusive Donor View</div>
+						<div class="featured-market-toggle-title">Ronin Market Hunter</div>
+						<div class="featured-market-toggle-note">
+							{% if market_open %}
+								Thanks for supporting Apex Breeder. This exclusive donor-only feed shows the top listed chickens for this mode.
+							{% else %}
+								Thanks for supporting Apex Breeder. This donor-only view shows top chickens currently for sale in Ronin Market for this mode.
+							{% endif %}
+						</div>
+					</div>
+
+					<div class="featured-market-toggle-action">
+						<span class="featured-market-toggle-btn">
+							{% if market_open %}Hide{% else %}Load{% endif %}
+						</span>
+					</div>
+				</a>
+
+				{% if market_open %}
+					<div class="featured-market-content">
+						{% if featured_feed and featured_feed.rows %}
+							<div class="featured-market-grid">
+								{% for chicken in featured_feed.rows %}
+									<a
+										href="{{ chicken.market_url }}"
+										target="_blank"
+										rel="noopener noreferrer"
+										class="featured-market-card"
+									>
+										<div class="featured-market-card-image-wrap">
+											<img
+												src="{{ chicken.image }}"
+												alt="Chicken #{{ chicken.token_id }}"
+												class="featured-market-card-image"
+											>
+										</div>
+
+										<div class="featured-market-card-body">
+											<div class="featured-market-card-topline">
+												<div class="featured-market-card-id">#{{ chicken.token_id }}</div>
+												<div class="featured-market-card-price">{{ chicken.price_display }}</div>
+											</div>
+
+											<div class="featured-market-card-meta">
+												<div class="featured-market-card-ip">IP: {{ chicken.total_ip }}</div>
+
+												{% if chicken.build_name_display %}
+													<div class="featured-market-card-build">
+														{{ chicken.build_name_display }}
+														{% if chicken.build_display %}
+															• {{ chicken.build_display }}
+														{% endif %}
+													</div>
+												{% endif %}
+											</div>
+
+											<div class="featured-market-card-breed-count">Breed Count: {{ chicken.breed_count }}</div>
+										</div>
+									</a>
+								{% endfor %}
+							</div>
+						{% else %}
+							<div class="empty-state-card empty-state-card-wide featured-market-empty">
+								<div class="empty-state-kicker">No listings found</div>
+								<h3>No current market listings matched this mode.</h3>
+								<p>Try again later. The panel only shows chickens that are actively for sale.</p>
+							</div>
+						{% endif %}
+					</div>
+				{% endif %}
+			</div>
+		</div>
+		<div class="loading-shell-skeleton">
+			<div class="panel featured-market-panel">
+				<div class="featured-market-content">
+					<div class="loading-shell-status">
+						<span class="loading-shell-spinner" aria-hidden="true"></span>
+						<span>Loading featured market listings...</span>
+					</div>
+
+					<div class="loading-skeleton-grid">
+						<div class="loading-skeleton-card">
+							<div class="loading-skeleton-image"></div>
+							<div class="loading-skeleton-body">
+								<div class="loading-skeleton-line is-short"></div>
+								<div class="loading-skeleton-line is-mid"></div>
+								<div class="loading-skeleton-line"></div>
+								<div class="loading-skeleton-line is-short"></div>
+							</div>
+						</div>
+
+						<div class="loading-skeleton-card">
+							<div class="loading-skeleton-image"></div>
+							<div class="loading-skeleton-body">
+								<div class="loading-skeleton-line is-short"></div>
+								<div class="loading-skeleton-line is-mid"></div>
+								<div class="loading-skeleton-line"></div>
+								<div class="loading-skeleton-line is-short"></div>
+							</div>
+						</div>
+
+						<div class="loading-skeleton-card">
+							<div class="loading-skeleton-image"></div>
+							<div class="loading-skeleton-body">
+								<div class="loading-skeleton-line is-short"></div>
+								<div class="loading-skeleton-line is-mid"></div>
+								<div class="loading-skeleton-line"></div>
+								<div class="loading-skeleton-line is-short"></div>
+							</div>
+						</div>
+
+						<div class="loading-skeleton-card">
+							<div class="loading-skeleton-image"></div>
+							<div class="loading-skeleton-body">
+								<div class="loading-skeleton-line is-short"></div>
+								<div class="loading-skeleton-line is-mid"></div>
+								<div class="loading-skeleton-line"></div>
+								<div class="loading-skeleton-line is-short"></div>
+							</div>
+						</div>
+
+						<div class="loading-skeleton-card">
+							<div class="loading-skeleton-image"></div>
+							<div class="loading-skeleton-body">
+								<div class="loading-skeleton-line is-short"></div>
+								<div class="loading-skeleton-line is-mid"></div>
+								<div class="loading-skeleton-line"></div>
+								<div class="loading-skeleton-line is-short"></div>
+							</div>
+						</div>
+
+						<div class="loading-skeleton-card">
+							<div class="loading-skeleton-image"></div>
+							<div class="loading-skeleton-body">
+								<div class="loading-skeleton-line is-short"></div>
+								<div class="loading-skeleton-line is-mid"></div>
+								<div class="loading-skeleton-line"></div>
+								<div class="loading-skeleton-line is-short"></div>
+							</div>
+						</div>
+
+						<div class="loading-skeleton-card">
+							<div class="loading-skeleton-image"></div>
+							<div class="loading-skeleton-body">
+								<div class="loading-skeleton-line is-short"></div>
+								<div class="loading-skeleton-line is-mid"></div>
+								<div class="loading-skeleton-line"></div>
+								<div class="loading-skeleton-line is-short"></div>
+							</div>
+						</div>
+
+						<div class="loading-skeleton-card">
+							<div class="loading-skeleton-image"></div>
+							<div class="loading-skeleton-body">
+								<div class="loading-skeleton-line is-short"></div>
+								<div class="loading-skeleton-line is-mid"></div>
+								<div class="loading-skeleton-line"></div>
+								<div class="loading-skeleton-line is-short"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>			
+</section>
+{% endif %}

@@ -102,7 +102,24 @@
         {% if error %}
             <div class="error">{{ error }}</div>
         {% endif %}
-
+		
+		{% set toggle_market_url = url_for(
+			'match_ultimate_page',
+			wallet_address=wallet,
+			selected_token_id=selected_token_id or None,
+			sort_by=sort_by,
+			sort_dir=sort_dir,
+			market_open=0 if market_open else 1,
+			ultimate_filter_type=','.join(ultimate_filter_type_values) if ultimate_filter_type_values else None,
+			ultimate_filter_build=ultimate_filter_build if ultimate_filter_build != 'all' else None,
+			ultimate_filter_build_match=','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else None,
+			ultimate_min_ip=ultimate_min_ip if ultimate_min_ip is not none else None,
+			ultimate_filter_generation=','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else None,
+			ultimate_filter_breed_count=','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else None,
+			ultimate_filter_ninuno=ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else None
+		) ~ '#available-chickens' %}
+		{% include "_featured_market_toggle.html" %}
+		
 		<section class="breeding-section">
 			<div class="breeding-section-header">
 				<div>
