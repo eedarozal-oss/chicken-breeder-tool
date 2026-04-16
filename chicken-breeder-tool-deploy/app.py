@@ -19,6 +19,10 @@ from services.family_roots import (
     complete_ninuno_via_lineage_with_resume,
     initialize_simple_family_roots_for_wallet,
 )
+from services.market_candidate_cache import init_market_candidate_cache_table
+from services.market_featured_service import get_featured_market_feed
+from services.market_listing_cache import init_market_listing_cache_table
+
 from services.chicken_enricher import enrich_chicken_records
 from services.build_eval import evaluate_build, count_added_missing_traits
 from services.wallet_access import get_wallet_access_expiry_display
@@ -96,6 +100,7 @@ from services.wallet_access import (
     grant_manual_access,
     get_wallet_access_rows,
     format_wallet_access_rows,
+    has_active_payment_access_in_db,
 )
 
 from services.ip_available_table import (
@@ -155,6 +160,8 @@ MATCH_SETTINGS = {
 
 init_db()
 init_wallet_access_db()
+init_market_candidate_cache_table()
+init_market_listing_cache_table()
 
 OWNER_ADMIN_PASSWORD = os.environ.get("OWNER_ADMIN_PASSWORD", "").strip()
 OWNER_WHITELIST_ROUTE = "/owner/grant-access"
@@ -1665,7 +1672,6 @@ def available_chickens_page():
         error=error,
     )
 
-
 @app.route("/planner/add", methods=["POST"])
 def add_to_breeding_planner():
     wallet = request.form.get("wallet_address", "").strip().lower()
@@ -1921,6 +1927,10 @@ def match_ip_page():
     popup_ninuno = normalize_auto_ninuno_filter(request.args.get("popup_ninuno"))
     popup_match_count = max(1, safe_int(request.args.get("popup_match_count"), 1) or 1)
 
+    market_open = str(request.args.get("market_open") or "").strip().lower() in {"1", "true", "on", "yes"}
+    show_featured_market_bar = has_active_payment_access_in_db(wallet)
+    featured_feed = None
+
     breedable_chickens = []
     selected_chicken = None
     potential_matches = []
@@ -2122,6 +2132,13 @@ def match_ip_page():
                         f"{selected_weakest_stat_label}: {get_effective_ip_stat(candidate, selected_weakest_stat_name)}"
                         if selected_weakest_stat_name else ""
                     )
+
+            if show_featured_market_bar and market_open:
+                featured_feed = get_featured_market_feed(
+                    mode="ip",
+                    target_count=8,
+                    batch_size=20,
+                )        
         except Exception as exc:
             error = f"Failed to load IP breeding matches: {exc}"
 
@@ -2162,6 +2179,9 @@ def match_ip_page():
         ip_available_filter_options=ip_available_filter_options,
         ip_active_filters=ip_active_filters,
         ip_original_available_count=len(ip_original_available_pool),
+        market_open=market_open,
+        show_featured_market_bar=show_featured_market_bar,
+        featured_feed=featured_feed,
         error=error,
     )
 
@@ -2181,6 +2201,10 @@ def match_gene_page():
     popup_breed_diff = safe_int(request.args.get("popup_breed_diff"))
     popup_ninuno = normalize_auto_ninuno_filter(request.args.get("popup_ninuno"))
     popup_match_count = max(1, safe_int(request.args.get("popup_match_count"), 1) or 1)
+
+    market_open = str(request.args.get("market_open") or "").strip().lower() in {"1", "true", "on", "yes"}
+    show_featured_market_bar = has_active_payment_access_in_db(wallet)
+    featured_feed = None
 
     gene_sort_by = str(request.args.get("sort_by") or "build").strip().lower()
     gene_sort_dir = str(request.args.get("sort_dir") or "asc").strip().lower()
@@ -2422,6 +2446,12 @@ def match_gene_page():
                     row for row in available_auto_match_pool
                     if safe_int(row.get("build_match_count"), 0) >= popup_min_build_count
                 ]
+            if show_featured_market_bar and market_open:
+                featured_feed = get_featured_market_feed(
+                    mode="gene",
+                    target_count=8,
+                    batch_size=20,
+                )
                 
         except Exception as exc:
             error = f"Failed to load gene breeding matches: {exc}"
@@ -2483,6 +2513,9 @@ def match_gene_page():
         match_empty_state=match_empty_state,
         auto_match_empty_state=auto_match_empty_state,
         wallet_summary=wallet_summary,
+        market_open=market_open,
+        show_featured_market_bar=show_featured_market_bar,
+        featured_feed=featured_feed,
         error=error,
     )
 
@@ -2499,6 +2532,10 @@ def match_ultimate_page():
     popup_breed_diff = safe_int(request.args.get("popup_breed_diff"))
     popup_ninuno = normalize_auto_ninuno_filter(request.args.get("popup_ninuno"))
     popup_match_count = max(1, safe_int(request.args.get("popup_match_count"), 1) or 1)
+
+    market_open = str(request.args.get("market_open") or "").strip().lower() in {"1", "true", "on", "yes"}
+    show_featured_market_bar = has_active_payment_access_in_db(wallet)
+    featured_feed = None
 
     if not require_authorized_wallet(wallet):
         return redirect(url_for("index"))
@@ -2718,7 +2755,12 @@ def match_ultimate_page():
                     row for row in available_auto_match_pool
                     if (safe_int(row.get("ultimate_build_match_count"), 0) or 0) >= popup_min_build_count
                 ]
-                    
+            if show_featured_market_bar and market_open:
+                featured_feed = get_featured_market_feed(
+                    mode="ultimate",
+                    target_count=8,
+                    batch_size=20,
+                )        
         except Exception as exc:
             error = f"Failed to load ultimate breeding matches: {exc}"
             
@@ -2770,6 +2812,9 @@ def match_ultimate_page():
         match_empty_state=match_empty_state,
         auto_match_empty_state=auto_match_empty_state,
         wallet_summary=wallet_summary,
+        market_open=market_open,
+        show_featured_market_bar=show_featured_market_bar,
+        featured_feed=featured_feed,
         error=error,
     )
 
