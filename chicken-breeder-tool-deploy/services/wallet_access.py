@@ -425,3 +425,26 @@ def format_wallet_access_rows(rows):
         )
 
     return formatted
+
+def has_active_payment_access_in_db(wallet: str) -> bool:
+    wallet = (wallet or "").strip().lower()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT 1
+        FROM wallet_access
+        WHERE wallet_address = ?
+          AND source = 'payment'
+          AND status = 'active'
+          AND expires_at > ?
+        LIMIT 1
+        """,
+        (wallet, now_iso),
+    )
+    row = cur.fetchone()
+    conn.close()
+
+    return row is not None
