@@ -587,6 +587,22 @@ document.addEventListener("DOMContentLoaded", function () {
     if (document.body?.dataset?.autoMatchResultOpen === "1") {
         openAutoMatchResultModal();
     }
+	
+	function activateLoadingShell(shell) {
+        if (!shell) return;
+        shell.classList.add("is-loading");
+    }
+
+    document.querySelectorAll("[data-loading-shell-trigger]").forEach(function (trigger) {
+        trigger.addEventListener("click", function () {
+            const targetSelector = trigger.getAttribute("data-loading-shell-trigger");
+            if (!targetSelector) return;
+
+            const shell = document.querySelector(targetSelector);
+            activateLoadingShell(shell);
+        });
+    });
+	
 });
 
 document.addEventListener("DOMContentLoaded", function () {
