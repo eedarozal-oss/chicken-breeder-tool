@@ -3,9 +3,8 @@ from datetime import datetime, timezone
 from services.build_eval import evaluate_all_builds
 from services.db.connection import get_connection
 from services.market_candidate_cache import (
-    delete_market_candidate_cache_row,
-    get_market_candidate_cache_row,
-    upsert_market_candidate_cache_row,
+    delete_market_candidate_cache_row_with_conn,
+    upsert_market_candidate_cache_row_with_conn,
     MARKET_CANDIDATE_CACHE_VERSION,
 )
 
@@ -260,24 +259,27 @@ def refresh_market_candidate_cache():
     upserted = 0
     deleted = 0
 
-    for static_row in changed_rows:
-        processed += 1
-        candidate_row = compute_market_candidate_row(static_row)
+    with get_connection() as conn:
+        for static_row in changed_rows:
+            processed += 1
+            candidate_row = compute_market_candidate_row(static_row)
 
-        qualifies_any = any(
-            [
-                candidate_row["qualifies_ip"],
-                candidate_row["qualifies_gene"],
-                candidate_row["qualifies_ultimate"],
-            ]
-        )
+            qualifies_any = any(
+                [
+                    candidate_row["qualifies_ip"],
+                    candidate_row["qualifies_gene"],
+                    candidate_row["qualifies_ultimate"],
+                ]
+            )
 
-        if qualifies_any:
-            upsert_market_candidate_cache_row(candidate_row)
-            upserted += 1
-        else:
-            delete_market_candidate_cache_row(candidate_row["token_id"])
-            deleted += 1
+            if qualifies_any:
+                upsert_market_candidate_cache_row_with_conn(conn, candidate_row)
+                upserted += 1
+            else:
+                delete_market_candidate_cache_row_with_conn(conn, candidate_row["token_id"])
+                deleted += 1
+
+        conn.commit()
 
     return {
         "processed": processed,

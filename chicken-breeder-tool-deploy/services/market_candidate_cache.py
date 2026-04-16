@@ -146,17 +146,24 @@ def delete_market_candidate_cache_row(token_id):
         return
 
     with get_connection() as conn:
-        conn.execute(
-            """
-            DELETE FROM chicken_market_candidates
-            WHERE token_id = ?
-            """,
-            (token_id,),
-        )
+        delete_market_candidate_cache_row_with_conn(conn, token_id)
         conn.commit()
 
+def delete_market_candidate_cache_row_with_conn(conn, token_id):
+    token_id = str(token_id or "").strip()
+    if not token_id:
+        return
 
-def upsert_market_candidate_cache_row(row):
+    conn.execute(
+        """
+        DELETE FROM chicken_market_candidates
+        WHERE token_id = ?
+        """,
+        (token_id,),
+    )
+
+
+def upsert_market_candidate_cache_row_with_conn(conn, row):
     row = dict(row or {})
     token_id = str(row.get("token_id") or "").strip()
     if not token_id:
@@ -180,64 +187,72 @@ def upsert_market_candidate_cache_row(row):
         "cache_version": int(row.get("cache_version") or MARKET_CANDIDATE_CACHE_VERSION),
     }
 
-    with get_connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO chicken_market_candidates (
-                token_id,
-                image,
-                breed_count,
-                total_ip,
-                best_build_name,
-                best_build_count,
-                best_build_total,
-                qualifies_ip,
-                qualifies_gene,
-                qualifies_ultimate,
-                source_updated_at,
-                computed_at,
-                market_skip,
-                market_skip_reason,
-                market_checked_at,
-                cache_version
-            )
-            VALUES (
-                :token_id,
-                :image,
-                :breed_count,
-                :total_ip,
-                :best_build_name,
-                :best_build_count,
-                :best_build_total,
-                :qualifies_ip,
-                :qualifies_gene,
-                :qualifies_ultimate,
-                :source_updated_at,
-                CURRENT_TIMESTAMP,
-                :market_skip,
-                :market_skip_reason,
-                :market_checked_at,
-                :cache_version
-            )
-            ON CONFLICT(token_id) DO UPDATE SET
-                image = excluded.image,
-                breed_count = excluded.breed_count,
-                total_ip = excluded.total_ip,
-                best_build_name = excluded.best_build_name,
-                best_build_count = excluded.best_build_count,
-                best_build_total = excluded.best_build_total,
-                qualifies_ip = excluded.qualifies_ip,
-                qualifies_gene = excluded.qualifies_gene,
-                qualifies_ultimate = excluded.qualifies_ultimate,
-                source_updated_at = excluded.source_updated_at,
-                computed_at = CURRENT_TIMESTAMP,
-                market_skip = excluded.market_skip,
-                market_skip_reason = excluded.market_skip_reason,
-                market_checked_at = excluded.market_checked_at,
-                cache_version = excluded.cache_version
-            """,
-            payload,
+    conn.execute(
+        """
+        INSERT INTO chicken_market_candidates (
+            token_id,
+            image,
+            breed_count,
+            total_ip,
+            best_build_name,
+            best_build_count,
+            best_build_total,
+            qualifies_ip,
+            qualifies_gene,
+            qualifies_ultimate,
+            source_updated_at,
+            computed_at,
+            market_skip,
+            market_skip_reason,
+            market_checked_at,
+            cache_version
         )
+        VALUES (
+            :token_id,
+            :image,
+            :breed_count,
+            :total_ip,
+            :best_build_name,
+            :best_build_count,
+            :best_build_total,
+            :qualifies_ip,
+            :qualifies_gene,
+            :qualifies_ultimate,
+            :source_updated_at,
+            CURRENT_TIMESTAMP,
+            :market_skip,
+            :market_skip_reason,
+            :market_checked_at,
+            :cache_version
+        )
+        ON CONFLICT(token_id) DO UPDATE SET
+            image = excluded.image,
+            breed_count = excluded.breed_count,
+            total_ip = excluded.total_ip,
+            best_build_name = excluded.best_build_name,
+            best_build_count = excluded.best_build_count,
+            best_build_total = excluded.best_build_total,
+            qualifies_ip = excluded.qualifies_ip,
+            qualifies_gene = excluded.qualifies_gene,
+            qualifies_ultimate = excluded.qualifies_ultimate,
+            source_updated_at = excluded.source_updated_at,
+            computed_at = CURRENT_TIMESTAMP,
+            market_skip = excluded.market_skip,
+            market_skip_reason = excluded.market_skip_reason,
+            market_checked_at = excluded.market_checked_at,
+            cache_version = excluded.cache_version
+        """,
+        payload,
+    )
+
+def upsert_market_candidate_cache_row(row):
+    row = dict(row or {})
+    token_id = str(row.get("token_id") or "").strip()
+    if not token_id:
+        return
+
+    with get_connection() as conn:
+        upsert_market_candidate_cache_row_with_conn(conn, row)
         conn.commit()
 
 
