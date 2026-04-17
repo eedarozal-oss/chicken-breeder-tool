@@ -1,11 +1,14 @@
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from services.db.connection import DB_PATH
-from flask import Flask, render_template, request, redirect, url_for, session, send_file
+from flask import Flask, render_template, request, redirect, url_for, session
 import os
+import hmac
+import secrets
 from io import BytesIO
 from openpyxl import Workbook
+from routes import register_core_routes, register_match_routes, register_planner_routes
 from services.ronin_api import fetch_all_owned_chickens
 from services.metadata_parser import parse_chicken_record
 from services.match_rules import (
@@ -24,6 +27,7 @@ from services.market_featured_service import get_featured_market_feed
 from services.market_listing_cache import init_market_listing_cache_table
 
 from services.chicken_enricher import enrich_chicken_records
+from services.gene_build_picker import get_best_available_gene_build_info
 from services.build_eval import evaluate_build, count_added_missing_traits
 from services.wallet_access import get_wallet_access_expiry_display
 from services.gene_classifier import classify_gene_profile
@@ -145,7 +149,30 @@ from services.planner_bookmarklet import (
     build_bookmarklet_inventory_name_lookup,
 )
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-fallback-secret")
+
+
+def env_flag(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+FLASK_DEBUG_ENABLED = env_flag("FLASK_DEBUG", default=False)
+SESSION_COOKIE_SECURE_ENABLED = env_flag(
+    "SESSION_COOKIE_SECURE",
+    default=bool(os.environ.get("RAILWAY_ENVIRONMENT", "").strip()),
+)
+session_secret = os.environ.get("FLASK_SECRET_KEY", "").strip()
+if not session_secret:
+    session_secret = secrets.token_hex(32)
+
+app.secret_key = session_secret
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=SESSION_COOKIE_SECURE_ENABLED,
+)
 
 CONTRACTS = [
     "0xee9436518030616bc315665678738a4348463df4",
@@ -165,8 +192,119 @@ init_market_listing_cache_table()
 
 OWNER_ADMIN_PASSWORD = os.environ.get("OWNER_ADMIN_PASSWORD", "").strip()
 OWNER_WHITELIST_ROUTE = "/owner/grant-access"
+CSRF_SESSION_KEY = "_csrf_token"
+CSRF_COOKIE_NAME = "apex_csrf_token"
+CSRF_HEADER_NAME = "X-CSRF-Token"
+CSRF_FORM_FIELD = "csrf_token"
+OWNER_ADMIN_MAX_ATTEMPTS = 5
+OWNER_ADMIN_LOCK_MINUTES = 15
 
 STATIC_EXPORT_DB_PATH = Path(__file__).resolve().parent / "cache" / "chicken_static_export.db"
+
+
+def get_csrf_token():
+    token = session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[CSRF_SESSION_KEY] = token
+    return token
+
+
+def is_ajax_request():
+    requested_with = str(request.headers.get("X-Requested-With") or "").strip().lower()
+    accepts_json = "application/json" in str(request.headers.get("Accept") or "").lower()
+    return requested_with == "xmlhttprequest" or accepts_json
+
+
+def build_csrf_error_response():
+    if is_ajax_request():
+        return {"ok": False, "error": "CSRF validation failed."}, 400
+    return "CSRF validation failed.", 400
+
+
+def validate_csrf_request():
+    expected_token = str(session.get(CSRF_SESSION_KEY) or "").strip()
+    submitted_token = str(
+        request.form.get(CSRF_FORM_FIELD)
+        or request.headers.get(CSRF_HEADER_NAME)
+        or request.headers.get("X-CSRFToken")
+        or ""
+    ).strip()
+    cookie_token = str(request.cookies.get(CSRF_COOKIE_NAME) or "").strip()
+
+    if not expected_token or not submitted_token or not cookie_token:
+        return False
+
+    return (
+        hmac.compare_digest(expected_token, submitted_token)
+        and hmac.compare_digest(expected_token, cookie_token)
+    )
+
+
+def is_owner_admin_locked():
+    locked_until_raw = session.get("owner_admin_locked_until")
+    if not locked_until_raw:
+        return False, 0
+
+    try:
+        locked_until = datetime.fromisoformat(locked_until_raw)
+    except Exception:
+        session.pop("owner_admin_locked_until", None)
+        return False, 0
+
+    now = datetime.now(timezone.utc)
+    if locked_until <= now:
+        session.pop("owner_admin_locked_until", None)
+        session.pop("owner_admin_failed_attempts", None)
+        return False, 0
+
+    remaining_minutes = max(1, int((locked_until - now).total_seconds() // 60) + 1)
+    return True, remaining_minutes
+
+
+def register_owner_admin_failure():
+    failures = int(session.get("owner_admin_failed_attempts", 0)) + 1
+    session["owner_admin_failed_attempts"] = failures
+
+    if failures >= OWNER_ADMIN_MAX_ATTEMPTS:
+        locked_until = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=OWNER_ADMIN_LOCK_MINUTES)
+        session["owner_admin_locked_until"] = locked_until.isoformat()
+
+
+def clear_owner_admin_failures():
+    session.pop("owner_admin_failed_attempts", None)
+    session.pop("owner_admin_locked_until", None)
+
+
+def owner_password_is_valid(owner_password):
+    if not OWNER_ADMIN_PASSWORD:
+        return False
+    return hmac.compare_digest(owner_password, OWNER_ADMIN_PASSWORD)
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {"csrf_token": get_csrf_token()}
+
+
+@app.before_request
+def protect_post_requests():
+    get_csrf_token()
+
+    if request.method == "POST" and not validate_csrf_request():
+        return build_csrf_error_response()
+
+
+@app.after_request
+def persist_csrf_cookie(response):
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        get_csrf_token(),
+        secure=app.config.get("SESSION_COOKIE_SECURE", False),
+        httponly=False,
+        samesite=app.config.get("SESSION_COOKIE_SAMESITE", "Lax"),
+    )
+    return response
 
 def quote_sqlite_identifier(name):
     return '"' + str(name).replace('"', '""') + '"'
@@ -1163,53 +1301,6 @@ def enrich_gene_display(chicken, build_type):
 
     return enrich_chicken_media(row)
 
-def get_best_available_gene_build_info(chicken):
-    build_options = ["killua", "shanks", "levi", "hybrid 2", "hybrid 1"]
-    best_info = {
-        "build_key": "",
-        "build_label": "",
-        "build_count_display": "",
-        "source": "",
-        "display_source": "",
-        "sort_source_rank": 99,
-        "sort_match_count": 0,
-        "sort_match_total": 0,
-    }
-
-    for build_key in build_options:
-        info = get_gene_build_target_info(chicken, build_key)
-        if not info.get("eligible"):
-            continue
-
-        current = {
-            "build_key": build_key,
-            "build_label": build_key.title(),
-            "build_count_display": info.get("display_match") or "",
-            "source": info.get("source") or "",
-            "display_source": info.get("display_source") or "",
-            "sort_source_rank": info.get("sort_source_rank", 99),
-            "sort_match_count": info.get("sort_match_count", 0),
-            "sort_match_total": info.get("sort_match_total", 0),
-        }
-
-        current_rank = (
-            current["sort_source_rank"],
-            -(current["sort_match_count"] or 0),
-            -(current["sort_match_total"] or 0),
-            current["build_label"].lower(),
-        )
-        best_rank = (
-            best_info["sort_source_rank"],
-            -(best_info["sort_match_count"] or 0),
-            -(best_info["sort_match_total"] or 0),
-            best_info["build_label"].lower(),
-        )
-
-        if not best_info["build_key"] or current_rank < best_rank:
-            best_info = current
-
-    return best_info
-
 def enrich_gene_available_display(chicken):
     row = enrich_chicken_media(dict(chicken or {}))
 
@@ -1374,11 +1465,51 @@ def build_ultimate_available_auto_candidates(breedable_chickens, breed_diff=None
     )
 
 
-def pick_multi_pairs_from_candidates(pair_candidates, target_count):
+def pick_multi_pairs_from_candidates(pair_candidates, target_count, mode=""):
+    pair_candidates = list(pair_candidates or [])
+    mode_key = str(mode or "").strip().lower()
+
+    if not mode_key:
+        if any("gene_pair_metrics" in row or "selected_eval" in row for row in pair_candidates):
+            mode_key = "gene"
+        elif any("ultimate_build_metrics" in row or "pair_quality" in row for row in pair_candidates):
+            mode_key = "ultimate"
+
+    def safe_pair_ranking(row):
+        return tuple(row.get("ranking") or ())
+
+    def safe_side_int(row, side, keys):
+        side_row = (row.get(side) or {})
+        for key in keys:
+            direct_value = safe_int(row.get(f"{side}_{key}"))
+            if direct_value is not None:
+                return direct_value
+            value = safe_int(side_row.get(key))
+            if value is not None:
+                return value
+        return 0
+
+    def sort_key(row):
+        if mode_key == "gene":
+            left_value = safe_side_int(row, "left", ("build_match_count",))
+            right_value = safe_side_int(row, "right", ("build_match_count",))
+            return (
+                -max(left_value, right_value),
+                -min(left_value, right_value),
+                -(left_value + right_value),
+                safe_pair_ranking(row),
+            )
+
+        if mode_key == "ultimate":
+            return safe_pair_ranking(row)
+
+        return safe_pair_ranking(row)
+
     used = set()
     results = []
     target_count = max(0, safe_int(target_count, 0) or 0)
-    for row in pair_candidates or []:
+    ordered_candidates = sorted(pair_candidates, key=sort_key)
+    for row in ordered_candidates:
         left_id = str((row.get("left") or {}).get("token_id") or "")
         right_id = str((row.get("right") or {}).get("token_id") or "")
         if not left_id or not right_id or left_id in used or right_id in used:
@@ -1418,1491 +1549,127 @@ def get_ip_difference(chicken_a, chicken_b):
 
     return abs(ip_a - ip_b)
 
-
-@app.route("/", methods=["GET", "POST"])
-def index():
-    error = None
-    success = None
-    redirect_url = None
-    wallet = request.values.get("wallet_address", "").strip().lower()
-
-    if request.method == "POST":
-        if not wallet:
-            error = "Enter a wallet address to continue."
-        elif not is_valid_wallet(wallet):
-            error = "Enter a valid 0x wallet address."
-        else:
-            try:
-                if not has_wallet_access(wallet):
-                    error = "This wallet has no active access. Send at least 0.1 RON to 0x9933199Fa3D96D7696d2B2A4CfBa48d99E47a079 to gain access."
-                else:
-                    set_authorized_wallet(wallet)
-                    get_wallet_chickens(wallet, ensure_loaded=True)
-
-                    expiry_display = get_wallet_access_expiry_display(wallet)
-                    if expiry_display:
-                        success = f"Wallet approved. Access is active until {expiry_display}."
-                    else:
-                        success = "Wallet approved. Access is active for 30 days."
-
-                    redirect_url = url_for("landing_page", wallet_address=wallet)
-
-            except Exception as exc:
-                error = f"Failed to validate wallet access: {exc}"
-
-    elif wallet:
-        if is_valid_wallet(wallet) and is_authorized_wallet(wallet):
-            return redirect(url_for("landing_page", wallet_address=wallet))
-
-    return render_template(
-        "index.html",
-        wallet=wallet,
-        error=error,
-        success=success,
-        redirect_url=redirect_url,
-    )
-
-
-@app.route(OWNER_WHITELIST_ROUTE, methods=["GET", "POST"])
-def owner_grant_access_page():
-    action = request.values.get("action", "grant_access").strip()
-    wallet = request.values.get("wallet_address", "").strip().lower()
-    wallet_password = request.values.get("wallet_password", "").strip()
-    owner_password = request.values.get("owner_password", "").strip()
-    duration_days = request.values.get("duration_days", "").strip()
-    error = None
-    success = None
-    sync_results = []
-    access_rows = []
-
-    if request.method == "POST":
-        parsed_days = safe_int(duration_days)
-
-        if not OWNER_ADMIN_PASSWORD:
-            error = "Owner admin password is not configured on the server."
-        elif owner_password != OWNER_ADMIN_PASSWORD:
-            error = "Invalid owner password."
-        elif action == "sync_static_cache":
-            try:
-                sync_results = sync_static_export_tables_to_main_db()
-                if sync_results:
-                    table_summary = ", ".join(
-                        f"{row['table']} ({row['row_count']} rows)"
-                        for row in sync_results
-                    )
-                    success = f"Static cache sync completed: {table_summary}."
-                else:
-                    success = "Static cache sync completed, but no tables were copied."
-                owner_password = ""
-            except Exception as exc:
-                error = f"Failed to sync static cache DB: {exc}"
-        else:
-            if not wallet:
-                error = "Enter a wallet address."
-            elif not is_valid_wallet(wallet):
-                error = "Enter a valid 0x wallet address."
-            elif wallet_password.lower() != wallet[-8:]:
-                error = "Wallet password must match the last 8 characters of the wallet address."
-            elif parsed_days is None or parsed_days <= 0:
-                error = "Duration must be a whole number greater than 0."
-            else:
-                try:
-                    grant_manual_access(
-                        wallet=wallet,
-                        notes=f"Owner manual grant for {parsed_days} day(s)",
-                        duration_days=parsed_days,
-                    )
-                    expiry_display = get_wallet_access_expiry_display(wallet)
-                    success = f"Access granted to {wallet} for {parsed_days} day(s). Active until {expiry_display}."
-                    wallet_password = ""
-                    duration_days = ""
-                    owner_password = ""
-                except Exception as exc:
-                    error = f"Failed to grant access: {exc}"
-
-    access_rows = format_wallet_access_rows(get_wallet_access_rows(limit=300))
-
-    return render_template(
-        "admin_whitelist.html",
-        wallet=wallet,
-        wallet_password=wallet_password,
-        duration_days=duration_days,
-        owner_password=owner_password,
-        error=error,
-        success=success,
-        sync_results=sync_results,
-        access_rows=access_rows,
-    )
-
-
-@app.route("/landing", methods=["GET"])
-def landing_page():
-    wallet = request.args.get("wallet_address", "").strip().lower()
-    breedable_chickens = []
-    error = None
-    success = None
-    access_expiry = None
-    refresh_status = str(request.args.get("refresh_status") or "").strip().lower()
-    refresh_message = str(request.args.get("refresh_message") or "").strip()
-    wallet_summary = None
-
-    if refresh_status == "success" and refresh_message:
-        success = refresh_message
-    elif refresh_status == "error" and refresh_message:
-        error = refresh_message
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    try:
-        chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-        breedable_chickens = [enrich_chicken_media(row) for row in chickens if is_breedable(row)]
-        access_expiry = get_wallet_access_expiry_display(wallet)
-
-        wallet_summary = build_wallet_summary(
-            wallet=wallet,
-            chickens=chickens,
-            access_expiry=access_expiry,
-        )
-        
-    except Exception as exc:
-        error = f"Failed to load wallet data: {exc}"
-
-    return render_template(
-        "landing.html",
-        wallet=wallet,
-        breedable_count=len(breedable_chickens),
-        access_expiry=access_expiry,
-        wallet_summary=wallet_summary,
-        error=error,
-        success=success,
-    )
-
-
-@app.route("/refresh-wallet", methods=["POST"])
-def refresh_wallet():
-    wallet = request.form.get("wallet_address", "").strip().lower()
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    cooldown_key = f"wallet_refresh_last_clicked_{wallet}"
-    now = datetime.now(timezone.utc)
-    last_clicked_raw = session.get(cooldown_key)
-
-    if last_clicked_raw:
-        try:
-            last_clicked = datetime.fromisoformat(last_clicked_raw)
-            seconds_since = (now - last_clicked).total_seconds()
-            if seconds_since < 60:
-                remaining = max(1, int(60 - seconds_since))
-                return redirect(url_for(
-                    "landing_page",
-                    wallet_address=wallet,
-                    refresh_status="error",
-                    refresh_message=f"Wallet was refreshed recently. Please wait {remaining} second(s) before refreshing again.",
-                ))
-        except Exception:
-            pass
-
-    try:
-        sync_wallet_data(wallet)
-        session[cooldown_key] = now.isoformat()
-        return redirect(url_for(
-            "landing_page",
-            wallet_address=wallet,
-            refresh_status="success",
-            refresh_message="Wallet refreshed successfully.",
-        ))
-    except Exception as exc:
-        return redirect(url_for(
-            "landing_page",
-            wallet_address=wallet,
-            refresh_status="error",
-            refresh_message=f"Failed to refresh wallet data: {exc}",
-        ))
-
-
-@app.route("/available-chickens", methods=["GET"])
-def available_chickens_page():
-    wallet = request.args.get("wallet_address", "").strip().lower()
-    breedable_chickens = []
-    error = None
-    wallet_summary = None
-    available_dashboard = None
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    try:
-        chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-        breedable_chickens = []
-
-        for row in chickens:
-            if not is_breedable(row):
-                continue
-
-            chicken = enrich_chicken_media(row)
-            best_gene_build = get_best_available_gene_build_info(chicken)
-
-            chicken["available_build_display"] = best_gene_build.get("build_label") or ""
-            chicken["available_build_count_display"] = best_gene_build.get("build_count_display") or ""
-
-            breedable_chickens.append(chicken)
-
-        access_expiry = get_wallet_access_expiry_display(wallet)
-        wallet_summary = build_wallet_summary(
-            wallet=wallet,
-            chickens=chickens,
-            access_expiry=access_expiry,
-        )
-        available_dashboard = build_available_chickens_dashboard(
-            chickens=chickens,
-            breedable_chickens=breedable_chickens,
-        )
-    except Exception as exc:
-        error = f"Failed to load available chickens: {exc}"
-
-    return render_template(
-        "available_chickens.html",
-        wallet=wallet,
-        breedable_chickens=breedable_chickens,
-        wallet_summary=wallet_summary,
-        available_dashboard=available_dashboard,
-        error=error,
-    )
-
-@app.route("/planner/add", methods=["POST"])
-def add_to_breeding_planner():
-    wallet = request.form.get("wallet_address", "").strip().lower()
-    mode = str(request.form.get("mode") or "").strip().lower()
-    return_endpoint = str(request.form.get("return_endpoint") or "match_ip_page").strip()
-    build_type = str(request.form.get("build_type") or "").strip().lower()
-    left_token_id = str(request.form.get("left_token_id") or "").strip()
-    right_token_id = str(request.form.get("right_token_id") or "").strip()
-    pair_quality = str(request.form.get("pair_quality") or "").strip()
-    left_item_name = str(request.form.get("left_item_name") or "").strip()
-    right_item_name = str(request.form.get("right_item_name") or "").strip()
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    redirect_kwargs = {"wallet_address": wallet}
-    selected_token_id = str(request.form.get("selected_token_id") or "").strip()
-    sort_by = str(request.form.get("sort_by") or "").strip()
-    sort_dir = str(request.form.get("sort_dir") or "").strip()
-    if selected_token_id:
-        redirect_kwargs["selected_token_id"] = selected_token_id
-    if sort_by:
-        redirect_kwargs["sort_by"] = sort_by
-    if sort_dir:
-        redirect_kwargs["sort_dir"] = sort_dir
-    if mode == "ip":
-        if request.form.get("min_ip") not in (None, ""):
-            redirect_kwargs["min_ip"] = request.form.get("min_ip")
-        if request.form.get("ip_diff") not in (None, ""):
-            redirect_kwargs["ip_diff"] = request.form.get("ip_diff")
-        if str(request.form.get("ninuno_100_only") or "").strip() in {"1", "true", "on", "yes"}:
-            redirect_kwargs["ninuno_100_only"] = 1
-    elif mode == "gene":
-        if build_type:
-            redirect_kwargs["build_type"] = build_type
-        if str(request.form.get("ninuno_100_only") or "").strip() in {"1", "true", "on", "yes"}:
-            redirect_kwargs["ninuno_100_only"] = 1
-
-    chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-    chicken_lookup = {str(row.get("token_id") or ""): enrich_chicken_media(row) for row in chickens}
-    left = chicken_lookup.get(left_token_id)
-    right = chicken_lookup.get(right_token_id)
-    if left and right and not planner_pair_exists(wallet, left_token_id, right_token_id):
-        left_item = {"name": left_item_name, "reason": ""} if left_item_name else None
-        right_item = {"name": right_item_name, "reason": ""} if right_item_name else None
-        queue_rows = get_breeding_planner_queue(wallet)
-        queue_rows.append(
-            build_planner_queue_row(
-                mode=mode,
-                left=left,
-                right=right,
-                left_item=left_item,
-                right_item=right_item,
-                pair_quality=pair_quality,
-                build_type=build_type,
-            )
-        )
-        save_breeding_planner_queue(wallet, queue_rows)
-    redirect_kwargs["skip_auto_open"] = 1
-    return redirect(url_for(return_endpoint, **redirect_kwargs))
-
-
-@app.route("/planner/remove", methods=["POST"])
-def remove_from_breeding_planner():
-    wallet = request.form.get("wallet_address", "").strip().lower()
-    return_endpoint = str(request.form.get("return_endpoint") or "match_ip_page").strip()
-    pair_key = str(request.form.get("pair_key") or "").strip()
-    queue_rows = [
-        row for row in get_breeding_planner_queue(wallet)
-        if str(row.get("pair_key") or "") != pair_key
-    ]
-    save_breeding_planner_queue(wallet, queue_rows)
-    if return_endpoint == "planner_modal":
-        return redirect(url_for("match_ip_page", wallet_address=wallet, skip_auto_open=1))
-    redirect_kwargs = {"wallet_address": wallet, "skip_auto_open": 1}
-    for key in ["selected_token_id", "sort_by", "sort_dir", "build_type", "min_ip", "ip_diff"]:
-        value = request.form.get(key)
-        if value not in (None, ""):
-            redirect_kwargs[key] = value
-    if str(request.form.get("ninuno_100_only") or "").strip() in {"1", "true", "on", "yes"}:
-        redirect_kwargs["ninuno_100_only"] = 1
-    return redirect(url_for(return_endpoint, **redirect_kwargs))
-
-
-@app.route("/planner/export", methods=["GET"])
-def export_breeding_planner():
-    wallet = request.args.get("wallet_address", "").strip().lower()
-    if wallet and not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-    output = export_breeding_planner_excel(get_breeding_planner_queue(wallet))
-    filename = f"breeding_planner_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return send_file(output, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-
-@app.route("/planner/items-check", methods=["GET"])
-def planner_items_check():
-    wallet = request.args.get("wallet_address", "").strip().lower()
-    source_page = str(request.args.get("source_page") or "").strip().lower()
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    error = None
-    planner_queue = get_breeding_planner_queue(wallet)
-    summary = {
-        "overall_status": "unknown",
-        "all_available": False,
-        "has_unknown": True,
-        "total_item_types": 0,
-        "total_required_count": 0,
-        "total_missing_count": 0,
-        "items": [],
-        "missing_items": [],
-        "ready_items": [],
-        "wallet_address": wallet,
-    }
-    per_pair_status_rows = []
-    wallet_summary = None
-
-    try:
-        chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-        access_expiry = get_wallet_access_expiry_display(wallet)
-
-        wallet_summary = build_wallet_summary(
-            wallet=wallet,
-            chickens=chickens,
-            access_expiry=access_expiry,
-        )
-
-        summary = build_wallet_planner_item_requirements_summary(
-            wallet_address=wallet,
-            queue_rows=planner_queue,
-        )
-
-        inventory_lookup = build_wallet_inventory_lookup(wallet)
-
-        per_pair_status_rows = [
-            build_per_pair_item_status(row, inventory_lookup)
-            for row in planner_queue
-        ]
-
-    except Exception as exc:
-        error = f"Failed to check planner items: {exc}"
-
-    return render_template(
-        "planner_items_check.html",
-        wallet=wallet,
-        wallet_summary=wallet_summary,
-        planner_queue=planner_queue,
-        planner_summary=build_planner_summary(planner_queue),
-        item_check_summary=summary,
-        per_pair_status_rows=per_pair_status_rows,
-        source_page=source_page,
-        error=error,
-    )
-
-@app.route("/planner/script-generate", methods=["GET"])
-def planner_script_generate():
-    wallet = request.args.get("wallet_address", "").strip().lower()
-    source_page = str(request.args.get("source_page") or "").strip().lower()
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    planner_queue = get_breeding_planner_queue(wallet)
-    wallet_summary = None
-    error = None
-
-    summary = {
-        "overall_status": "unknown",
-        "all_available": False,
-        "has_unknown": True,
-        "total_item_types": 0,
-        "total_required_count": 0,
-        "total_missing_count": 0,
-        "items": [],
-        "missing_items": [],
-        "ready_items": [],
-        "wallet_address": wallet,
-    }
-
-    bookmarklet_code = ""
-    inventory_name_lookup = {}
-
-    script_mode = str(request.args.get("script_mode") or "full").strip().lower()
-    if script_mode not in {"full", "partial", "no_items"}:
-        script_mode = "full"
-
-    try:
-        chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-        access_expiry = get_wallet_access_expiry_display(wallet)
-
-        wallet_summary = build_wallet_summary(
-            wallet=wallet,
-            chickens=chickens,
-            access_expiry=access_expiry,
-        )
-
-        summary = build_wallet_planner_item_requirements_summary(
-            wallet_address=wallet,
-            queue_rows=planner_queue,
-        )
-
-        if script_mode == "partial":
-            inventory_name_lookup = build_bookmarklet_inventory_name_lookup(wallet)
-
-        if script_mode == "full" and summary.get("overall_status") != "ready":
-            if source_page == "gene":
-                return redirect(url_for("planner_items_check", wallet_address=wallet, source_page="gene"))
-            elif source_page == "ultimate":
-                return redirect(url_for("planner_items_check", wallet_address=wallet, source_page="ultimate"))
-            return redirect(url_for("planner_items_check", wallet_address=wallet, source_page="ip"))
-
-        bookmarklet_code = build_apex_breeder_bookmarklet_code(
-            planner_queue,
-            script_mode=script_mode,
-            inventory_name_lookup=inventory_name_lookup,
-        )
-
-    except Exception as exc:
-        error = f"Failed to generate script page: {exc}"
-
-    return render_template(
-        "planner_script_generate.html",
-        wallet=wallet,
-        source_page=source_page,
-        wallet_summary=wallet_summary,
-        planner_queue=planner_queue,
-        planner_summary=build_planner_summary(planner_queue),
-        item_check_summary=summary,
-        bookmarklet_code=bookmarklet_code,
-        script_mode=script_mode,
-        error=error,
-    )
-
-@app.route("/match/ip", methods=["GET"])
-def match_ip_page():
-    wallet = request.args.get("wallet_address", "").strip().lower()
-    selected_token_id = request.args.get("selected_token_id", "").strip()
-    auto_match = str(request.args.get("auto_match") or "").strip().lower() in {"1", "true", "on", "yes"}
-    skip_auto_open = str(request.args.get("skip_auto_open") or "").strip().lower() in {"1", "true", "on", "yes"}
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    min_ip = safe_int(request.args.get("min_ip"))
-    ip_diff = safe_int(request.args.get("ip_diff"))
-    ninuno_100_only = str(request.args.get("ninuno_100_only") or "").strip().lower() in {"1", "true", "on", "yes"}
-    auto_match_source = str(request.args.get("auto_match_source") or "").strip().lower()
-    auto_match_mode = str(request.args.get("auto_match_mode") or "").strip().lower()
-    popup_ip_diff = safe_int(request.args.get("popup_ip_diff"))
-    popup_breed_diff = safe_int(request.args.get("popup_breed_diff"))
-    popup_ninuno = normalize_auto_ninuno_filter(request.args.get("popup_ninuno"))
-    popup_match_count = max(1, safe_int(request.args.get("popup_match_count"), 1) or 1)
-
-    market_open = str(request.args.get("market_open") or "").strip().lower() in {"1", "true", "on", "yes"}
-    show_featured_market_bar = has_active_payment_access_in_db(wallet)
-    featured_feed = None
-
-    breedable_chickens = []
-    selected_chicken = None
-    potential_matches = []
-    error = None
-
-    ip_original_available_pool = []
-    ip_available_filter_options = {
-        "type_options": [],
-        "generation_options": [],
-        "breed_count_options": [],
-        "ninuno_options": [
-            {"value": "all", "label": "All"},
-            {"value": "100", "label": "100% only"},
-            {"value": "gt0", "label": "Above 0%"},
-        ],
-    }
-    ip_active_filters = []
-    
-    selected_weakest_stat_column_label = "Selected Weakest Stat"
-    ip_sort_by = str(request.args.get("sort_by") or "ip").strip().lower()
-    ip_sort_dir = str(request.args.get("sort_dir") or "desc").strip().lower()
-    multi_match_rows = []
-    multi_match_target = 0
-    multi_match_note = ""
-    auto_open_multi_match = False
-    auto_match_single_empty = False
-    wallet_summary = None
-
-    ip_filter_type_values = parse_csv_query_values(request.args.get("ip_filter_type"))
-    ip_filter_generation_values = parse_csv_query_values(request.args.get("ip_filter_generation"))
-    ip_filter_breed_count_values = parse_csv_query_values(request.args.get("ip_filter_breed_count"))
-    ip_filter_ninuno = normalize_ip_available_ninuno_filter(request.args.get("ip_filter_ninuno"))
-
-    if ip_sort_by not in {"token_id", "ip", "weakest_stat", "generation", "breed_count", "ninuno"}:
-        ip_sort_by = "ip"
-    if ip_sort_dir not in {"asc", "desc"}:
-        ip_sort_dir = "desc"
-
-    if not request.args.get("ip_filter_ninuno"):
-        ip_filter_ninuno = "100" if ninuno_100_only else "all"
-
-    if popup_ip_diff is None:
-        popup_ip_diff = 10
-
-    if popup_breed_diff is None:
-        popup_breed_diff = 1
-
-    if wallet:
-        try:
-            chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-
-            ip_original_available_pool = filter_out_planner_tokens(
-                [
-                    enrich_ip_available_chicken_row(
-                        row,
-                        enrich_chicken_media=enrich_chicken_media,
-                        get_weakest_ip_stat_info=get_weakest_ip_stat_info,
-                    )
-                    for row in chickens
-                    if is_breedable(row)
-                ],
-                wallet,
-            )
-
-            ip_available_filter_options = build_ip_available_filter_options(
-                ip_original_available_pool,
-                safe_int=safe_int,
-            )
-
-            breedable_chickens = list(ip_original_available_pool)
-
-            access_expiry = get_wallet_access_expiry_display(wallet)
-            wallet_summary = build_wallet_summary(
-                wallet=wallet,
-                chickens=chickens,
-                access_expiry=access_expiry,
-            )
-
-            if min_ip is not None:
-                breedable_chickens = [
-                    row for row in breedable_chickens
-                    if safe_int(row.get("ip"), default=-1) is not None
-                    and safe_int(row.get("ip"), default=-1) >= min_ip
-                ]
-
-            breedable_chickens = [
-                row for row in breedable_chickens
-                if chicken_matches_ip_available_filters(
-                    row,
-                    safe_int=safe_int,
-                    selected_types=ip_filter_type_values,
-                    selected_generations=ip_filter_generation_values,
-                    selected_breed_counts=ip_filter_breed_count_values,
-                    ninuno_mode=ip_filter_ninuno,
-                )
-            ]
-
-            ip_active_filters = build_ip_active_filters(
-                selected_types=ip_filter_type_values,
-                min_ip=min_ip,
-                selected_generations=ip_filter_generation_values,
-                selected_breed_counts=ip_filter_breed_count_values,
-                ninuno_mode=ip_filter_ninuno,
-            )
-
-            breedable_chickens = sort_ip_available_chickens(
-                breedable_chickens,
-                sort_by=ip_sort_by,
-                sort_dir=ip_sort_dir,
-                sort_key_int=sort_key_int,
-                sort_key_text=sort_key_text,
-            )
-
-            if auto_match and auto_match_source == "available" and auto_match_mode == "multiple":
-                if popup_ip_diff is None:
-                    popup_ip_diff = 10
-                if popup_breed_diff is None:
-                    popup_breed_diff = 1
-
-                multi_match_target = min(popup_match_count, max(0, len(breedable_chickens) // 2))
-
-                multi_match_rows = build_ip_multi_matches(
-                    breedable_chickens=breedable_chickens,
-                    ip_diff=popup_ip_diff,
-                    breed_diff=popup_breed_diff,
-                    ninuno_filter=popup_ninuno,
-                    target_count=multi_match_target,
-                )
-
-                if multi_match_target and len(multi_match_rows) < multi_match_target:
-                    multi_match_note = f"Only {len(multi_match_rows)} valid pair(s) were available from the current filtered pool."
-
-                auto_open_multi_match = bool(multi_match_rows) and auto_match and not skip_auto_open
-
-            elif auto_match and not selected_token_id:
-                ranked_sources = []
-                effective_ip_diff = popup_ip_diff if auto_match_source == "available" and auto_match_mode == "single" else ip_diff
-                effective_breed_diff = popup_breed_diff if auto_match_source == "available" and auto_match_mode == "single" else None
-                effective_ninuno = popup_ninuno if auto_match_source == "available" and auto_match_mode == "single" else "all"
-                for source in breedable_chickens:
-                    if not chicken_passes_auto_ninuno_filter(source, effective_ninuno):
-                        continue
-                    candidate_pool = [row for row in breedable_chickens if str(row["token_id"]) != str(source["token_id"])]
-                    if effective_ip_diff is not None:
-                        source_ip = safe_int(source.get("ip"))
-                        if source_ip is not None:
-                            candidate_pool = [row for row in candidate_pool if safe_int(row.get("ip")) is not None and abs(safe_int(row.get("ip")) - source_ip) <= effective_ip_diff]
-                    if effective_breed_diff is not None:
-                        source_breed = safe_int(source.get("breed_count"))
-                        if source_breed is not None:
-                            candidate_pool = [row for row in candidate_pool if safe_int(row.get("breed_count")) is not None and abs(safe_int(row.get("breed_count")) - source_breed) <= effective_breed_diff]
-                    candidate_pool = [row for row in candidate_pool if chicken_passes_auto_ninuno_filter(row, effective_ninuno)]
-                    matches = find_potential_matches(source, candidate_pool, settings=MATCH_SETTINGS)
-                    matches = [row for row in matches if row.get("evaluation", {}).get("is_ip_recommended") and row.get("evaluation", {}).get("is_breed_count_recommended") and pair_has_usable_ip_items(source, row.get("candidate"))]
-                    if matches:
-                        ranked_sources.append({"source": source, "match_count": len(matches)})
-                ranked_sources.sort(key=lambda row: (-(safe_int(row["source"].get("ip"), 0) or 0), safe_int(row["source"].get("breed_count"), 999999) or 999999, -(float(row["source"].get("ownership_percent") or 0)), -row["match_count"], safe_int(row["source"].get("token_id"), 999999999) or 999999999))
-
-                if ranked_sources:
-                    selected_token_id = str(ranked_sources[0]["source"]["token_id"])
-
-                elif auto_match and (auto_match_source != "available" or auto_match_mode == "single"):
-                    auto_match_single_empty = True
-
-            if selected_token_id:
-                selected_chicken = next((row for row in breedable_chickens if str(row["token_id"]) == selected_token_id), None)
-
-            selected_weakest_stat_name = ""
-            selected_weakest_stat_label = "Selected Weakest Stat"
-            if selected_chicken:
-                candidate_pool = [row for row in breedable_chickens if str(row["token_id"]) != selected_token_id]
-                if ip_diff is not None:
-                    selected_ip = safe_int(selected_chicken.get("ip"))
-                    if selected_ip is not None:
-                        candidate_pool = [
-                            row for row in candidate_pool
-                            if safe_int(row.get("ip")) is not None
-                            and abs(safe_int(row.get("ip")) - selected_ip) <= ip_diff
-                        ]
-
-                potential_matches = find_potential_matches(selected_chicken, candidate_pool, settings=MATCH_SETTINGS)
-
-                if auto_match:
-                    potential_matches = [
-                        row for row in potential_matches
-                        if row.get("evaluation", {}).get("is_ip_recommended")
-                        and row.get("evaluation", {}).get("is_breed_count_recommended")
-                        and pair_has_usable_ip_items(selected_chicken, row.get("candidate"))
-                    ]
-
-                potential_matches = sort_ip_match_rows(selected_chicken, potential_matches)
-
-                if auto_match and not potential_matches and not multi_match_rows:
-                    auto_match_single_empty = True
-
-                for row in potential_matches:
-                    candidate = row.get("candidate") or {}
-                    row["selected_weakest_stat_display"] = (
-                        f"{selected_weakest_stat_label}: {get_effective_ip_stat(candidate, selected_weakest_stat_name)}"
-                        if selected_weakest_stat_name else ""
-                    )
-
-            if show_featured_market_bar and market_open:
-                featured_feed = get_featured_market_feed(
-                    mode="ip",
-                    target_count=8,
-                    batch_size=20,
-                )        
-        except Exception as exc:
-            error = f"Failed to load IP breeding matches: {exc}"
-
-    return render_template(
-        "match_ip.html",
-        wallet=wallet,
-        selected_token_id=selected_token_id,
-        selected_chicken=selected_chicken,
-        breedable_chickens=breedable_chickens,
-        potential_matches=potential_matches,
-        min_ip=min_ip,
-        ip_diff=ip_diff,
-        ninuno_100_only=ninuno_100_only,
-        sort_by=ip_sort_by,
-        sort_dir=ip_sort_dir,
-        selected_weakest_stat_column_label=selected_weakest_stat_column_label,
-        auto_match=auto_match,
-        auto_match_source=auto_match_source,
-        auto_match_mode=auto_match_mode,
-        popup_ip_diff=popup_ip_diff,
-        popup_breed_diff=popup_breed_diff,
-        popup_ninuno=popup_ninuno,
-        popup_match_count=popup_match_count,
-        multi_match_rows=multi_match_rows,
-        multi_match_target=multi_match_target,
-        multi_match_note=multi_match_note,
-        auto_open_multi_match=auto_open_multi_match,
-        available_pair_max=max(0, len(breedable_chickens) // 2),
-        auto_open_template_id=("" if skip_auto_open else (f"compare-ip-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches and not multi_match_rows else "")),
-        auto_match_single_empty=auto_match_single_empty,
-        planner_queue=get_breeding_planner_queue(wallet),
-        planner_summary=build_planner_summary(get_breeding_planner_queue(wallet)),
-        wallet_summary=wallet_summary,
-        ip_filter_type_values=ip_filter_type_values,
-        ip_filter_generation_values=ip_filter_generation_values,
-        ip_filter_breed_count_values=ip_filter_breed_count_values,
-        ip_filter_ninuno=ip_filter_ninuno,
-        ip_available_filter_options=ip_available_filter_options,
-        ip_active_filters=ip_active_filters,
-        ip_original_available_count=len(ip_original_available_pool),
-        market_open=market_open,
-        show_featured_market_bar=show_featured_market_bar,
-        featured_feed=featured_feed,
-        error=error,
-    )
-
-@app.route("/match/gene", methods=["GET"])
-def match_gene_page():
-    wallet = request.args.get("wallet_address", "").strip().lower()
-    selected_token_id = request.args.get("selected_token_id", "").strip()
-
-    auto_match = str(request.args.get("auto_match") or "").strip().lower() in {"1", "true", "on", "yes"}
-    ninuno_100_only = str(request.args.get("ninuno_100_only") or "").strip().lower() in {"1", "true", "on", "yes"}
-    skip_auto_open = str(request.args.get("skip_auto_open") or "").strip().lower() in {"1", "true", "on", "yes"}
-    auto_match_source = str(request.args.get("auto_match_source") or "").strip().lower()
-    auto_match_mode = str(request.args.get("auto_match_mode") or "").strip().lower()
-
-    popup_build = (request.args.get("popup_build") or "all").strip().lower()
-    popup_min_build_count = safe_int(request.args.get("popup_min_build_count"))
-    popup_breed_diff = safe_int(request.args.get("popup_breed_diff"))
-    popup_ninuno = normalize_auto_ninuno_filter(request.args.get("popup_ninuno"))
-    popup_match_count = max(1, safe_int(request.args.get("popup_match_count"), 1) or 1)
-
-    market_open = str(request.args.get("market_open") or "").strip().lower() in {"1", "true", "on", "yes"}
-    show_featured_market_bar = has_active_payment_access_in_db(wallet)
-    featured_feed = None
-
-    gene_sort_by = str(request.args.get("sort_by") or "build").strip().lower()
-    gene_sort_dir = str(request.args.get("sort_dir") or "asc").strip().lower()
-
-    if gene_sort_by not in {"token_id", "build", "build_match", "build_source", "instinct", "ip", "generation", "breed_count", "ninuno"}:
-        gene_sort_by = "build"
-    if gene_sort_dir not in {"asc", "desc"}:
-        gene_sort_dir = "asc"
-
-    gene_filter_type_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_type")))
-    gene_filter_build = normalize_gene_available_build_filter(
-        request.args.get("gene_filter_build"),
-        build_order=GENE_BUILD_ORDER,
-    )
-    gene_filter_build_match_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_build_match")))
-    gene_filter_build_source_values = normalize_gene_available_source_values(
-        parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_build_source")))
-    )
-    gene_filter_instinct_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_instinct")))
-    gene_min_ip = safe_int(request.args.get("gene_min_ip"))
-    gene_filter_generation_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_generation")))
-    gene_filter_breed_count_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_breed_count")))
-    gene_filter_ninuno = normalize_gene_available_ninuno_filter(request.args.get("gene_filter_ninuno"))
-    
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    breedable_chickens = []
-    selected_chicken = None
-    potential_matches = []
-    gene_enrichment_loaded = 0
-    gene_enrichment_remaining = 0
-    error = None
-    
-    multi_match_rows = []
-    multi_match_target = 0
-    multi_match_note = ""
-    auto_open_multi_match = False
-    auto_match_single_empty = False
-    wallet_summary = None
-
-    available_empty_state = make_empty_state(
-        "No chickens found",
-        "No chickens matched the current Gene filters.",
-        "Try removing some Gene filters or clear the 100% Ninuno option.",
-    )
-
-    match_empty_state = make_empty_state(
-        "No matches found",
-        "No valid gene pair was found for the selected chicken.",
-        "Try another chicken or review a larger available pool.",
-    )
-
-    auto_match_empty_state = make_empty_state(
-        "No valid auto-match",
-        "Auto Match could not find a usable gene pair.",
-        "Try wider popup filters or choose a chicken manually.",
-    )
-
-    if wallet:
-        try:
-            chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-                        
-            access_expiry = get_wallet_access_expiry_display(wallet)
-            wallet_summary = build_wallet_summary(
-                wallet=wallet,
-                chickens=chickens,
-                access_expiry=access_expiry,
-            )
-            
-            batch_result = enrich_missing_gene_data_in_batches(chickens=chickens, wallet=wallet, page_key="gene", batch_size=5, prioritized_token_id=selected_token_id or None)
-            gene_enrichment_loaded = batch_result["loaded"]
-
-            chickens = get_wallet_chickens(wallet, ensure_loaded=False)
-
-            gene_enrichment_remaining = batch_result["remaining"]
-            
-            all_breedable = [
-                enrich_gene_available_chicken_row(
-                    row,
-                    enrich_chicken_media,
-                    get_best_available_gene_build_info,
-                    build_order=GENE_BUILD_ORDER,
-                )
-                for row in chickens
-                if is_breedable(row)
-            ]
-            
-            gene_original_available_pool = filter_out_planner_tokens(all_breedable, wallet)
-
-            gene_original_available_pool = [
-                row for row in gene_original_available_pool
-                if str(row.get("gene_build_key") or "").strip()
-                and safe_int(row.get("gene_build_match_count"), 0) >= 2
-            ]
-
-            if ninuno_100_only:
-                gene_original_available_pool = [
-                    row for row in gene_original_available_pool
-                    if row.get("is_complete") and float(row.get("ownership_percent") or 0) == 100.0
-                ]
-
-            gene_available_filter_options = build_gene_available_filter_options(
-                gene_original_available_pool,
-                safe_int,
-                build_order=GENE_BUILD_ORDER,
-            )
-
-            breedable_chickens = [
-                row for row in gene_original_available_pool
-                if chicken_matches_gene_available_filters(
-                    row,
-                    safe_int=safe_int,
-                    selected_types=gene_filter_type_values,
-                    selected_build=gene_filter_build,
-                    selected_build_matches=gene_filter_build_match_values,
-                    selected_build_sources=gene_filter_build_source_values,
-                    selected_instincts=gene_filter_instinct_values,
-                    min_ip=gene_min_ip,
-                    selected_generations=gene_filter_generation_values,
-                    selected_breed_counts=gene_filter_breed_count_values,
-                    ninuno_mode=gene_filter_ninuno,
-                    build_order=GENE_BUILD_ORDER,
-                )
-            ]
-
-            breedable_chickens = sort_gene_available_chickens(
-                breedable_chickens,
-                sort_by=gene_sort_by,
-                sort_dir=gene_sort_dir,
-                build_order=GENE_BUILD_ORDER,
-            )
-
-            available_empty_state = make_empty_state(
-                "No chickens found",
-                "No chickens matched the current Gene filters.",
-                "Try removing some Gene filters or clear the 100% Ninuno option.",
-            )
-
-            match_empty_state = build_gene_match_empty_state(
-                selected_chicken.get("build_type") if selected_chicken else "",
-                ninuno_100_only=ninuno_100_only,
-                auto_match=auto_match,
-                same_instinct=False,
-                min_build_count=None,
-            )
-
-            auto_match_empty_state = build_gene_match_empty_state(
-                popup_build if popup_build != "all" else (selected_chicken.get("build_type") if selected_chicken else ""),
-                ninuno_100_only=(popup_ninuno == "100" or ninuno_100_only),
-                auto_match=True,
-                same_instinct=False,
-                min_build_count=popup_min_build_count,
-            )
-
-
-            if auto_match and auto_match_source == "available" and auto_match_mode == "multiple":
-                auto_match_available_pool = list(breedable_chickens or [])
-
-                if popup_build and popup_build != "all":
-                    auto_match_available_pool = [
-                        row for row in auto_match_available_pool
-                        if str(row.get("build_type") or "").strip().lower() == popup_build
-                    ]
-
-                if popup_min_build_count is not None:
-                    auto_match_available_pool = [
-                        row for row in auto_match_available_pool
-                        if safe_int(row.get("build_match_count"), 0) >= popup_min_build_count
-                    ]
-
-                multi_match_target = min(popup_match_count, max(0, len(auto_match_available_pool) // 2))
-                
-                pair_candidates = build_gene_available_auto_candidates_same_build(
-                    auto_match_available_pool,
-                    min_build_count=popup_min_build_count,
-                    breed_diff=popup_breed_diff,
-                    same_instinct=False,
-                    ninuno_mode=popup_ninuno,
-                )
-
-                multi_match_rows = pick_multi_pairs_from_candidates(pair_candidates, multi_match_target)
-
-                if multi_match_target and len(multi_match_rows) < multi_match_target:
-                    multi_match_note = f"Only {len(multi_match_rows)} valid pair(s) were available from the current filtered pool."
-
-                auto_open_multi_match = bool(multi_match_rows) and auto_match and not skip_auto_open
-                
-            elif auto_match and not selected_token_id:
-                if auto_match_source == "available" and auto_match_mode == "single":
-                    selected_chicken, potential_matches = pick_best_gene_auto_match_from_pool(
-                        breedable_chickens=breedable_chickens,
-                        popup_build=popup_build,
-                        popup_min_build_count=popup_min_build_count,
-                        popup_breed_diff=popup_breed_diff,
-                        popup_ninuno=popup_ninuno,
-                    )
-                else:
-                    selected_chicken, potential_matches = pick_best_gene_auto_match_from_pool(
-                        breedable_chickens=breedable_chickens,
-                        popup_build="all",
-                        popup_min_build_count=None,
-                        popup_breed_diff=None,
-                        popup_ninuno="all",
-                    )
-
-                if selected_chicken:
-                    selected_token_id = str(selected_chicken.get("token_id") or "")
-                elif auto_match and (auto_match_source != "available" or auto_match_mode == "single"):
-                    auto_match_single_empty = True
-
-            if selected_token_id:
-                selected_chicken = next((row for row in breedable_chickens if str(row["token_id"]) == selected_token_id), None)
-
-            if selected_chicken:
-                selected_build_type = str(selected_chicken.get("build_type") or "").strip().lower()
-
-                if not potential_matches:
-                    potential_matches = build_gene_potential_matches_strict(selected_chicken, breedable_chickens)
-
-                if auto_match and (auto_match_source != "available" or auto_match_mode == "single") and not potential_matches and not multi_match_rows:
-                    auto_match_single_empty = True
-            else:
-                selected_build_type = ""
-
-                if auto_match and (auto_match_source != "available" or auto_match_mode == "single") and not potential_matches and not multi_match_rows:
-                    auto_match_single_empty = True
-
-            available_auto_match_pool = list(breedable_chickens or [])
-
-            if popup_build and popup_build != "all":
-                available_auto_match_pool = [
-                    row for row in available_auto_match_pool
-                    if str(row.get("build_type") or "").strip().lower() == popup_build
-                ]
-
-            if popup_min_build_count is not None:
-                available_auto_match_pool = [
-                    row for row in available_auto_match_pool
-                    if safe_int(row.get("build_match_count"), 0) >= popup_min_build_count
-                ]
-            if show_featured_market_bar and market_open:
-                featured_feed = get_featured_market_feed(
-                    mode="gene",
-                    target_count=8,
-                    batch_size=20,
-                )
-                
-        except Exception as exc:
-            error = f"Failed to load gene breeding matches: {exc}"
-
-    return render_template(
-        "match_gene.html",
-        wallet=wallet,
-        selected_token_id=selected_token_id,
-        selected_chicken=selected_chicken,
-        breedable_chickens=breedable_chickens,
-        potential_matches=potential_matches,
-        selected_build_type=(selected_chicken.get("build_type") if selected_chicken else ""),
-        gene_filter_type_values=gene_filter_type_values,
-        gene_filter_build=gene_filter_build,
-        gene_filter_build_match_values=gene_filter_build_match_values,
-        gene_filter_build_source_values=gene_filter_build_source_values,
-        gene_filter_instinct_values=gene_filter_instinct_values,
-        gene_min_ip=gene_min_ip,
-        gene_filter_generation_values=gene_filter_generation_values,
-        gene_filter_breed_count_values=gene_filter_breed_count_values,
-        gene_filter_ninuno=gene_filter_ninuno,
-        gene_available_filter_options=gene_available_filter_options,
-        gene_active_filters=build_gene_active_filters(
-            selected_types=gene_filter_type_values,
-            selected_build=gene_filter_build,
-            selected_build_matches=gene_filter_build_match_values,
-            selected_build_sources=gene_filter_build_source_values,
-            selected_instincts=gene_filter_instinct_values,
-            min_ip=gene_min_ip,
-            selected_generations=gene_filter_generation_values,
-            selected_breed_counts=gene_filter_breed_count_values,
-            ninuno_mode=gene_filter_ninuno,
-            build_order=GENE_BUILD_ORDER,
-        ),
-        gene_original_available_count=len(gene_original_available_pool),
-        ninuno_100_only=ninuno_100_only,
-        sort_by=gene_sort_by,
-        sort_dir=gene_sort_dir,
-        auto_match=auto_match,
-        auto_match_source=auto_match_source,
-        auto_match_mode=auto_match_mode,
-        popup_build=popup_build,
-        popup_min_build_count=popup_min_build_count,
-        popup_breed_diff=popup_breed_diff,
-        popup_ninuno=popup_ninuno,
-        popup_match_count=popup_match_count,
-        multi_match_rows=multi_match_rows,
-        multi_match_target=multi_match_target,
-        multi_match_note=multi_match_note,
-        auto_open_multi_match=auto_open_multi_match,
-        available_pair_max=max(0, len(available_auto_match_pool) // 2),
-        auto_open_template_id=("" if skip_auto_open else (f"compare-gene-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches and not multi_match_rows else "")),
-        auto_match_single_empty=auto_match_single_empty,
-        gene_enrichment_loaded=gene_enrichment_loaded,
-        gene_enrichment_remaining=gene_enrichment_remaining,
-        planner_queue=get_breeding_planner_queue(wallet),
-        planner_summary=build_planner_summary(get_breeding_planner_queue(wallet)),
-        available_empty_state=available_empty_state,
-        match_empty_state=match_empty_state,
-        auto_match_empty_state=auto_match_empty_state,
-        wallet_summary=wallet_summary,
-        market_open=market_open,
-        show_featured_market_bar=show_featured_market_bar,
-        featured_feed=featured_feed,
-        error=error,
-    )
-
-@app.route("/match/ultimate", methods=["GET"])
-def match_ultimate_page():
-    wallet = request.args.get("wallet_address", "").strip().lower()
-    selected_token_id = request.args.get("selected_token_id", "").strip()
-    auto_match = str(request.args.get("auto_match") or "").strip().lower() in {"1", "true", "on", "yes"}
-    skip_auto_open = str(request.args.get("skip_auto_open") or "").strip().lower() in {"1", "true", "on", "yes"}
-    auto_match_source = str(request.args.get("auto_match_source") or "").strip().lower()
-    auto_match_mode = str(request.args.get("auto_match_mode") or "").strip().lower()
-    popup_build = (request.args.get("popup_build") or "all").strip().lower()
-    popup_min_build_count = safe_int(request.args.get("popup_min_build_count"))
-    popup_breed_diff = safe_int(request.args.get("popup_breed_diff"))
-    popup_ninuno = normalize_auto_ninuno_filter(request.args.get("popup_ninuno"))
-    popup_match_count = max(1, safe_int(request.args.get("popup_match_count"), 1) or 1)
-
-    market_open = str(request.args.get("market_open") or "").strip().lower() in {"1", "true", "on", "yes"}
-    show_featured_market_bar = has_active_payment_access_in_db(wallet)
-    featured_feed = None
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    breedable_chickens = []
-    selected_chicken = None
-    potential_matches = []
-    error = None
-    multi_match_rows = []
-    multi_match_target = 0
-    multi_match_note = ""
-    auto_open_multi_match = False
-    auto_match_single_empty = False
-    wallet_summary = None
-
-    ultimate_original_available_pool = []
-    ultimate_available_filter_options = {
-        "type_options": [],
-        "build_options": [],
-        "build_match_options": [],
-        "generation_options": [],
-        "breed_count_options": [],
-        "ninuno_options": [
-            {"value": "all", "label": "All"},
-            {"value": "100", "label": "100% only"},
-            {"value": "gt0", "label": "Above 0%"},
-        ],
-    }
-    available_auto_match_pool = []
-
-    ultimate_sort_by = str(request.args.get("sort_by") or "ultimate_type").strip().lower()
-    ultimate_sort_dir = str(request.args.get("sort_dir") or "asc").strip().lower()
-
-    if ultimate_sort_by not in {"token_id", "ultimate_type", "build", "build_match", "ip", "generation", "breed_count", "ninuno"}:
-        ultimate_sort_by = "ultimate_type"
-
-    if ultimate_sort_dir not in {"asc", "desc"}:
-        ultimate_sort_dir = "asc"
-
-    ultimate_filter_type_values = parse_ultimate_csv_query_values(request.args.get("ultimate_filter_type"))
-    ultimate_filter_build = (request.args.get("ultimate_filter_build") or "all").strip().lower()
-    ultimate_filter_build_match_values = parse_ultimate_csv_query_values(request.args.get("ultimate_filter_build_match"))
-    ultimate_min_ip = safe_int(request.args.get("ultimate_min_ip"))
-    ultimate_filter_generation_values = parse_ultimate_csv_query_values(request.args.get("ultimate_filter_generation"))
-    ultimate_filter_breed_count_values = parse_ultimate_csv_query_values(request.args.get("ultimate_filter_breed_count"))
-    ultimate_filter_ninuno = normalize_ultimate_available_ninuno_filter(
-        request.args.get("ultimate_filter_ninuno")
-    )
-
-    available_empty_state = build_ultimate_available_empty_state()
-    match_empty_state = build_ultimate_match_empty_state(
-        auto_match=auto_match,
-        ninuno_mode="all",
-        breed_diff=None,
-    )
-    auto_match_empty_state = build_ultimate_match_empty_state(
-        auto_match=True,
-        ninuno_mode=popup_ninuno,
-        breed_diff=popup_breed_diff,
-    )
-
-
-    if wallet:
-        try:
-            chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-
-            access_expiry = get_wallet_access_expiry_display(wallet)
-            wallet_summary = build_wallet_summary(
-                wallet=wallet,
-                chickens=chickens,
-                access_expiry=access_expiry,
-            )
-            
-            all_breedable = [row for row in chickens if is_breedable(row)]
-
-            ultimate_original_available_pool = filter_out_planner_tokens(
-                [
-                    enrich_ultimate_available_chicken_row(
-                        chicken=enrich_ultimate_display(row),
-                        enrich_chicken_media=enrich_chicken_media,
-                        get_ultimate_type_display_fn=get_ultimate_type_display,
-                        get_ultimate_build_display_fn=get_ultimate_build_display,
-                        safe_int=safe_int,
-                    )
-                    for row in all_breedable
-                    if is_ultimate_eligible(row)
-                ],
-                wallet,
-            )
-
-            ultimate_available_filter_options = build_ultimate_available_filter_options(
-                ultimate_original_available_pool,
-                safe_int=safe_int,
-            )
-
-            breedable_chickens = [
-                row for row in ultimate_original_available_pool
-                if chicken_matches_ultimate_available_filters(
-                    row,
-                    safe_int=safe_int,
-                    selected_types=ultimate_filter_type_values,
-                    selected_build=ultimate_filter_build,
-                    selected_build_matches=ultimate_filter_build_match_values,
-                    min_ip=ultimate_min_ip,
-                    selected_generations=ultimate_filter_generation_values,
-                    selected_breed_counts=ultimate_filter_breed_count_values,
-                    ninuno_mode=ultimate_filter_ninuno,
-                )
-            ]
-
-            breedable_chickens = sort_ultimate_available_table_chickens(
-                breedable_chickens,
-                sort_by=ultimate_sort_by,
-                sort_dir=ultimate_sort_dir,
-                sort_key_int=safe_int,
-            )
-            
-            if ultimate_original_available_pool and not breedable_chickens:
-                available_empty_state = {
-                    "kicker": "No filtered chickens",
-                    "title": "No chickens match the current filters.",
-                    "body": "Try removing one or more filters to widen the available Ultimate pool.",
-                }
-            
-            if auto_match and auto_match_source == "available" and auto_match_mode == "multiple":
-                auto_match_available_pool = list(breedable_chickens or [])
-
-                if popup_build and popup_build != "all":
-                    auto_match_available_pool = [
-                        row for row in auto_match_available_pool
-                        if str(row.get("ultimate_build_key") or row.get("primary_build") or "").strip().lower() == popup_build
-                    ]
-
-                if popup_min_build_count is not None:
-                    auto_match_available_pool = [
-                        row for row in auto_match_available_pool
-                        if (safe_int(row.get("ultimate_build_match_count"), 0) or 0) >= popup_min_build_count
-                    ]
-
-                multi_match_target = min(popup_match_count, max(0, len(auto_match_available_pool) // 2))
-                pair_candidates = build_ultimate_available_auto_candidates(
-                    auto_match_available_pool,
-                    breed_diff=popup_breed_diff,
-                    ninuno_mode=popup_ninuno,
-                )
-                multi_match_rows = pick_multi_pairs_from_candidates(pair_candidates, multi_match_target)
-
-                if multi_match_target and len(multi_match_rows) < multi_match_target:
-                    multi_match_note = f"Only {len(multi_match_rows)} valid pair(s) were available from the current filtered pool."
-
-                auto_open_multi_match = auto_match and not skip_auto_open
-                
-            else:
-                if selected_token_id:
-                    selected_chicken = next((row for row in breedable_chickens if str(row["token_id"]) == selected_token_id), None)
-                    
-                if auto_match and not selected_token_id:
-                    if auto_match_source == "available" and auto_match_mode == "single":
-                        auto_match_available_pool = list(breedable_chickens or [])
-
-                        if popup_build and popup_build != "all":
-                            auto_match_available_pool = [
-                                row for row in auto_match_available_pool
-                                if str(row.get("ultimate_build_key") or row.get("primary_build") or "").strip().lower() == popup_build
-                            ]
-
-                        if popup_min_build_count is not None:
-                            auto_match_available_pool = [
-                                row for row in auto_match_available_pool
-                                if (safe_int(row.get("ultimate_build_match_count"), 0) or 0) >= popup_min_build_count
-                            ]
-
-                        pair_candidates = build_ultimate_available_auto_candidates(
-                            auto_match_available_pool,
-                            breed_diff=popup_breed_diff,
-                            ninuno_mode=popup_ninuno,
-                        )
-
-                        if pair_candidates:
-                            selected_chicken = pair_candidates[0]["left"]
-                            selected_token_id = str(selected_chicken.get("token_id") or "")
-                        else:
-                            auto_match_single_empty = True
-        
-                    else:
-                        selected_chicken, potential_matches = pick_best_ultimate_auto_match(breedable_chickens)
-                        if selected_chicken:
-                            selected_token_id = str(selected_chicken.get("token_id") or "")
-                            
-                if selected_chicken and not potential_matches:
-                    candidate_pool = [
-                        row for row in breedable_chickens
-                        if str(row["token_id"]) != selected_token_id
-                        and not is_parent_offspring(selected_chicken, row)
-                        and not is_full_siblings(selected_chicken, row)
-                        and is_generation_gap_allowed(
-                            selected_chicken,
-                            row,
-                            max_gap=MATCH_SETTINGS["max_generation_gap"],
-                        )
-                    ]
-                    potential_matches = filter_and_sort_ultimate_candidates(selected_chicken, candidate_pool)
-
-                if auto_match and (auto_match_source != "available" or auto_match_mode == "single") and not potential_matches and not multi_match_rows:
-                    auto_match_single_empty = True
-                    
-            available_auto_match_pool = list(breedable_chickens or [])
-
-            if popup_build and popup_build != "all":
-                available_auto_match_pool = [
-                    row for row in available_auto_match_pool
-                    if str(row.get("ultimate_build_key") or row.get("primary_build") or "").strip().lower() == popup_build
-                ]
-
-            if popup_min_build_count is not None:
-                available_auto_match_pool = [
-                    row for row in available_auto_match_pool
-                    if (safe_int(row.get("ultimate_build_match_count"), 0) or 0) >= popup_min_build_count
-                ]
-            if show_featured_market_bar and market_open:
-                featured_feed = get_featured_market_feed(
-                    mode="ultimate",
-                    target_count=8,
-                    batch_size=20,
-                )        
-        except Exception as exc:
-            error = f"Failed to load ultimate breeding matches: {exc}"
-            
-    return render_template(
-        "match_ultimate.html",
-        wallet=wallet,
-        selected_token_id=selected_token_id,
-        selected_chicken=selected_chicken,
-        breedable_chickens=breedable_chickens,
-        sort_by=ultimate_sort_by,
-        sort_dir=ultimate_sort_dir,
-        ultimate_filter_type_values=ultimate_filter_type_values,
-        ultimate_min_ip=ultimate_min_ip,
-        ultimate_filter_build=ultimate_filter_build,
-        ultimate_filter_build_match_values=ultimate_filter_build_match_values,
-        ultimate_filter_generation_values=ultimate_filter_generation_values,
-        ultimate_filter_breed_count_values=ultimate_filter_breed_count_values,
-        ultimate_filter_ninuno=ultimate_filter_ninuno,
-        ultimate_available_filter_options=ultimate_available_filter_options,
-        ultimate_active_filters=build_ultimate_active_filters(
-            selected_types=ultimate_filter_type_values,
-            selected_build=ultimate_filter_build,
-            selected_build_matches=ultimate_filter_build_match_values,
-            min_ip=ultimate_min_ip,
-            selected_generations=ultimate_filter_generation_values,
-            selected_breed_counts=ultimate_filter_breed_count_values,
-            ninuno_mode=ultimate_filter_ninuno,
-        ),
-        ultimate_original_available_count=len(ultimate_original_available_pool),
-        potential_matches=potential_matches,
-        auto_match=auto_match,
-        auto_match_source=auto_match_source,
-        auto_match_mode=auto_match_mode,
-        popup_breed_diff=popup_breed_diff,
-        popup_ninuno=popup_ninuno,
-        popup_match_count=popup_match_count,
-        popup_build=popup_build,
-        popup_min_build_count=popup_min_build_count,
-        multi_match_rows=multi_match_rows,
-        multi_match_target=multi_match_target,
-        multi_match_note=multi_match_note,
-        auto_open_multi_match=auto_open_multi_match,
-        available_pair_max=max(0, len(available_auto_match_pool) // 2),
-        auto_open_template_id=("" if skip_auto_open else (f"compare-ultimate-{potential_matches[0]['candidate']['token_id']}" if auto_match and potential_matches and not multi_match_rows else "")),
-        auto_match_single_empty=auto_match_single_empty,
-        planner_queue=get_breeding_planner_queue(wallet),
-        planner_summary=build_planner_summary(get_breeding_planner_queue(wallet)),
-        available_empty_state=available_empty_state,
-        match_empty_state=match_empty_state,
-        auto_match_empty_state=auto_match_empty_state,
-        wallet_summary=wallet_summary,
-        market_open=market_open,
-        show_featured_market_bar=show_featured_market_bar,
-        featured_feed=featured_feed,
-        error=error,
-    )
-
-@app.route("/match/gene/process-batch", methods=["POST"])
-def process_gene_batch():
-    wallet = request.form.get("wallet_address", "").strip().lower()
-    selected_token_id = request.form.get("selected_token_id", "").strip()
-
-    if not require_authorized_wallet(wallet):
-        return {"ok": False, "error": "Unauthorized"}, 403
-
-    try:
-        chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-        batch_result = enrich_missing_recessive_data_in_batches(
-            chickens=chickens,
-            wallet=wallet,
-            page_key="gene",
-            batch_size=5,
-            prioritized_token_id=selected_token_id or None,
-        )
-        return {
-            "ok": True,
-            "loaded": batch_result["loaded"],
-            "remaining": batch_result["remaining"],
-        }
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}, 500
-
-@app.route("/complete-ninuno", methods=["POST"])
-def complete_ninuno():
-    anchor_id = request.form.get("anchor_id", "").strip()
-    wallet = request.form.get("wallet_address", "").strip().lower()
-    token_id = request.form.get("token_id", "").strip()
-    selected_token_id = request.form.get("selected_token_id", "").strip()
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    if not wallet or not token_id:
-        return redirect(url_for("index", wallet_address=wallet))
-
-    chickens = get_chickens_by_wallet(wallet)
-    owned_token_ids = {str(row["token_id"]) for row in chickens}
-
-    summary = complete_ninuno_via_lineage_with_resume(
-        wallet_address=wallet,
-        token_id=token_id,
-        owned_token_ids=owned_token_ids,
-        depth=3,
-        max_tokens=300,
-        contract_addresses=CONTRACTS,
-    )
-
-    upsert_family_root_summary(wallet, summary)
-
-    referrer = request.referrer or ""
-    if referrer:
-        base_referrer = referrer.split("#")[0]
-        separator = "&" if "?" in base_referrer else "?"
-        if anchor_id:
-            return redirect(f"{base_referrer}{separator}skip_auto_open=1#{anchor_id}")
-        return redirect(f"{base_referrer}{separator}skip_auto_open=1")
-
-    return redirect(url_for("match_ip_page", wallet_address=wallet, selected_token_id=selected_token_id or token_id))
-
-
-@app.route("/inventory", methods=["GET"])
-def inventory():
-    wallet = request.args.get("wallet_address", "").strip().lower()
-    chickens = []
-    error = None
-
-    if not require_authorized_wallet(wallet):
-        return redirect(url_for("index"))
-
-    try:
-        chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-    except Exception as exc:
-        error = f"Failed to load inventory: {exc}"
-
-    return render_template(
-        "inventory.html",
-        wallet=wallet,
-        chickens=chickens,
-        error=error,
-    )
-
+register_core_routes(app, {
+    "build_available_chickens_dashboard": build_available_chickens_dashboard,
+    "build_wallet_summary": build_wallet_summary,
+    "clear_owner_admin_failures": clear_owner_admin_failures,
+    "enrich_chicken_media": enrich_chicken_media,
+    "format_wallet_access_rows": format_wallet_access_rows,
+    "get_best_available_gene_build_info": get_best_available_gene_build_info,
+    "get_owner_admin_password": lambda: OWNER_ADMIN_PASSWORD,
+    "get_wallet_access_expiry_display": get_wallet_access_expiry_display,
+    "get_wallet_access_rows": get_wallet_access_rows,
+    "get_wallet_chickens": get_wallet_chickens,
+    "grant_manual_access": grant_manual_access,
+    "has_wallet_access": has_wallet_access,
+    "is_authorized_wallet": is_authorized_wallet,
+    "is_breedable": is_breedable,
+    "is_owner_admin_locked": is_owner_admin_locked,
+    "is_valid_wallet": is_valid_wallet,
+    "owner_password_is_valid": owner_password_is_valid,
+    "owner_whitelist_route": OWNER_WHITELIST_ROUTE,
+    "register_owner_admin_failure": register_owner_admin_failure,
+    "require_authorized_wallet": require_authorized_wallet,
+    "safe_int": safe_int,
+    "set_authorized_wallet": set_authorized_wallet,
+    "static_export_db_path": STATIC_EXPORT_DB_PATH,
+    "sync_static_export_tables_to_main_db": sync_static_export_tables_to_main_db,
+    "sync_wallet_data": sync_wallet_data,
+})
+
+register_planner_routes(app, {
+    "build_apex_breeder_bookmarklet_code": build_apex_breeder_bookmarklet_code,
+    "build_bookmarklet_inventory_name_lookup": build_bookmarklet_inventory_name_lookup,
+    "build_per_pair_item_status": build_per_pair_item_status,
+    "build_planner_queue_row": build_planner_queue_row,
+    "build_planner_summary": build_planner_summary,
+    "build_wallet_inventory_lookup": build_wallet_inventory_lookup,
+    "build_wallet_planner_item_requirements_summary": build_wallet_planner_item_requirements_summary,
+    "build_wallet_summary": build_wallet_summary,
+    "enrich_chicken_media": enrich_chicken_media,
+    "export_breeding_planner_excel": export_breeding_planner_excel,
+    "get_breeding_planner_queue": get_breeding_planner_queue,
+    "get_wallet_access_expiry_display": get_wallet_access_expiry_display,
+    "get_wallet_chickens": get_wallet_chickens,
+    "planner_pair_exists": planner_pair_exists,
+    "require_authorized_wallet": require_authorized_wallet,
+    "save_breeding_planner_queue": save_breeding_planner_queue,
+})
+
+register_match_routes(app, {
+    "build_gene_active_filters": build_gene_active_filters,
+    "build_gene_available_auto_candidates_same_build": build_gene_available_auto_candidates_same_build,
+    "build_gene_available_filter_options": build_gene_available_filter_options,
+    "build_gene_match_empty_state": build_gene_match_empty_state,
+    "build_gene_potential_matches_strict": build_gene_potential_matches_strict,
+    "build_ip_active_filters": build_ip_active_filters,
+    "build_ip_available_filter_options": build_ip_available_filter_options,
+    "build_ip_multi_matches": build_ip_multi_matches,
+    "build_planner_summary": build_planner_summary,
+    "build_ultimate_active_filters": build_ultimate_active_filters,
+    "build_ultimate_available_auto_candidates": build_ultimate_available_auto_candidates,
+    "build_ultimate_available_empty_state": build_ultimate_available_empty_state,
+    "build_ultimate_available_filter_options": build_ultimate_available_filter_options,
+    "build_ultimate_match_empty_state": build_ultimate_match_empty_state,
+    "build_wallet_summary": build_wallet_summary,
+    "chicken_matches_gene_available_filters": chicken_matches_gene_available_filters,
+    "chicken_matches_ip_available_filters": chicken_matches_ip_available_filters,
+    "chicken_matches_ultimate_available_filters": chicken_matches_ultimate_available_filters,
+    "chicken_passes_auto_ninuno_filter": chicken_passes_auto_ninuno_filter,
+    "complete_ninuno_via_lineage_with_resume": complete_ninuno_via_lineage_with_resume,
+    "CONTRACTS": CONTRACTS,
+    "enrich_chicken_media": enrich_chicken_media,
+    "enrich_gene_available_chicken_row": enrich_gene_available_chicken_row,
+    "enrich_ip_available_chicken_row": enrich_ip_available_chicken_row,
+    "enrich_missing_gene_data_in_batches": enrich_missing_gene_data_in_batches,
+    "enrich_missing_recessive_data_in_batches": enrich_missing_recessive_data_in_batches,
+    "enrich_ultimate_available_chicken_row": enrich_ultimate_available_chicken_row,
+    "enrich_ultimate_display": enrich_ultimate_display,
+    "filter_and_sort_ultimate_candidates": filter_and_sort_ultimate_candidates,
+    "filter_out_planner_tokens": filter_out_planner_tokens,
+    "find_potential_matches": find_potential_matches,
+    "GENE_BUILD_ORDER": GENE_BUILD_ORDER,
+    "get_best_available_gene_build_info": get_best_available_gene_build_info,
+    "get_breeding_planner_queue": get_breeding_planner_queue,
+    "get_chickens_by_wallet": get_chickens_by_wallet,
+    "get_effective_ip_stat": get_effective_ip_stat,
+    "get_featured_market_feed": get_featured_market_feed,
+    "get_ultimate_build_display": get_ultimate_build_display,
+    "get_ultimate_type_display": get_ultimate_type_display,
+    "get_wallet_access_expiry_display": get_wallet_access_expiry_display,
+    "get_wallet_chickens": get_wallet_chickens,
+    "get_weakest_ip_stat_info": get_weakest_ip_stat_info,
+    "has_active_payment_access_in_db": has_active_payment_access_in_db,
+    "is_breedable": is_breedable,
+    "is_full_siblings": is_full_siblings,
+    "is_generation_gap_allowed": is_generation_gap_allowed,
+    "is_parent_offspring": is_parent_offspring,
+    "is_ultimate_eligible": is_ultimate_eligible,
+    "make_empty_state": make_empty_state,
+    "match_settings": MATCH_SETTINGS,
+    "normalize_auto_ninuno_filter": normalize_auto_ninuno_filter,
+    "normalize_gene_available_build_filter": normalize_gene_available_build_filter,
+    "normalize_gene_available_ninuno_filter": normalize_gene_available_ninuno_filter,
+    "normalize_gene_available_source_values": normalize_gene_available_source_values,
+    "normalize_ip_available_ninuno_filter": normalize_ip_available_ninuno_filter,
+    "normalize_ultimate_available_ninuno_filter": normalize_ultimate_available_ninuno_filter,
+    "pair_has_usable_ip_items": pair_has_usable_ip_items,
+    "parse_gene_csv_query_values": parse_gene_csv_query_values,
+    "parse_ip_csv_query_values": parse_csv_query_values,
+    "parse_ultimate_csv_query_values": parse_ultimate_csv_query_values,
+    "pick_best_gene_auto_match_from_pool": pick_best_gene_auto_match_from_pool,
+    "pick_best_ultimate_auto_match": pick_best_ultimate_auto_match,
+    "pick_multi_pairs_from_candidates": pick_multi_pairs_from_candidates,
+    "require_authorized_wallet": require_authorized_wallet,
+    "safe_int": safe_int,
+    "sort_gene_available_chickens": sort_gene_available_chickens,
+    "sort_ip_available_chickens": sort_ip_available_chickens,
+    "sort_ip_match_rows": sort_ip_match_rows,
+    "sort_key_int": sort_key_int,
+    "sort_key_text": sort_key_text,
+    "sort_ultimate_available_table_chickens": sort_ultimate_available_table_chickens,
+    "upsert_family_root_summary": upsert_family_root_summary,
+})
 
 if __name__ == "__main__":
-    app.run(debug=True)
-
+    app.run(debug=FLASK_DEBUG_ENABLED)
