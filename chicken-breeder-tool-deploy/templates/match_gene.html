@@ -110,6 +110,7 @@
 				class="info-message gene-status-banner"
 				data-wallet="{{ wallet }}"
 				data-selected-token-id="{{ selected_token_id or '' }}"
+				data-batch-url="{{ url_for('process_gene_batch') }}"
 				data-running="1"
 			>
 				Recessive gene data will load in the background.
@@ -1809,8 +1810,8 @@
                 <div class="multi-match-side multi-match-side-boxed">
                     <h4>Chicken #{{ row.left.token_id }}</h4>
                     <div class="multi-match-details-grid">
-						<div><strong>Build</strong><span>{{ row.left.build_type|title or 'No Build' }}</span></div>
-                        <div><strong>Build Count</strong><span>{{ row.left.build_match_display or '' }}</span></div>
+						<div><strong>Build</strong><span>{{ ((row.left.build_match_display or '') ~ (' (' ~ (row.left.build_type|title) ~ ')' if row.left.build_type else '')) if (row.left.build_match_display or row.left.build_type) else 'No Build' }}</span></div>
+                        <div><strong>Missing Traits</strong><span>+{{ 0 if row.right.build_source_display == 'Recessive' else ((row.gene_pair_metrics.right_only_count if row.gene_pair_metrics else 0) or 0) }}</span></div>
                         <div><strong>Breed Count</strong><span>{{ row.left.breed_count if row.left.breed_count is not none else '' }}</span></div>
                         <div><strong>Ninuno</strong><span>{{ row.left.ownership_percent or 0 }}%</span></div>
                     </div>
@@ -1860,8 +1861,8 @@
                 <div class="multi-match-side multi-match-side-boxed">
                     <h4>Chicken #{{ row.right.token_id }}</h4>
                     <div class="multi-match-details-grid">
-						<div><strong>Build</strong><span>{{ row.right.build_type|title or 'No Build' }}</span></div>
-                        <div><strong>Build Count</strong><span>{{ row.right.build_match_display or '' }}</span></div>
+						<div><strong>Build</strong><span>{{ ((row.right.build_match_display or '') ~ (' (' ~ (row.right.build_type|title) ~ ')' if row.right.build_type else '')) if (row.right.build_match_display or row.right.build_type) else 'No Build' }}</span></div>
+                        <div><strong>Missing Traits</strong><span>+{{ 0 if row.left.build_source_display == 'Recessive' else ((row.gene_pair_metrics.left_only_count if row.gene_pair_metrics else 0) or 0) }}</span></div>
                         <div><strong>Breed Count</strong><span>{{ row.right.breed_count if row.right.breed_count is not none else '' }}</span></div>
                         <div><strong>Ninuno</strong><span>{{ row.right.ownership_percent or 0 }}%</span></div>
                     </div>
@@ -1996,7 +1997,13 @@
 							{% endif %}
 						</div>
 					</div>
-					<div class="compare-item-box compare-item-box-right">
+						<div class="compare-item-box compare-item-box-right">
+							<div class="stats-grid compare-gene-summary-grid">
+								<div><strong>Build:</strong> {{ ((selected_chicken.build_match_display or '') ~ (' (' ~ (selected_chicken.build_type|title) ~ ')' if selected_chicken.build_type else '')) if (selected_chicken.build_match_display or selected_chicken.build_type) else 'No Build' }}</div>
+								<div><strong>Missing traits:</strong> +{{ 0 if row.candidate.build_source_display == 'Recessive' else ((row.gene_pair_metrics.right_only_count if row.gene_pair_metrics else 0) or 0) }}</div>
+								<div><strong>Breed Count:</strong> {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else '' }}</div>
+								<div><strong>Ninuno:</strong> {{ selected_chicken.ownership_percent or 0 }}%</div>
+							</div>
 						<div class="compare-item-label">Recommended Item</div>
 						{% set item_image = get_item_image_url(selected_item.name) %}
 						<div class="compare-item-inline compare-item-inline-right">
@@ -2046,6 +2053,12 @@
 						</div>
 					</div>
 					<div class="compare-item-box">
+						<div class="stats-grid compare-gene-summary-grid">
+							<div><strong>Build:</strong> {{ ((row.candidate.build_match_display or '') ~ (' (' ~ (row.candidate.build_type|title) ~ ')' if row.candidate.build_type else '')) if (row.candidate.build_match_display or row.candidate.build_type) else 'No Build' }}</div>
+							<div><strong>Missing traits:</strong> +{{ 0 if selected_chicken.build_source_display == 'Recessive' else ((row.gene_pair_metrics.left_only_count if row.gene_pair_metrics else 0) or 0) }}</div>
+							<div><strong>Breed Count:</strong> {{ row.candidate.breed_count if row.candidate.breed_count is not none else '' }}</div>
+							<div><strong>Ninuno:</strong> {{ row.candidate.ownership_percent or 0 }}%</div>
+						</div>
 						<div class="compare-item-label">Recommended Item</div>
 						{% set item_image = get_item_image_url(candidate_item.name) %}
 						<div class="compare-item-inline">
@@ -2117,268 +2130,6 @@
 		</div>
 	</div>
 {% endif %}
-
-	<script>
-	document.addEventListener("DOMContentLoaded", function () {
-		document.querySelectorAll(".clickable-row[data-href]").forEach(function (row) {
-			row.addEventListener("click", function (event) {
-				if (event.target.closest("a, button, input, select, textarea, label, form")) return;
-				window.location.href = row.dataset.href;
-			});
-
-			row.addEventListener("keydown", function (event) {
-				if (event.key === "Enter" || event.key === " ") {
-					event.preventDefault();
-					window.location.href = row.dataset.href;
-				}
-			});
-		});
-	});
-	</script>
-	<script>
-	document.addEventListener("DOMContentLoaded", function () {
-		const emptyModal = document.getElementById("auto-match-empty-modal");
-		if (!emptyModal) return;
-
-		document.body.classList.add("modal-open");
-
-		function closeEmptyModal() {
-			emptyModal.remove();
-			document.body.classList.remove("modal-open");
-		}
-
-		emptyModal.querySelectorAll("[data-close-auto-match-empty]").forEach(function (node) {
-			node.addEventListener("click", closeEmptyModal);
-		});
-	});
-	</script>
-	<script>
-	document.addEventListener("DOMContentLoaded", function () {
-		document.querySelectorAll(".ip-column-filter-form").forEach(function (form) {
-			form.addEventListener("submit", function () {
-				form.querySelectorAll(".ip-filter-csv-source").forEach(function (checkbox) {
-					const targetId = checkbox.getAttribute("data-target-input");
-					if (!targetId) return;
-
-					const hiddenInput = form.querySelector("#" + targetId);
-					if (!hiddenInput) return;
-
-					const selectedValues = Array.from(
-						form.querySelectorAll('.ip-filter-csv-source[data-target-input="' + targetId + '"]:checked')
-					).map(function (node) {
-						return node.value;
-					});
-
-					hiddenInput.value = selectedValues.join(",");
-				});
-
-				const currentAction = form.getAttribute("action") || window.location.pathname;
-				form.setAttribute("action", currentAction.split("#")[0] + "#available-chickens");
-			});
-		});
-	});
-	</script>
-	<script>
-	document.addEventListener("DOMContentLoaded", function () {
-		const batchWrap = document.getElementById("gene-batch-wrap");
-		const statusBox = document.getElementById("gene-batch-status");
-		const toggleBtn = document.getElementById("toggle-gene-batch");
-
-		if (!statusBox || !toggleBtn) return;
-
-		const wallet = statusBox.dataset.wallet;
-		const selectedTokenId = statusBox.dataset.selectedTokenId || "";
-		const pauseKey = `gene-batch-paused-${wallet}`;
-		let running = localStorage.getItem(pauseKey) !== "1";
-		let timerId = null;
-
-		function updateBatchWrapVisibility() {
-			if (!batchWrap) return;
-
-			const statusHidden = statusBox.style.display === "none";
-			const buttonHidden = toggleBtn.style.display === "none";
-
-			batchWrap.style.display = (statusHidden && buttonHidden) ? "none" : "";
-		}
-
-		function setRunning(next) {
-			running = next;
-			toggleBtn.textContent = running ? "Stop Recessive Check" : "Resume Recessive Check";
-			statusBox.dataset.running = running ? "1" : "0";
-
-			if (running) {
-				statusBox.style.display = "";
-				toggleBtn.style.display = "";
-				statusBox.textContent = "Recessive gene data is loading in the background...";
-				updateBatchWrapVisibility();
-				scheduleNext(0);
-			} else {
-				statusBox.textContent = "Recessive gene background loading is paused.";
-				statusBox.style.display = "";
-				toggleBtn.style.display = "";
-				updateBatchWrapVisibility();
-
-				if (timerId) {
-					clearTimeout(timerId);
-					timerId = null;
-				}
-			}
-		}
-
-		function scheduleNext(delayMs) {
-			if (!running) return;
-			if (timerId) clearTimeout(timerId);
-			timerId = setTimeout(runBatch, delayMs);
-		}
-
-		async function runBatch() {
-			if (!running) return;
-
-			const formData = new URLSearchParams();
-			formData.append("wallet_address", wallet);
-			formData.append("selected_token_id", selectedTokenId);
-
-			try {
-				const response = await fetch("{{ url_for('process_gene_batch') }}", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/x-www-form-urlencoded",
-					},
-					body: formData.toString(),
-				});
-
-				const data = await response.json();
-
-				if (!data.ok) {
-					statusBox.textContent = "Background loading stopped due to an error.";
-					running = false;
-					toggleBtn.textContent = "Resume Recessive Check";
-					updateBatchWrapVisibility();
-					return;
-				}
-
-				if ((data.remaining || 0) > 0) {
-					statusBox.style.display = "";
-					toggleBtn.style.display = "";
-					statusBox.textContent =
-						`Recessive gene data is loading in the background. Loaded ${data.loaded || 0} chickens this round. ${data.remaining || 0} still remaining.`;
-					updateBatchWrapVisibility();
-					scheduleNext(2500);
-				} else {
-					running = false;
-					localStorage.removeItem(pauseKey);
-					statusBox.textContent = "";
-					statusBox.style.display = "none";
-					toggleBtn.style.display = "none";
-					updateBatchWrapVisibility();
-				}
-			} catch (err) {
-				statusBox.textContent = "Background loading stopped due to a network error.";
-				running = false;
-				toggleBtn.textContent = "Resume Recessive Check";
-				updateBatchWrapVisibility();
-			}
-		}
-
-		toggleBtn.addEventListener("click", function () {
-			running = !running;
-			localStorage.setItem(pauseKey, running ? "0" : "1");
-			setRunning(running);
-		});
-
-		setRunning(running);
-		updateBatchWrapVisibility();
-	});
-	</script>
-	<script>
-	document.addEventListener("DOMContentLoaded", function () {
-		const popupBuild = document.getElementById("gene-popup-build");
-		const popupMinBuildCount = document.getElementById("gene-popup-min-build-count");
-		const popupMatchCount = document.getElementById("gene-popup-match-count");
-		const pairMaxText = document.getElementById("gene-available-pair-max");
-		const tableRows = Array.from(document.querySelectorAll("#gene-available-table tbody tr.clickable-row"));
-
-		if (!popupBuild || !popupMinBuildCount || !popupMatchCount || !pairMaxText || !tableRows.length) {
-			return;
-		}
-		
-		function getGeneBuildCompatibility(buildKey) {
-			const key = String(buildKey || "").trim().toLowerCase();
-
-			const compatibility = {
-				"killua": new Set(["killua", "hybrid 1", "hybrid 2"]),
-				"shanks": new Set(["shanks", "hybrid 1"]),
-				"levi": new Set(["levi", "hybrid 1", "hybrid 2"]),
-				"hybrid 1": new Set(["killua", "shanks", "levi", "hybrid 1"]),
-				"hybrid 2": new Set(["killua", "levi", "hybrid 2"]),
-			};
-
-			return compatibility[key] || new Set();
-		}
-
-		function geneBuildsAreCompatible(selectedBuild, rowBuild) {
-			const left = String(selectedBuild || "").trim().toLowerCase();
-			const right = String(rowBuild || "").trim().toLowerCase();
-
-			if (!left || !right) return false;
-
-			const leftCompatible = getGeneBuildCompatibility(left);
-			const rightCompatible = getGeneBuildCompatibility(right);
-
-			return leftCompatible.has(right) && rightCompatible.has(left);
-		}
-		
-		function getVisibleRows() {
-			return tableRows.filter(function (row) {
-				return row.offsetParent !== null;
-			});
-		}
-
-		function recomputeGeneAvailablePairMax() {
-			const selectedBuild = String(popupBuild.value || "all").trim().toLowerCase();
-			const minBuildCountRaw = String(popupMinBuildCount.value || "").trim();
-			const minBuildCount = minBuildCountRaw === "" ? null : parseInt(minBuildCountRaw, 10);
-
-			let eligibleCount = 0;
-
-			getVisibleRows().forEach(function (row) {
-				const rowBuild = String(row.dataset.buildKey || "").trim().toLowerCase();
-				const rowBuildCount = parseInt(row.dataset.buildCount || "0", 10) || 0;
-
-				if (selectedBuild !== "all" && !geneBuildsAreCompatible(selectedBuild, rowBuild)) {
-					return;
-				}
-
-				if (minBuildCount !== null && rowBuildCount < minBuildCount) {
-					return;
-				}
-
-				eligibleCount += 1;
-			});
-
-			const pairMax = Math.max(0, Math.floor(eligibleCount / 2));
-
-			pairMaxText.textContent = String(pairMax);
-			popupMatchCount.max = String(pairMax);
-
-			const currentValue = parseInt(popupMatchCount.value || "1", 10) || 1;
-
-			if (pairMax === 0) {
-				popupMatchCount.value = "1";
-			} else if (currentValue > pairMax) {
-				popupMatchCount.value = String(pairMax);
-			} else if (currentValue < 1) {
-				popupMatchCount.value = "1";
-			}
-		}
-
-		popupBuild.addEventListener("change", recomputeGeneAvailablePairMax);
-		popupMinBuildCount.addEventListener("input", recomputeGeneAvailablePairMax);
-		popupMinBuildCount.addEventListener("change", recomputeGeneAvailablePairMax);
-
-		recomputeGeneAvailablePairMax();
-	});
-	</script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

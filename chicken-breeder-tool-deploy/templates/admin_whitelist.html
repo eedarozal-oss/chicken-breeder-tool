@@ -28,6 +28,7 @@
         <div class="panel" style="max-width: 720px; margin: 0 auto;">
             <h2>Grant Manual Access</h2>
             <form method="POST" class="filter-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="filter-grid" style="grid-template-columns: 1fr;">
                     <div>
                         <label for="owner_password"><strong>Owner Password</strong></label>
@@ -49,18 +50,6 @@
                             name="wallet_address"
                             value="{{ wallet or '' }}"
                             placeholder="0x..."
-                            autocomplete="off"
-                            required
-                        >
-                    </div>
-
-                    <div>
-                        <label for="wallet_password"><strong>Password</strong></label>
-                        <input
-                            type="password"
-                            id="wallet_password"
-                            name="wallet_password"
-                            value="{{ wallet_password or '' }}"
                             autocomplete="off"
                             required
                         >
@@ -135,6 +124,7 @@
 
             <form method="POST" class="filter-form">
                 <input type="hidden" name="action" value="sync_static_cache">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
                 <div class="filter-grid" style="grid-template-columns: 1fr;">
                     <div>
@@ -180,5 +170,6 @@
             {% endif %}
         </div>
     </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

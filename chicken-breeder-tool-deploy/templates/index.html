@@ -16,6 +16,8 @@
             >
 
 			<form method="POST" class="welcome-wallet-form" id="wallet-load-form">
+				<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+				<div class="welcome-version-badge">Version 1.5.1</div>
 				<div class="wallet-input-shell">
 					<input
 						type="text"

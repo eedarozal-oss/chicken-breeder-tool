@@ -1557,66 +1557,6 @@
 		</div>
 	</div>
 	{% endif %}
-	<script>
-	document.addEventListener("DOMContentLoaded", function () {
-		document.querySelectorAll(".clickable-row[data-href]").forEach(function (row) {
-			row.addEventListener("click", function (event) {
-				if (event.target.closest("a, button, input, select, textarea, label, form")) return;
-				window.location.href = row.dataset.href;
-			});
-
-			row.addEventListener("keydown", function (event) {
-				if (event.key === "Enter" || event.key === " ") {
-					event.preventDefault();
-					window.location.href = row.dataset.href;
-				}
-			});
-		});
-	});
-	</script>
-	<script>
-	document.addEventListener("DOMContentLoaded", function () {
-		const emptyModal = document.getElementById("auto-match-empty-modal");
-		if (!emptyModal) return;
-
-		document.body.classList.add("modal-open");
-
-		function closeEmptyModal() {
-			emptyModal.remove();
-			document.body.classList.remove("modal-open");
-		}
-
-		emptyModal.querySelectorAll("[data-close-auto-match-empty]").forEach(function (node) {
-			node.addEventListener("click", closeEmptyModal);
-		});
-	});
-	</script>
-	<script>
-	document.addEventListener("DOMContentLoaded", function () {
-		document.querySelectorAll(".ip-column-filter-form").forEach(function (form) {
-			form.addEventListener("submit", function () {
-				form.querySelectorAll(".ip-filter-csv-source").forEach(function (checkbox) {
-					const targetId = checkbox.getAttribute("data-target-input");
-					if (!targetId) return;
-
-					const hiddenInput = form.querySelector("#" + targetId);
-					if (!hiddenInput) return;
-
-					const selectedValues = Array.from(
-						form.querySelectorAll('.ip-filter-csv-source[data-target-input="' + targetId + '"]:checked')
-					).map(function (node) {
-						return node.value;
-					});
-
-					hiddenInput.value = selectedValues.join(",");
-				});
-
-				const currentAction = form.getAttribute("action") || window.location.pathname;
-				form.setAttribute("action", currentAction.split("#")[0] + "#available-chickens");
-			});
-		});
-	});
-	</script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

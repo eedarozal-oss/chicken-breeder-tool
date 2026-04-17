@@ -17,6 +17,7 @@
             <div class="topbar-actions-area">
 				<div class="topbar-actions topbar-actions-wrap">
 					<form method="POST" action="{{ url_for('refresh_wallet') }}" class="inline-form">
+						<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 						<input type="hidden" name="wallet_address" value="{{ wallet }}">
 						<button type="submit" class="wallet-refresh-btn" title="Refresh wallet" aria-label="Refresh wallet">↻</button>
 					</form>
