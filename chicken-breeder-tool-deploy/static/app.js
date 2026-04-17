@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
+    let activeNoticeTimer = null;
     const detailButtons = document.querySelectorAll(".toggle-details-btn");
     const clickableRows = document.querySelectorAll(".clickable-row");
 
@@ -15,6 +16,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const autoMatchResultModal = document.getElementById("auto-match-result-modal");
     const autoMatchResultCloseButtons = document.querySelectorAll("[data-close-auto-match-result]");
     const autoMatchOpenButtons = document.querySelectorAll(".open-auto-match-config-btn");
+    const autoMatchConfigForms = document.querySelectorAll(".auto-match-config-form");
 
     const plannerModal = document.getElementById("planner-modal");
     const plannerOpenButtons = document.querySelectorAll(".open-planner-btn");
@@ -22,6 +24,72 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	let plannerStateChanged = false;
 	let plannerRemovalChanged = false;
+
+    function showPageNotice(message, tone = "info") {
+        if (!message) return;
+
+        const existing = document.getElementById("page-feedback-notice");
+        if (existing) {
+            existing.remove();
+        }
+
+        const notice = document.createElement("div");
+        notice.id = "page-feedback-notice";
+        notice.className = `floating-notice floating-notice-${tone}`;
+        notice.setAttribute("role", tone === "error" ? "alert" : "status");
+        notice.textContent = message;
+        document.body.appendChild(notice);
+
+        if (activeNoticeTimer) {
+            clearTimeout(activeNoticeTimer);
+        }
+
+        activeNoticeTimer = setTimeout(function () {
+            notice.classList.add("is-hiding");
+            setTimeout(function () {
+                notice.remove();
+            }, 180);
+        }, 2400);
+    }
+
+    function readCookie(name) {
+        const cookiePrefix = `${name}=`;
+        const cookies = document.cookie ? document.cookie.split(";") : [];
+
+        for (const rawCookie of cookies) {
+            const cookie = rawCookie.trim();
+            if (cookie.startsWith(cookiePrefix)) {
+                return decodeURIComponent(cookie.slice(cookiePrefix.length));
+            }
+        }
+
+        return "";
+    }
+
+    function getCsrfToken() {
+        return readCookie("apex_csrf_token");
+    }
+
+    function appendCsrfToken(form) {
+        if (!form) return;
+
+        const csrfToken = getCsrfToken();
+        if (!csrfToken) return;
+
+        let input = form.querySelector('input[name="csrf_token"]');
+        if (!input) {
+            input = document.createElement("input");
+            input.type = "hidden";
+            input.name = "csrf_token";
+            form.appendChild(input);
+        }
+
+        input.value = csrfToken;
+    }
+
+    document.querySelectorAll('form[method="POST"]').forEach((form) => {
+        appendCsrfToken(form);
+    });
 
 	function reloadPageWithoutModalState() {
 		const url = new URL(window.location.href);
@@ -225,6 +293,15 @@ document.addEventListener("DOMContentLoaded", function () {
     function closeAutoMatchConfigModal() {
         if (!autoMatchConfigModal) return;
         autoMatchConfigModal.classList.add("hidden");
+        autoMatchConfigForms.forEach(function (form) {
+            form.dataset.submitting = "0";
+            const submitButton = form.querySelector('button[type="submit"]');
+            if (!submitButton) return;
+
+            submitButton.disabled = false;
+            submitButton.classList.remove("is-pending");
+            submitButton.textContent = submitButton.dataset.defaultLabel || submitButton.textContent;
+        });
         unlockBodyIfNoModalOpen();
     }
 
@@ -340,6 +417,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
     syncAutoMatchConfigState();
 
+    autoMatchConfigForms.forEach(function (form) {
+        const submitButton = form.querySelector('button[type="submit"]');
+        if (!submitButton) return;
+
+        submitButton.dataset.defaultLabel = submitButton.textContent.trim() || "Run Auto Match";
+
+        form.addEventListener("submit", function () {
+            if (form.dataset.submitting === "1") {
+                return;
+            }
+
+            form.dataset.submitting = "1";
+            submitButton.disabled = true;
+            submitButton.classList.add("is-pending");
+            submitButton.textContent = "Running...";
+        });
+    });
+
     function markPlannerButtonAdded(button) {
         if (!button) return;
         button.disabled = true;
@@ -447,6 +542,8 @@ document.addEventListener("DOMContentLoaded", function () {
     async function submitPlannerFormAjax(form, button, mode) {
         if (!form || !button || button.disabled || form.dataset.submitting === "1") return;
 
+        appendCsrfToken(form);
+
         form.dataset.submitting = "1";
         button.disabled = true;
         button.classList.add("is-pending");
@@ -456,14 +553,15 @@ document.addEventListener("DOMContentLoaded", function () {
                 method: (form.method || "POST").toUpperCase(),
                 body: new FormData(form),
                 headers: {
-                    "X-Requested-With": "XMLHttpRequest"
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRF-Token": getCsrfToken()
                 },
                 credentials: "same-origin",
                 redirect: "follow"
             });
 
             if (!response.ok) {
-                throw new Error("Request failed");
+                throw new Error("Planner update failed");
             }
 
 			if (mode === "add") {
@@ -471,6 +569,7 @@ document.addEventListener("DOMContentLoaded", function () {
 				updatePlannerCount(1);
 				updateAvailablePairMax(-1);
 				clearPlannerEmptyState();
+                showPageNotice("Pair added to breeding planner.", "success");
 
 				const isSelectedMatchFlow =
 					form.id === "compare-add-form" ||
@@ -489,6 +588,7 @@ document.addEventListener("DOMContentLoaded", function () {
 				updatePlannerCount(-1);
 				updateAvailablePairMax(1);
 				removePlannerRow(button);
+                showPageNotice("Pair removed from breeding planner.", "success");
 
 				plannerStateChanged = true;
 				plannerRemovalChanged = true;
@@ -501,6 +601,7 @@ document.addEventListener("DOMContentLoaded", function () {
             button.classList.remove("is-pending");
             form.dataset.submitting = "0";
             console.error(error);
+            showPageNotice("Planner update failed. Please try again.", "error");
         }
     }
 
@@ -587,6 +688,256 @@ document.addEventListener("DOMContentLoaded", function () {
     if (document.body?.dataset?.autoMatchResultOpen === "1") {
         openAutoMatchResultModal();
     }
+
+    const autoMatchEmptyModal = document.getElementById("auto-match-empty-modal");
+    if (autoMatchEmptyModal) {
+        lockBody();
+
+        function closeAutoMatchEmptyModal() {
+            autoMatchEmptyModal.remove();
+            unlockBodyIfNoModalOpen();
+        }
+
+        autoMatchEmptyModal.querySelectorAll("[data-close-auto-match-empty]").forEach(function (node) {
+            node.addEventListener("click", closeAutoMatchEmptyModal);
+        });
+    }
+
+    document.querySelectorAll(".ip-column-filter-form").forEach(function (form) {
+        form.addEventListener("submit", function () {
+            form.querySelectorAll(".ip-filter-csv-source").forEach(function (checkbox) {
+                const targetId = checkbox.getAttribute("data-target-input");
+                if (!targetId) return;
+
+                const hiddenInput = form.querySelector("#" + targetId);
+                if (!hiddenInput) return;
+
+                const selectedValues = Array.from(
+                    form.querySelectorAll('.ip-filter-csv-source[data-target-input="' + targetId + '"]:checked')
+                ).map(function (node) {
+                    return node.value;
+                });
+
+                hiddenInput.value = selectedValues.join(",");
+            });
+
+            const currentAction = form.getAttribute("action") || window.location.pathname;
+            form.setAttribute("action", currentAction.split("#")[0] + "#available-chickens");
+        });
+    });
+
+    function initBuildPairMax(options) {
+        const popupBuild = document.getElementById(options.popupBuildId);
+        const popupMinBuildCount = document.getElementById(options.popupMinBuildCountId);
+        const popupMatchCount = document.getElementById(options.popupMatchCountId);
+        const pairMaxText = document.getElementById(options.pairMaxId);
+        const tableRows = Array.from(document.querySelectorAll(options.tableRowSelector));
+
+        if (!popupBuild || !popupMinBuildCount || !popupMatchCount || !pairMaxText || !tableRows.length) {
+            return;
+        }
+
+        const compatibility = {
+            "killua": new Set(["killua", "hybrid 1", "hybrid 2"]),
+            "shanks": new Set(["shanks", "hybrid 1"]),
+            "levi": new Set(["levi", "hybrid 1", "hybrid 2"]),
+            "hybrid 1": new Set(["killua", "shanks", "levi", "hybrid 1"]),
+            "hybrid 2": new Set(["killua", "levi", "hybrid 2"]),
+        };
+
+        function buildsAreCompatible(selectedBuild, rowBuild) {
+            const left = String(selectedBuild || "").trim().toLowerCase();
+            const right = String(rowBuild || "").trim().toLowerCase();
+
+            if (!left || !right) return false;
+
+            const leftCompatible = compatibility[left] || new Set();
+            const rightCompatible = compatibility[right] || new Set();
+
+            return leftCompatible.has(right) && rightCompatible.has(left);
+        }
+
+        function getVisibleRows() {
+            return tableRows.filter(function (row) {
+                return row.offsetParent !== null;
+            });
+        }
+
+        function recomputeAvailablePairMax() {
+            const selectedBuild = String(popupBuild.value || "all").trim().toLowerCase();
+            const minBuildCountRaw = String(popupMinBuildCount.value || "").trim();
+            const minBuildCount = minBuildCountRaw === "" ? null : parseInt(minBuildCountRaw, 10);
+
+            let eligibleCount = 0;
+
+            getVisibleRows().forEach(function (row) {
+                const rowBuild = String(row.dataset.buildKey || "").trim().toLowerCase();
+                const rowBuildCount = parseInt(row.dataset.buildCount || "0", 10) || 0;
+
+                if (selectedBuild !== "all" && !buildsAreCompatible(selectedBuild, rowBuild)) {
+                    return;
+                }
+
+                if (minBuildCount !== null && rowBuildCount < minBuildCount) {
+                    return;
+                }
+
+                eligibleCount += 1;
+            });
+
+            const pairMax = Math.max(0, Math.floor(eligibleCount / 2));
+
+            pairMaxText.textContent = String(pairMax);
+            popupMatchCount.max = String(pairMax);
+
+            const currentValue = parseInt(popupMatchCount.value || "1", 10) || 1;
+
+            if (pairMax === 0) {
+                popupMatchCount.value = "1";
+            } else if (currentValue > pairMax) {
+                popupMatchCount.value = String(pairMax);
+            } else if (currentValue < 1) {
+                popupMatchCount.value = "1";
+            }
+        }
+
+        popupBuild.addEventListener("change", recomputeAvailablePairMax);
+        popupMinBuildCount.addEventListener("input", recomputeAvailablePairMax);
+        popupMinBuildCount.addEventListener("change", recomputeAvailablePairMax);
+
+        recomputeAvailablePairMax();
+    }
+
+    initBuildPairMax({
+        popupBuildId: "gene-popup-build",
+        popupMinBuildCountId: "gene-popup-min-build-count",
+        popupMatchCountId: "gene-popup-match-count",
+        pairMaxId: "gene-available-pair-max",
+        tableRowSelector: "#gene-available-table tbody tr.clickable-row",
+    });
+
+    initBuildPairMax({
+        popupBuildId: "ultimate-popup-build",
+        popupMinBuildCountId: "ultimate-popup-min-build-count",
+        popupMatchCountId: "ultimate-popup-match-count",
+        pairMaxId: "ultimate-available-pair-max",
+        tableRowSelector: "#ultimate-available-table tbody tr.clickable-row",
+    });
+
+    (function initGeneBatchLoader() {
+        const batchWrap = document.getElementById("gene-batch-wrap");
+        const statusBox = document.getElementById("gene-batch-status");
+        const toggleBtn = document.getElementById("toggle-gene-batch");
+
+        if (!statusBox || !toggleBtn) {
+            return;
+        }
+
+        const wallet = statusBox.dataset.wallet || "";
+        const selectedTokenId = statusBox.dataset.selectedTokenId || "";
+        const batchUrl = statusBox.dataset.batchUrl || "";
+        const pauseKey = `gene-batch-paused-${wallet}`;
+        let running = localStorage.getItem(pauseKey) !== "1";
+        let timerId = null;
+
+        function updateBatchWrapVisibility() {
+            if (!batchWrap) return;
+
+            const statusHidden = statusBox.style.display === "none";
+            const buttonHidden = toggleBtn.style.display === "none";
+            batchWrap.style.display = (statusHidden && buttonHidden) ? "none" : "";
+        }
+
+        function setRunning(next) {
+            running = next;
+            toggleBtn.textContent = running ? "Stop Recessive Check" : "Resume Recessive Check";
+            statusBox.dataset.running = running ? "1" : "0";
+
+            if (running) {
+                statusBox.style.display = "";
+                toggleBtn.style.display = "";
+                statusBox.textContent = "Recessive gene data is loading in the background...";
+                updateBatchWrapVisibility();
+                scheduleNext(0);
+            } else {
+                statusBox.textContent = "Recessive gene background loading is paused.";
+                statusBox.style.display = "";
+                toggleBtn.style.display = "";
+                updateBatchWrapVisibility();
+
+                if (timerId) {
+                    clearTimeout(timerId);
+                    timerId = null;
+                }
+            }
+        }
+
+        function scheduleNext(delayMs) {
+            if (!running) return;
+            if (timerId) clearTimeout(timerId);
+            timerId = setTimeout(runBatch, delayMs);
+        }
+
+        async function runBatch() {
+            if (!running || !batchUrl) return;
+
+            const formData = new URLSearchParams();
+            formData.append("wallet_address", wallet);
+            formData.append("selected_token_id", selectedTokenId);
+
+            try {
+                const response = await fetch(batchUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "X-CSRF-Token": getCsrfToken(),
+                    },
+                    body: formData.toString(),
+                });
+
+                const data = await response.json();
+
+                if (!data.ok) {
+                    statusBox.textContent = "Background loading stopped due to an error.";
+                    running = false;
+                    toggleBtn.textContent = "Resume Recessive Check";
+                    showPageNotice("Gene background loading stopped due to an error.", "error");
+                    updateBatchWrapVisibility();
+                    return;
+                }
+
+                if ((data.remaining || 0) > 0) {
+                    statusBox.style.display = "";
+                    toggleBtn.style.display = "";
+                    statusBox.textContent = `Recessive gene data is loading in the background. Loaded ${data.loaded || 0} chickens this round. ${data.remaining || 0} still remaining.`;
+                    updateBatchWrapVisibility();
+                    scheduleNext(2500);
+                } else {
+                    running = false;
+                    localStorage.removeItem(pauseKey);
+                    statusBox.textContent = "";
+                    statusBox.style.display = "none";
+                    toggleBtn.style.display = "none";
+                    updateBatchWrapVisibility();
+                }
+            } catch (err) {
+                statusBox.textContent = "Background loading stopped due to a network error.";
+                running = false;
+                toggleBtn.textContent = "Resume Recessive Check";
+                showPageNotice("Gene background loading hit a network error.", "error");
+                updateBatchWrapVisibility();
+            }
+        }
+
+        toggleBtn.addEventListener("click", function () {
+            running = !running;
+            localStorage.setItem(pauseKey, running ? "0" : "1");
+            setRunning(running);
+        });
+
+        setRunning(running);
+        updateBatchWrapVisibility();
+    })();
 	
 	function activateLoadingShell(shell) {
         if (!shell) return;
