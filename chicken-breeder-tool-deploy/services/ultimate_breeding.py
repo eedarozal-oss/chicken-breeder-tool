@@ -1135,8 +1135,25 @@ def rank_ultimate_pair(
     total_score = scores["total_score"]
     build_score = scores["build_score"]
     ip_score = scores["ip_score"]
+    quality_rank = {
+        "Excellent match": 0,
+        "Strong match": 1,
+        "Good match": 2,
+        "Situational": 3,
+        "Poor match": 4,
+    }.get(
+        build_ultimate_pair_quality_from_items(
+            selected,
+            candidate,
+            build_name,
+            left_item=left_item,
+            right_item=right_item,
+        ),
+        99,
+    )
 
     return (
+        quality_rank,
         -total_score,
         -build_score,
         -ip_score,

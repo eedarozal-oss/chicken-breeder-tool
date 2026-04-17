@@ -573,52 +573,86 @@ def build_gene_pair_quality(row):
     if combined_total <= 0:
         return "Poor"
 
+    selected_count = safe_int((selected_eval or {}).get("match_count"), 0)
+    if selected_count is None:
+        selected_count = metrics["selected_count"] if not selected_eval or not candidate_eval else 0
+
+    candidate_count = safe_int((candidate_eval or {}).get("match_count"), 0)
+    if candidate_count is None:
+        candidate_count = metrics["candidate_count"] if not selected_eval or not candidate_eval else 0
+
+    selected_count = selected_count or 0
+    candidate_count = candidate_count or 0
+
     shared_count = safe_int(pair_metrics.get("shared_count"), 0) or 0
-    candidate_match_count = safe_int(candidate_target_info.get("sort_match_count"), 0) or 0
-    priority_satisfied = bool(priority_metrics.get("selected_priority_satisfied"))
-    priority_resolved = (safe_int(priority_metrics.get("selected_priority_resolved_count"), 0) or 0) > 0
+    edge_count = safe_int(pair_metrics.get("edge_count"), 0) or 0
 
-    overlap_penalty = get_gene_overlap_penalty(shared_count)
+    left_finishes = combined_count > selected_count
+    right_finishes = combined_count > candidate_count
+    both_finish = left_finishes and right_finishes
+    both_complete = selected_count >= combined_total and candidate_count >= combined_total
+    one_complete_one_near = (
+        max(selected_count, candidate_count) >= combined_total
+        and min(selected_count, candidate_count) >= max(0, combined_total - 1)
+    )
+    pure_fill = added_missing_traits >= 1 and shared_count == 0
 
-    if overlap_penalty >= 220:
-        if combined_count >= combined_total and added_missing_traits >= 2:
-            return "Situational"
-        if combined_count >= max(4, combined_total - 1):
-            return "Situational"
-        return "Poor"
+    if both_complete:
+        return "Excellent match"
 
-    if (
-        priority_satisfied
-        and combined_count >= combined_total
-        and shared_count >= max(3, combined_total - 2)
-    ):
+    if both_finish and combined_count >= combined_total and shared_count >= max(3, combined_total - 2):
+        return "Excellent match"
+
+    if one_complete_one_near and combined_count >= combined_total and shared_count >= max(3, combined_total - 2):
         return "Excellent match"
 
     if (
-        priority_satisfied
-        and combined_count >= max(4, combined_total - 1)
+        combined_count >= max(4, combined_total - 1)
         and shared_count >= max(2, combined_total - 3)
-        and (added_missing_traits >= 1 or priority_resolved)
+        and (both_finish or added_missing_traits >= 2)
     ):
         return "Strong match"
 
+    if pure_fill:
+        return "Situational"
+
+    if shared_count <= 1 and added_missing_traits <= 1:
+        return "Poor"
+
     if (
-        combined_count >= max(4, combined_total - 1)
-        and shared_count >= 2
+        (shared_count in {1, 2} and added_missing_traits >= 2)
+        or (shared_count >= 3 and added_missing_traits == 0 and not both_complete)
+        or (shared_count >= 2 and added_missing_traits >= 1)
     ):
         return "Good match"
 
-    if (
-        combined_count >= max(3, combined_total - 2)
-        and (
-            added_missing_traits >= 1
-            or shared_count >= 1
-            or candidate_match_count >= max(4, combined_total - 1)
-        )
-    ):
+    if shared_count == 0 and added_missing_traits >= 1:
         return "Situational"
 
     return "Poor"
+
+
+def build_gene_pair_quality_from_score(
+    selected_chicken,
+    candidate,
+    build_type,
+    selected_eval=None,
+    candidate_eval=None,
+    pair_metrics=None,
+    candidate_target_info=None,
+    priority_metrics=None,
+    added_missing_traits=0,
+):
+    row = {
+        "left": selected_chicken or {},
+        "candidate": candidate or {},
+        "build_type": build_type,
+        "selected_eval": selected_eval or {},
+        "candidate_eval": candidate_eval or {},
+        "candidate_target_info": candidate_target_info or {},
+        "added_missing_traits": added_missing_traits,
+    }
+    return build_gene_pair_quality(row)
 
 def get_gene_item_score_bonus(item):
     item_name = str((item or {}).get("name") or "").strip()
@@ -743,7 +777,27 @@ def rank_gene_pair(
         added_missing_traits=added_missing_traits,
     )
 
+    quality_rank = {
+        "Excellent match": 0,
+        "Strong match": 1,
+        "Good match": 2,
+        "Situational": 3,
+        "Poor": 4,
+    }.get(
+        build_gene_pair_quality_from_score(
+            selected_chicken=selected_chicken,
+            candidate=candidate,
+            build_type=build_type,
+            pair_metrics=pair_metrics,
+            candidate_target_info=candidate_target_info,
+            priority_metrics=priority_metrics,
+            added_missing_traits=added_missing_traits,
+        ),
+        99,
+    )
+
     return (
+        quality_rank,
         -gene_score,
         -(pair_metrics.get("combined_count") or 0),
         -(pair_metrics.get("shared_count") or 0),

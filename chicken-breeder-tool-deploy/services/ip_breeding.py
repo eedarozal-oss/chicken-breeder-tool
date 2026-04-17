@@ -257,10 +257,7 @@ def get_ip_item_candidates(parent, other_parent=None):
             for item in pair_candidates
         ]
 
-        if broad_count >= 4:
-            return [soulknot_item] + result
-
-        if broad_count >= 3:
+        if broad_count >= 6:
             result.append(soulknot_item)
 
         return result
@@ -272,7 +269,7 @@ def recommend_ip_item(parent, other_parent=None):
     ranked = get_top_base_stat_field(parent)
     broad_count = sum(1 for _, value in ranked if value >= 32)
 
-    if broad_count >= 4:
+    if broad_count >= 6:
         return {
             "name": "Soulknot",
             "reason": "Best when this parent is strong across several innate stats.",
@@ -639,46 +636,49 @@ def build_ip_pair_quality(selected_chicken, candidate, row=None):
     threshold_metrics = get_pair_threshold_metrics(selected_chicken, candidate, threshold=25)
     burden_metrics = get_ip_pair_burden_metrics(selected_chicken, candidate, threshold=25)
     ip_difference = get_ip_difference(selected_chicken, candidate)
+    evaluation = (row or {}).get("evaluation") or {}
+
+    if evaluation:
+        if not evaluation.get("is_ip_recommended") or not evaluation.get("is_breed_count_recommended"):
+            if evaluation.get("is_ip_recommended") or evaluation.get("is_breed_count_recommended"):
+                return "Situational"
+            return "Poor"
 
     if ip_difference is None:
         return "Poor"
+
+    unresolved_load_too_high = (
+        burden_metrics.get("selected_below_count", 0) >= 2
+        or burden_metrics.get("candidate_below_count", 0) >= 2
+    )
 
     if priority_metrics.get("shared_unresolved_weakness"):
         if (
             threshold_metrics.get("all_threshold_gaps_resolved")
             and threshold_metrics.get("mutual_fix_count", 0) >= 2
+            and not unresolved_load_too_high
         ):
             return "Strong match"
         if threshold_metrics.get("right_fixes_left_count", 0) >= 1:
             return "Good match"
         return "Situational"
 
-        burden_metrics = get_ip_pair_burden_metrics(selected_chicken, candidate, threshold=25)
-
-        if (
-            threshold_metrics.get("all_threshold_gaps_resolved")
-            and threshold_metrics.get("right_fixes_left_count", 0) >= 1
-            and threshold_metrics.get("left_fixes_right_count", 0) >= 1
-            and threshold_metrics.get("combined_below_remaining_count", 0) == 0
-            and burden_metrics.get("selected_below_count", 0) <= 2
-            and burden_metrics.get("candidate_below_count", 0) <= 2
-            and burden_metrics.get("total_below_count", 0) <= 4
-            and ip_difference <= 10
-        ):
-            return "Excellent match"
-
     if (
         metrics.get("elite_stabilization")
         and metrics.get("shared_strong_count", 0) >= 5
         and ip_difference < 10
+        and threshold_metrics.get("combined_below_remaining_count", 0) == 0
+        and not unresolved_load_too_high
     ):
         return "Excellent match"
 
     if (
         metrics.get("anchor_finisher")
         and threshold_metrics.get("right_fixes_left_count", 0) >= 1
-        and threshold_metrics.get("combined_below_remaining_count", 0) <= 1
+        and threshold_metrics.get("left_fixes_right_count", 0) >= 1
+        and threshold_metrics.get("combined_below_remaining_count", 0) == 0
         and ip_difference < 10
+        and not unresolved_load_too_high
     ):
         return "Excellent match"
 
@@ -921,14 +921,57 @@ def build_ip_multi_matches(breedable_chickens, ip_diff=10, breed_diff=1, ninuno_
     pool = [row for row in pool if chicken_passes_auto_ninuno_filter(row, ninuno_filter)]
 
     while len(pool) >= 2 and len(results) < target_count:
-        selected, matches = pick_best_ip_auto_match(
-            pool,
-            enable_ip_diff=(ip_diff is not None),
-            ip_diff=ip_diff,
+        ordered_pool = sorted(
+            list(pool),
+            key=lambda row: (
+                -(safe_int(row.get("ip"), 0) or 0),
+                safe_int(row.get("breed_count"), 999999) or 999999,
+                -(float(row.get("ownership_percent") or 0)),
+                safe_int(row.get("token_id"), 999999999) or 999999999,
+            ),
         )
+        selected = ordered_pool[0] if ordered_pool else None
+        matches = []
 
-        if not selected or not matches:
+        if selected:
+            selected_token_id = str(selected.get("token_id") or "")
+            candidate_pool = [
+                row
+                for row in pool
+                if str(row.get("token_id") or "") != selected_token_id
+            ]
+
+            if ip_diff is not None:
+                selected_ip = safe_int(selected.get("ip"))
+                if selected_ip is not None:
+                    candidate_pool = [
+                        row
+                        for row in candidate_pool
+                        if safe_int(row.get("ip")) is not None
+                        and abs((safe_int(row.get("ip")) or 0) - selected_ip) <= ip_diff
+                    ]
+
+            matches = find_potential_matches(selected, candidate_pool, settings=MATCH_SETTINGS)
+            matches = [
+                row
+                for row in matches
+                if row.get("evaluation", {}).get("is_ip_recommended")
+                and row.get("evaluation", {}).get("is_breed_count_recommended")
+                and pair_has_usable_ip_items(selected, row.get("candidate"))
+            ]
+            matches = sort_ip_match_rows(selected, matches)
+
+        if not selected:
             break
+
+        if not matches:
+            used_selected_id = str(selected.get("token_id") or "")
+            pool = [
+                row
+                for row in pool
+                if str(row.get("token_id") or "") != used_selected_id
+            ]
+            continue
 
         filtered_matches = []
         for row in matches:

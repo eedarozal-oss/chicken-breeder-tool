@@ -1,14 +1,13 @@
 from datetime import datetime, timezone
 
-from services.build_eval import evaluate_all_builds
+from services.chicken_enricher import enrich_chicken_record
 from services.db.connection import get_connection
+from services.gene_build_picker import get_best_available_gene_build_info
 from services.market_candidate_cache import (
     delete_market_candidate_cache_row_with_conn,
     upsert_market_candidate_cache_row_with_conn,
     MARKET_CANDIDATE_CACHE_VERSION,
 )
-
-MAIN_BUILDS = ("killua", "shanks", "levi")
 
 
 def safe_int(value, default=0):
@@ -20,40 +19,6 @@ def safe_int(value, default=0):
 
 def safe_lower(value):
     return str(value or "").strip().lower()
-
-
-def build_primary_traits(row):
-    row = dict(row or {})
-    return {
-        "beak": row.get("beak"),
-        "comb": row.get("comb"),
-        "eyes": row.get("eyes"),
-        "feet": row.get("feet"),
-        "wings": row.get("wings"),
-        "tail": row.get("tail"),
-        "body": row.get("body"),
-    }
-
-
-def build_gene_traits(row):
-    row = dict(row or {})
-
-    def choose_gene_value(slot_name):
-        for key in (f"{slot_name}_h1", f"{slot_name}_h2", f"{slot_name}_h3"):
-            value = str(row.get(key) or "").strip()
-            if value:
-                return value
-        return ""
-
-    return {
-        "beak": choose_gene_value("beak"),
-        "comb": choose_gene_value("comb"),
-        "eyes": choose_gene_value("eyes"),
-        "feet": choose_gene_value("feet"),
-        "wings": choose_gene_value("wings"),
-        "tail": choose_gene_value("tail"),
-        "body": choose_gene_value("body"),
-    }
 
 
 def compute_total_ip(row):
@@ -70,45 +35,6 @@ def compute_total_ip(row):
         ]
     )
 
-
-def choose_best_main_build(evaluations):
-    evaluations = dict(evaluations or {})
-    best = None
-
-    for build_name in MAIN_BUILDS:
-        result = evaluations.get(build_name) or {}
-        match_count = safe_int(result.get("match_count"))
-        match_total = safe_int(result.get("match_total"))
-
-        candidate = {
-            "build_name": build_name,
-            "match_count": match_count,
-            "match_total": match_total,
-        }
-
-        if best is None:
-            best = candidate
-            continue
-
-        if candidate["match_count"] > best["match_count"]:
-            best = candidate
-            continue
-
-        if candidate["match_count"] == best["match_count"]:
-            if candidate["match_total"] > best["match_total"]:
-                best = candidate
-                continue
-
-    if not best:
-        return {
-            "build_name": "",
-            "match_count": 0,
-            "match_total": 0,
-        }
-
-    return best
-
-
 def compute_market_candidate_row(static_row):
     static_row = dict(static_row or {})
     token_id = str(static_row.get("token_id") or "").strip()
@@ -117,28 +43,16 @@ def compute_market_candidate_row(static_row):
 
     total_ip = compute_total_ip(static_row)
     breed_count = safe_int(static_row.get("breed_count"), 0)
+    enriched_row = enrich_chicken_record(static_row)
+    best_build = get_best_available_gene_build_info(enriched_row)
 
-    primary_traits = build_primary_traits(static_row)
-    gene_traits = build_gene_traits(static_row)
-
-    primary_evaluations = evaluate_all_builds(primary_traits)
-    gene_evaluations = evaluate_all_builds(gene_traits)
-
-    best_primary = choose_best_main_build(primary_evaluations)
-    best_gene = choose_best_main_build(gene_evaluations)
-
-    if best_primary["match_count"] >= best_gene["match_count"]:
-        best_build = best_primary
-    else:
-        best_build = best_gene
-
-    best_build_name = safe_lower(best_build.get("build_name"))
-    best_build_count = safe_int(best_build.get("match_count"))
-    best_build_total = safe_int(best_build.get("match_total"))
+    best_build_name = safe_lower(best_build.get("build_key"))
+    best_build_count = safe_int(best_build.get("sort_match_count"))
+    best_build_total = safe_int(best_build.get("sort_match_total"))
 
     qualifies_ip = 1 if total_ip >= 175 else 0
-    qualifies_gene = 1 if best_build_count >= 3 else 0
-    qualifies_ultimate = 1 if total_ip >= 175 and best_build_count >= 3 else 0
+    qualifies_gene = 1 if best_build_name and best_build_count >= 3 else 0
+    qualifies_ultimate = 1 if total_ip >= 175 and best_build_name and best_build_count >= 3 else 0
     
     return {
         "token_id": token_id,

@@ -7,7 +7,9 @@ from services.db.connection import get_connection
 TARGET_WALLET = "0x9933199fa3d96d7696d2b2a4cfba48d99e47a079"
 MIN_AMOUNT_WEI = 100000000000000000  # 0.1 RON
 ACCESS_DAYS = 30
-SKYNET_TXS_URL = "https://skynet-api.roninchain.com/ronin/explorer/v2/accounts/{wallet}/txs?offset=0&limit=100"
+SKYNET_TXS_URL = "https://skynet-api.roninchain.com/ronin/explorer/v2/accounts/{wallet}/txs?offset={offset}&limit={limit}"
+SKYNET_PAGE_LIMIT = 100
+SKYNET_MAX_PAGES = 10
 
 
 def get_conn():
@@ -217,20 +219,43 @@ def grant_manual_access(wallet: str, notes: str = "manual access", duration_days
     save_access_record(wallet, "manual", reference, granted_at, notes, duration_days=duration_days)
 
 
+def iter_recent_target_wallet_transactions(cutoff: datetime, page_limit: int = SKYNET_PAGE_LIMIT, max_pages: int = SKYNET_MAX_PAGES):
+    for page_index in range(max_pages):
+        offset = page_index * page_limit
+        url = SKYNET_TXS_URL.format(wallet=TARGET_WALLET, offset=offset, limit=page_limit)
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+
+        payload = response.json()
+        items = payload.get("result", {}).get("items", [])
+        if not items:
+            break
+
+        saw_older_transaction = False
+
+        for tx in items:
+            block_time = tx.get("blockTime")
+            if not block_time:
+                continue
+
+            tx_time = datetime.fromtimestamp(int(block_time), tz=timezone.utc)
+            if tx_time < cutoff:
+                saw_older_transaction = True
+                continue
+
+            yield tx
+
+        if len(items) < page_limit or saw_older_transaction:
+            break
+
+
 def find_latest_qualifying_payment(wallet: str):
     wallet = (wallet or "").strip().lower()
-
-    url = SKYNET_TXS_URL.format(wallet=TARGET_WALLET)
-    response = requests.get(url, timeout=20)
-    response.raise_for_status()
-
-    payload = response.json()
-    items = payload.get("result", {}).get("items", [])
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=ACCESS_DAYS)
     latest_match = None
 
-    for tx in items:
+    for tx in iter_recent_target_wallet_transactions(cutoff=cutoff):
         tx_from = str(tx.get("from") or "").strip().lower()
         tx_to = str(tx.get("to") or "").strip().lower()
         tx_status = int(tx.get("status") or 0)
@@ -242,14 +267,7 @@ def find_latest_qualifying_payment(wallet: str):
         except ValueError:
             continue
 
-        block_time = tx.get("blockTime")
-        if not block_time:
-            continue
-
-        tx_time = datetime.fromtimestamp(int(block_time), tz=timezone.utc)
-
-        if tx_time < cutoff:
-            continue
+        tx_time = datetime.fromtimestamp(int(tx.get("blockTime")), tz=timezone.utc)
         if tx_from != wallet:
             continue
         if tx_to != TARGET_WALLET:

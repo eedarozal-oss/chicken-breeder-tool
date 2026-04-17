@@ -1,6 +1,6 @@
 from services.db.connection import get_connection
 
-MARKET_CANDIDATE_CACHE_VERSION = 2
+MARKET_CANDIDATE_CACHE_VERSION = 3
 
 def init_market_candidate_cache_table():
     with get_connection() as conn:
