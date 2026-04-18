@@ -92,6 +92,7 @@ from services.ultimate_breeding import (
     build_ultimate_pair_quality_from_items,
     pick_best_ultimate_auto_match as service_pick_best_ultimate_auto_match,
     build_ultimate_available_auto_candidates as service_build_ultimate_available_auto_candidates,
+    refresh_ultimate_primary_builds_if_needed,
 )
 
 from services.wallet_access import (
@@ -133,6 +134,7 @@ from services.gene_available_table import (
 from services.ultimate_available_table import (
     parse_csv_query_values as parse_ultimate_csv_query_values,
     normalize_ultimate_available_ninuno_filter,
+    normalize_ultimate_build_value,
     enrich_ultimate_available_chicken_row,
     build_ultimate_available_filter_options,
     chicken_matches_ultimate_available_filters,
@@ -1274,6 +1276,7 @@ def inject_breeding_item_helpers():
         "build_ip_pair_quality": build_ip_pair_quality,
         "build_gene_pair_quality": build_gene_pair_quality,
         "build_ultimate_pair_quality": build_ultimate_pair_quality,
+        "build_prefers_instinct": build_prefers_instinct,
         "planner_pair_exists": lambda wallet, left_token_id, right_token_id: planner_pair_exists(wallet, left_token_id, right_token_id),
     }
 
@@ -1429,18 +1432,42 @@ def build_gene_match_empty_state(build_type, ninuno_100_only=False, auto_match=F
 
 def enrich_ultimate_display(chicken):
     row = dict(chicken)
+    best_info = get_best_available_gene_build_info(row)
 
-    row["ultimate_type_display"] = get_ultimate_type_display(row)
-    row["ultimate_build_display"] = get_ultimate_build_display(row)
+    primary_build = normalize_ultimate_build_value(row.get("primary_build"))
+    if not primary_build:
+        primary_build = (
+            str(row.get("gene_build_key") or "").strip().lower()
+            or str(best_info.get("build_key") or "").strip().lower()
+        )
+        row["primary_build"] = primary_build
 
     primary_count = safe_int(row.get("primary_build_match_count"), 0) or 0
     primary_total = safe_int(row.get("primary_build_match_total"), 0) or 0
+    if not primary_count and safe_int(row.get("gene_build_match_count"), 0):
+        row["primary_build_match_count"] = safe_int(row.get("gene_build_match_count"), 0) or 0
+        primary_count = row["primary_build_match_count"]
+    elif not primary_count and safe_int(best_info.get("sort_match_count"), 0):
+        row["primary_build_match_count"] = safe_int(best_info.get("sort_match_count"), 0) or 0
+        primary_count = row["primary_build_match_count"]
+    if not primary_total and safe_int(row.get("gene_build_match_total"), 0):
+        row["primary_build_match_total"] = safe_int(row.get("gene_build_match_total"), 0) or 0
+        primary_total = row["primary_build_match_total"]
+    elif not primary_total and safe_int(best_info.get("sort_match_total"), 0):
+        row["primary_build_match_total"] = safe_int(best_info.get("sort_match_total"), 0) or 0
+        primary_total = row["primary_build_match_total"]
+
+    row["ultimate_type_display"] = get_ultimate_type_display(row)
+    row["ultimate_build_display"] = get_ultimate_build_display(row)
     row["ultimate_build_match_display"] = f"{primary_count}/{primary_total}" if primary_total else ""
 
     return enrich_chicken_media(row)
 
-def pick_best_ultimate_auto_match(breedable_chickens):
-    return service_pick_best_ultimate_auto_match(breedable_chickens)
+def pick_best_ultimate_auto_match(breedable_chickens, include_lower_values=False):
+    return service_pick_best_ultimate_auto_match(
+        breedable_chickens,
+        include_lower_values=include_lower_values,
+    )
 
 def parse_build_match_count(value):
     raw = str(value or "").strip()
@@ -1457,11 +1484,12 @@ def parse_build_match_count(value):
             best = max(best, safe_int(part, 0) or 0)
     return best
 
-def build_ultimate_available_auto_candidates(breedable_chickens, breed_diff=None, ninuno_mode="all"):
+def build_ultimate_available_auto_candidates(breedable_chickens, breed_diff=None, ninuno_mode="all", include_lower_values=False):
     return service_build_ultimate_available_auto_candidates(
         breedable_chickens=breedable_chickens,
         breed_diff=breed_diff,
         ninuno_mode=ninuno_mode,
+        include_lower_values=include_lower_values,
     )
 
 
@@ -1660,6 +1688,7 @@ register_match_routes(app, {
     "pick_best_gene_auto_match_from_pool": pick_best_gene_auto_match_from_pool,
     "pick_best_ultimate_auto_match": pick_best_ultimate_auto_match,
     "pick_multi_pairs_from_candidates": pick_multi_pairs_from_candidates,
+    "refresh_ultimate_primary_builds_if_needed": refresh_ultimate_primary_builds_if_needed,
     "require_authorized_wallet": require_authorized_wallet,
     "safe_int": safe_int,
     "sort_gene_available_chickens": sort_gene_available_chickens,
@@ -1668,6 +1697,7 @@ register_match_routes(app, {
     "sort_key_int": sort_key_int,
     "sort_key_text": sort_key_text,
     "sort_ultimate_available_table_chickens": sort_ultimate_available_table_chickens,
+    "upsert_chicken": upsert_chicken,
     "upsert_family_root_summary": upsert_family_root_summary,
 })
 
