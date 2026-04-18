@@ -1,3 +1,4 @@
+from services.builds_config import BUILD_PRIORITY
 from services.primary_build_classifier import safe_int
 from services.build_eval import (
     evaluate_build,
@@ -140,7 +141,8 @@ def refresh_ultimate_primary_builds_if_needed(chickens, upsert_chicken_fn, safe_
 
 
 def get_primary_build(chicken):
-    return str((chicken or {}).get("primary_build") or "").strip().lower()
+    raw = str((chicken or {}).get("primary_build") or "").strip().lower()
+    return raw if raw in BUILD_PRIORITY else ""
 
 
 def get_primary_build_count(chicken):
@@ -1278,7 +1280,7 @@ def chicken_passes_auto_ninuno_filter(chicken, mode):
     return True
 
 
-def pick_best_ultimate_auto_match(breedable_chickens):
+def pick_best_ultimate_auto_match(breedable_chickens, include_lower_values=False):
     best_selected = None
     best_matches = []
     best_top = None
@@ -1297,7 +1299,11 @@ def pick_best_ultimate_auto_match(breedable_chickens):
             )
         ]
 
-        matches = filter_and_sort_ultimate_candidates(selected, candidate_pool)
+        matches = filter_and_sort_ultimate_candidates(
+            selected,
+            candidate_pool,
+            include_lower_values=include_lower_values,
+        )
         if not matches:
             continue
 
@@ -1312,7 +1318,7 @@ def pick_best_ultimate_auto_match(breedable_chickens):
     return best_selected, best_matches
 
 
-def build_ultimate_available_auto_candidates(breedable_chickens, breed_diff=None, ninuno_mode="all"):
+def build_ultimate_available_auto_candidates(breedable_chickens, breed_diff=None, ninuno_mode="all", include_lower_values=False):
     pair_rows = []
 
     for index, source in enumerate(breedable_chickens or []):
@@ -1338,8 +1344,16 @@ def build_ultimate_available_auto_candidates(breedable_chickens, breed_diff=None
             if not is_generation_gap_allowed(source, candidate, max_gap=3):
                 continue
 
-            forward = filter_and_sort_ultimate_candidates(source, [candidate])
-            reverse = filter_and_sort_ultimate_candidates(candidate, [source])
+            forward = filter_and_sort_ultimate_candidates(
+                source,
+                [candidate],
+                include_lower_values=include_lower_values,
+            )
+            reverse = filter_and_sort_ultimate_candidates(
+                candidate,
+                [source],
+                include_lower_values=include_lower_values,
+            )
 
             if forward:
                 chosen_left = dict(source)
@@ -1389,14 +1403,14 @@ def build_ultimate_available_auto_candidates(breedable_chickens, breed_diff=None
     pair_rows.sort(key=lambda row: row["ranking"])
     return pair_rows
 
-def filter_and_sort_ultimate_candidates(selected, chickens, require_items=False):
+def filter_and_sort_ultimate_candidates(selected, chickens, require_items=False, include_lower_values=False):
     rows = []
 
     for candidate in chickens or []:
         if str(candidate.get("token_id") or "") == str(selected.get("token_id") or ""):
             continue
 
-        if not is_ultimate_eligible(candidate):
+        if not include_lower_values and not is_ultimate_eligible(candidate):
             continue
 
         if not is_valid_ultimate_pair(selected, candidate):

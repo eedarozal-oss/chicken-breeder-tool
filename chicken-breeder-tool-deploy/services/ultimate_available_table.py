@@ -1,6 +1,8 @@
 ULTIMATE_BUILD_ORDER = ["killua", "shanks", "levi", "hybrid 2", "hybrid 1"]
 ULTIMATE_TYPE_ORDER = ["both", "gene_only", "ip_only"]
 
+from services.gene_build_picker import get_best_available_gene_build_info
+
 
 def parse_csv_query_values(raw_value):
     raw_text = str(raw_value or "").strip()
@@ -119,6 +121,15 @@ def enrich_ultimate_available_chicken_row(
     safe_int,
 ):
     row = enrich_chicken_media(dict(chicken or {}))
+    best_info = get_best_available_gene_build_info(row)
+
+    primary_build = normalize_ultimate_build_value(row.get("primary_build"))
+    gene_build = str(row.get("gene_build_key") or "").strip().lower()
+    if not primary_build:
+        fallback_build = gene_build or str(best_info.get("build_key") or "").strip().lower()
+        if fallback_build:
+            row["primary_build"] = fallback_build
+            primary_build = fallback_build
 
     type_normalized = normalize_chicken_type_value(row.get("type"))
     ultimate_type_key = normalize_ultimate_type_value(
@@ -130,6 +141,23 @@ def enrich_ultimate_available_chicken_row(
 
     primary_count = safe_int(row.get("primary_build_match_count"), 0) or 0
     primary_total = safe_int(row.get("primary_build_match_total"), 0) or 0
+    gene_count = safe_int(row.get("gene_build_match_count"), 0) or 0
+    gene_total = safe_int(row.get("gene_build_match_total"), 0) or 0
+    fallback_count = safe_int(best_info.get("sort_match_count"), 0) or 0
+    fallback_total = safe_int(best_info.get("sort_match_total"), 0) or 0
+
+    if not primary_count and gene_count:
+        primary_count = gene_count
+        row["primary_build_match_count"] = primary_count
+    elif not primary_count and fallback_count:
+        primary_count = fallback_count
+        row["primary_build_match_count"] = primary_count
+    if not primary_total and gene_total:
+        primary_total = gene_total
+        row["primary_build_match_total"] = primary_total
+    elif not primary_total and fallback_total:
+        primary_total = fallback_total
+        row["primary_build_match_total"] = primary_total
 
     row["type_normalized"] = type_normalized
     row["type_display"] = get_chicken_type_display(type_normalized)

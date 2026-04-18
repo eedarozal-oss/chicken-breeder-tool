@@ -198,6 +198,39 @@ def build_prefers_instinct(chicken, build_type):
     )
 
 
+def get_gene_gregor_priority(parent, other_parent):
+    build_source = str((parent or {}).get("build_source_display") or "").strip().lower()
+    if build_source != "primary":
+        return ""
+
+    parent_count = safe_int((parent or {}).get("primary_build_match_count"), 0) or 0
+    other_count = safe_int((other_parent or {}).get("primary_build_match_count"), 0) or 0
+    build_type = str((parent or {}).get("build_type") or "").strip().lower()
+
+    if parent_count >= 7:
+        if other_count < 7:
+            return "forced"
+        return "blocked"
+
+    if build_type:
+        supplied_slots = get_build_supply_slots(parent, other_parent, build_type)
+        other_eval = evaluate_build(other_parent or {}, build_type)
+        other_missing_count = len(other_eval.get("missing_slots", []))
+
+        if (
+            parent_count >= 4
+            and parent_count > other_count
+            and other_missing_count > 0
+            and len(supplied_slots) * 2 >= other_missing_count
+        ):
+            return "forced"
+
+    if parent_count >= 4 and parent_count > other_count:
+        return "fallback"
+
+    return "blocked"
+
+
 def _normalize_gene_eval(result):
     result = dict(result or {})
     return {
@@ -362,6 +395,13 @@ def recommend_gene_item(parent, other_parent, build_type):
             "reason": "Best when this parent is being valued for recessive build inheritance.",
         }
 
+    gregor_priority = get_gene_gregor_priority(parent, other_parent)
+    if gregor_priority == "forced":
+        return {
+            "name": "Gregor's Gift",
+            "reason": "Best when this parent is preserving the stronger primary build influence for the pair.",
+        }
+
     priority_slots = get_gene_priority_item_slots(parent, other_parent, build_type)
     if priority_slots:
         item_name, reason = TRAIT_ITEM_RULES[priority_slots[0]]
@@ -386,11 +426,10 @@ def recommend_gene_item(parent, other_parent, build_type):
             "reason": "Best when no trait edge is available and this parent has a strong instinct fit for the target build.",
         }
 
-    primary_match_count = safe_int((parent or {}).get("primary_build_match_count"), 0) or 0
-    if build_source == "primary" and primary_match_count >= 4:
+    if gregor_priority == "fallback":
         return {
             "name": "Gregor's Gift",
-            "reason": "Best when this parent is contributing a strong primary build.",
+            "reason": "Best when this parent is contributing the stronger primary build in the pair.",
         }
 
     return None
@@ -404,6 +443,16 @@ def get_gene_item_candidates(parent, other_parent, build_type):
             {
                 "name": "Mendel's Memento",
                 "reason": "Best when this parent is being valued for recessive build inheritance.",
+            }
+        )
+        return candidates
+
+    gregor_priority = get_gene_gregor_priority(parent, other_parent)
+    if gregor_priority == "forced":
+        candidates.append(
+            {
+                "name": "Gregor's Gift",
+                "reason": "Best when this parent is preserving the stronger primary build influence for the pair.",
             }
         )
         return candidates
@@ -438,12 +487,11 @@ def get_gene_item_candidates(parent, other_parent, build_type):
             }
         )
 
-    primary_match_count = safe_int((parent or {}).get("primary_build_match_count"), 0) or 0
-    if build_source == "primary" and primary_match_count >= 4:
+    if gregor_priority == "fallback":
         candidates.append(
             {
                 "name": "Gregor's Gift",
-                "reason": "Best when this parent is contributing a strong primary build.",
+                "reason": "Best when this parent is contributing the stronger primary build in the pair.",
             }
         )
 
