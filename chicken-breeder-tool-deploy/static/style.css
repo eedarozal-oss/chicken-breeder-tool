@@ -3007,6 +3007,11 @@ body.modal-open {
     text-overflow: ellipsis;
 }
 
+.multi-match-details-grid .instinct-align {
+    display: inline;
+    white-space: nowrap;
+}
+
 .multi-match-center {
     display: flex;
     align-items: center;
@@ -4263,6 +4268,63 @@ body.welcome-page {
     flex-wrap: wrap;
 }
 
+.ultimate-filter-notice {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 16px 18px;
+    margin: 0 0 16px;
+    border: 1px solid rgba(232, 183, 83, 0.24);
+    border-radius: 16px;
+    background: rgba(232, 183, 83, 0.08);
+}
+
+.ultimate-filter-notice.is-relaxed {
+    border-color: rgba(94, 234, 146, 0.22);
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.ultimate-filter-notice-copy {
+    max-width: 760px;
+}
+
+.ultimate-filter-notice-title {
+    margin-bottom: 6px;
+    color: #ffd98b;
+    font-size: 0.88rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.ultimate-filter-notice.is-relaxed .ultimate-filter-notice-title {
+    color: #9af0b4;
+}
+
+.ultimate-filter-notice-text {
+    margin: 0;
+    color: rgba(236, 244, 255, 0.92);
+    line-height: 1.55;
+}
+
+.ultimate-filter-notice-status {
+    margin: 6px 0 0;
+    color: rgba(236, 244, 255, 0.92);
+    line-height: 1.5;
+}
+
+.ultimate-filter-notice-action {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.ultimate-filter-toggle-btn {
+    white-space: nowrap;
+}
+
 .available-search-box {
     display: flex;
     align-items: center;
@@ -4512,6 +4574,11 @@ body.welcome-page {
 
 @media (max-width: 900px) {
     .available-search-toolbar {
+        align-items: stretch;
+    }
+
+    .ultimate-filter-notice {
+        flex-direction: column;
         align-items: stretch;
     }
 
@@ -4903,4 +4970,16 @@ body.welcome-page {
     .loading-skeleton-grid {
         grid-template-columns: 1fr;
     }
+}
+
+.instinct-align {
+    font-weight: 700;
+}
+
+.instinct-align-match {
+    color: #53d769;
+}
+
+.instinct-align-miss {
+    color: #ff8a65;
 }
