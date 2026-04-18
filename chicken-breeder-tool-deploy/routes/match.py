@@ -1,4 +1,4 @@
-from flask import redirect, render_template, request, url_for
+from flask import redirect, render_template, request, session, url_for
 
 
 def register_match_routes(app, deps):
@@ -62,6 +62,7 @@ def register_match_routes(app, deps):
     pick_best_gene_auto_match_from_pool = deps["pick_best_gene_auto_match_from_pool"]
     pick_best_ultimate_auto_match = deps["pick_best_ultimate_auto_match"]
     pick_multi_pairs_from_candidates = deps["pick_multi_pairs_from_candidates"]
+    refresh_ultimate_primary_builds_if_needed = deps["refresh_ultimate_primary_builds_if_needed"]
     require_authorized_wallet = deps["require_authorized_wallet"]
     safe_int = deps["safe_int"]
     sort_gene_available_chickens = deps["sort_gene_available_chickens"]
@@ -70,6 +71,7 @@ def register_match_routes(app, deps):
     sort_key_int = deps["sort_key_int"]
     sort_key_text = deps["sort_key_text"]
     sort_ultimate_available_table_chickens = deps["sort_ultimate_available_table_chickens"]
+    upsert_chicken = deps["upsert_chicken"]
     upsert_family_root_summary = deps["upsert_family_root_summary"]
     GENE_BUILD_ORDER = deps["GENE_BUILD_ORDER"]
     CONTRACTS = deps["CONTRACTS"]
@@ -102,6 +104,10 @@ def register_match_routes(app, deps):
         if skip_auto_open or not auto_match or not potential_matches or multi_match_rows:
             return ""
         return f"{prefix}-{potential_matches[0]['candidate']['token_id']}"
+
+    def get_ultimate_relaxed_session_key(wallet):
+        wallet_key = str(wallet or "").strip().lower()
+        return f"ultimate_include_lower::{wallet_key}"
 
     def filter_popup_candidate_pool(rows, popup_build, popup_min_build_count, build_key_fn, match_count_fn):
         filtered_rows = list(rows or [])
@@ -499,6 +505,8 @@ def register_match_routes(app, deps):
         if wallet:
             try:
                 chickens = get_wallet_chickens(wallet, ensure_loaded=True)
+                if refresh_ultimate_primary_builds_if_needed(chickens, upsert_chicken, safe_int):
+                    chickens = get_wallet_chickens(wallet, ensure_loaded=True)
                 access_expiry = get_wallet_access_expiry_display(wallet)
                 wallet_summary = build_wallet_summary(wallet=wallet, chickens=chickens, access_expiry=access_expiry)
                 batch_result = enrich_missing_gene_data_in_batches(chickens=chickens, wallet=wallet, page_key="gene", batch_size=5, prioritized_token_id=selected_token_id or None)
@@ -659,6 +667,18 @@ def register_match_routes(app, deps):
         popup_ninuno = popup_params["popup_ninuno"]
         popup_match_count = popup_params["popup_match_count"]
         market_context = build_market_context(wallet)
+        ultimate_relaxed_available = has_active_payment_access_in_db(wallet)
+        ultimate_include_lower_arg = str(request.args.get("ultimate_include_lower") or "").strip().lower()
+        ultimate_include_lower_values = False
+        if wallet:
+            relaxed_session_key = get_ultimate_relaxed_session_key(wallet)
+            if not ultimate_relaxed_available:
+                session.pop(relaxed_session_key, None)
+            elif ultimate_include_lower_arg in {"1", "true", "on", "yes"}:
+                session[relaxed_session_key] = True
+            elif ultimate_include_lower_arg in {"0", "false", "off", "no"}:
+                session.pop(relaxed_session_key, None)
+            ultimate_include_lower_values = bool(session.get(relaxed_session_key))
 
         if not require_authorized_wallet(wallet):
             return redirect(url_for("index"))
@@ -719,7 +739,7 @@ def register_match_routes(app, deps):
                         get_ultimate_build_display_fn=get_ultimate_build_display,
                         safe_int=safe_int,
                     )
-                    for row in all_breedable if is_ultimate_eligible(row)
+                    for row in all_breedable if ultimate_include_lower_values or is_ultimate_eligible(row)
                 ], wallet)
                 ultimate_available_filter_options = build_ultimate_available_filter_options(ultimate_original_available_pool, safe_int=safe_int)
                 breedable_chickens = [
@@ -739,7 +759,12 @@ def register_match_routes(app, deps):
                 )
                 if auto_match and auto_match_source == "available" and auto_match_mode == "multiple":
                     multi_match_target = min(popup_match_count, available_pair_max)
-                    pair_candidates = build_ultimate_available_auto_candidates(available_auto_match_pool, breed_diff=popup_breed_diff, ninuno_mode=popup_ninuno)
+                    pair_candidates = build_ultimate_available_auto_candidates(
+                        available_auto_match_pool,
+                        breed_diff=popup_breed_diff,
+                        ninuno_mode=popup_ninuno,
+                        include_lower_values=ultimate_include_lower_values,
+                    )
                     multi_match_feedback = build_multi_match_feedback(
                         pick_multi_pairs_from_candidates(pair_candidates, multi_match_target),
                         multi_match_target,
@@ -753,13 +778,21 @@ def register_match_routes(app, deps):
                     selected_chicken = resolve_selected_chicken(breedable_chickens, selected_token_id)
                     if auto_match and not selected_token_id:
                         if auto_match_source == "available" and auto_match_mode == "single":
-                            pair_candidates = build_ultimate_available_auto_candidates(available_auto_match_pool, breed_diff=popup_breed_diff, ninuno_mode=popup_ninuno)
+                            pair_candidates = build_ultimate_available_auto_candidates(
+                                available_auto_match_pool,
+                                breed_diff=popup_breed_diff,
+                                ninuno_mode=popup_ninuno,
+                                include_lower_values=ultimate_include_lower_values,
+                            )
                             if pair_candidates:
                                 selected_chicken, selected_token_id = select_left_pair_candidate(pair_candidates)
                             else:
                                 auto_match_single_empty = True
                         else:
-                            selected_chicken, potential_matches = pick_best_ultimate_auto_match(breedable_chickens)
+                            selected_chicken, potential_matches = pick_best_ultimate_auto_match(
+                                breedable_chickens,
+                                include_lower_values=ultimate_include_lower_values,
+                            )
                             selected_token_id = resolve_selected_token_id(selected_chicken, selected_token_id)
                     if selected_chicken and not potential_matches:
                         candidate_pool = [
@@ -769,7 +802,11 @@ def register_match_routes(app, deps):
                             and not is_full_siblings(selected_chicken, row)
                             and is_generation_gap_allowed(selected_chicken, row, max_gap=match_settings["max_generation_gap"])
                         ]
-                        potential_matches = filter_and_sort_ultimate_candidates(selected_chicken, candidate_pool)
+                        potential_matches = filter_and_sort_ultimate_candidates(
+                            selected_chicken,
+                            candidate_pool,
+                            include_lower_values=ultimate_include_lower_values,
+                        )
                     if should_mark_auto_match_empty(
                         auto_match,
                         auto_match_source,
@@ -802,6 +839,8 @@ def register_match_routes(app, deps):
             ultimate_available_filter_options=ultimate_available_filter_options,
             ultimate_active_filters=build_ultimate_active_filters(selected_types=ultimate_filter_type_values, selected_build=ultimate_filter_build, selected_build_matches=ultimate_filter_build_match_values, min_ip=ultimate_min_ip, selected_generations=ultimate_filter_generation_values, selected_breed_counts=ultimate_filter_breed_count_values, ninuno_mode=ultimate_filter_ninuno),
             ultimate_original_available_count=len(ultimate_original_available_pool),
+            ultimate_relaxed_available=ultimate_relaxed_available,
+            ultimate_include_lower_values=ultimate_include_lower_values,
             potential_matches=potential_matches,
             auto_match=auto_match,
             auto_match_source=auto_match_source,
