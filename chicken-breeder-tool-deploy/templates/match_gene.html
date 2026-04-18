@@ -951,9 +951,12 @@
 									</div>
 								</td>
 								<td>{{ chicken.build_display or "" }}</td>
-								<td>{{ chicken.build_match_display or "" }}</td>
+								{% set chicken_visible_match_count = chicken.recessive_build_match_count if chicken.build_source_display == 'Recessive' else (chicken.primary_build_match_count if chicken.primary_build_match_total else chicken.build_match_count) %}
+								{% set chicken_visible_match_total = chicken.recessive_build_match_total if chicken.build_source_display == 'Recessive' else (chicken.primary_build_match_total if chicken.primary_build_match_total else chicken.build_match_total) %}
+								{% set chicken_instinct_aligned = build_prefers_instinct(chicken, chicken.build_type) %}
+								<td>{{ (((chicken_visible_match_count or 0)|string) ~ '/' ~ ((chicken_visible_match_total or 0)|string)) if (chicken_visible_match_total or 0) else '' }}</td>
 								<td>{{ chicken.build_source_display or "" }}</td>
-								<td>{{ chicken.instinct or "" }}</td>
+								<td>{{ chicken.instinct or "" }}{% if chicken.instinct %} <span class="instinct-align instinct-align-{{ 'match' if chicken_instinct_aligned else 'miss' }}">({{ '+' if chicken_instinct_aligned else '-' }})</span>{% endif %}</td>
 								<td>{{ chicken.ip if chicken.ip is not none else "" }}</td>
 								<td>{{ chicken.generation_text or "" }}</td>
 								<td>{{ chicken.breed_count if chicken.breed_count is not none else "" }}</td>
@@ -1257,12 +1260,15 @@
 						</div>
 
 						<div class="selected-chicken-summary-grid">
+							{% set selected_instinct_aligned = build_prefers_instinct(selected_chicken, selected_chicken.build_type) %}
 							<div>
-								<strong>Build Source:</strong>
-								{{ selected_chicken.build_source_display or "" }}
+								<strong>Instinct:</strong>
+								{{ selected_chicken.instinct or "" }}{% if selected_chicken.instinct %} <span class="instinct-align instinct-align-{{ 'match' if selected_instinct_aligned else 'miss' }}">({{ '+' if selected_instinct_aligned else '-' }})</span>{% endif %}
 							</div>
+							{% set selected_visible_match_count = selected_chicken.recessive_build_match_count if selected_chicken.build_source_display == 'Recessive' else (selected_chicken.primary_build_match_count if selected_chicken.primary_build_match_total else selected_chicken.build_match_count) %}
+							{% set selected_visible_match_total = selected_chicken.recessive_build_match_total if selected_chicken.build_source_display == 'Recessive' else (selected_chicken.primary_build_match_total if selected_chicken.primary_build_match_total else selected_chicken.build_match_total) %}
 							<div><strong>Build Match:</strong>
-								{{ selected_chicken.build_match_display or "" }}
+								{{ (((selected_visible_match_count or 0)|string) ~ '/' ~ ((selected_visible_match_total or 0)|string)) if (selected_visible_match_total or 0) else '' }}
 							</div>
 							<div>
 								<strong>Breed Count:</strong>
@@ -1391,7 +1397,7 @@
 											<th>Match</th>
 											<th>Chicken ID</th>
 											<th>Build Match</th>
-											<th>Build Source</th>
+											<th>Instinct</th>
 											<th>Added Missing Traits</th>
 											<th>Breed Count</th>
 											<th>Ninuno %</th>
@@ -1440,8 +1446,11 @@
 													<div class="chicken-id-card-text">#{{ row.candidate.token_id }}</div>
 												</div>
 											</td>
-											<td>{{ row.candidate.build_match_display or "" }}</td>
-											<td>{{ row.candidate.build_source_display or "" }}</td>
+											{% set candidate_visible_match_count = row.candidate.recessive_build_match_count if row.candidate.build_source_display == 'Recessive' else (row.candidate.primary_build_match_count if row.candidate.primary_build_match_total else row.candidate.build_match_count) %}
+											{% set candidate_visible_match_total = row.candidate.recessive_build_match_total if row.candidate.build_source_display == 'Recessive' else (row.candidate.primary_build_match_total if row.candidate.primary_build_match_total else row.candidate.build_match_total) %}
+											{% set candidate_instinct_aligned = build_prefers_instinct(row.candidate, row.candidate.build_type) %}
+											<td>{{ (((candidate_visible_match_count or 0)|string) ~ '/' ~ ((candidate_visible_match_total or 0)|string)) if (candidate_visible_match_total or 0) else '' }}</td>
+											<td>{{ row.candidate.instinct or "" }}{% if row.candidate.instinct %} <span class="instinct-align instinct-align-{{ 'match' if candidate_instinct_aligned else 'miss' }}">({{ '+' if candidate_instinct_aligned else '-' }})</span>{% endif %}</td>
 											<td>{{ row.added_missing_traits if row.added_missing_traits is not none else "" }}</td>
 											<td>{{ row.candidate.breed_count if row.candidate.breed_count is not none else "" }}</td>
 											<td id="ninuno-{{ row.candidate.token_id }}">
@@ -1810,10 +1819,13 @@
                 <div class="multi-match-side multi-match-side-boxed">
                     <h4>Chicken #{{ row.left.token_id }}</h4>
                     <div class="multi-match-details-grid">
-						<div><strong>Build</strong><span>{{ ((row.left.build_match_display or '') ~ (' (' ~ (row.left.build_type|title) ~ ')' if row.left.build_type else '')) if (row.left.build_match_display or row.left.build_type) else 'No Build' }}</span></div>
+						{% set left_visible_match_count = row.left.recessive_build_match_count if row.left.build_source_display == 'Recessive' else (row.left.primary_build_match_count if row.left.primary_build_match_total else row.left.build_match_count) %}
+						{% set left_visible_match_total = row.left.recessive_build_match_total if row.left.build_source_display == 'Recessive' else (row.left.primary_build_match_total if row.left.primary_build_match_total else row.left.build_match_total) %}
+						<div><strong>Build</strong><span>{{ ((((left_visible_match_count or 0)|string) ~ '/' ~ ((left_visible_match_total or 0)|string)) if (left_visible_match_total or 0) else '') ~ (' (' ~ (row.left.build_type|title) ~ ')' if row.left.build_type else '') if ((left_visible_match_total or 0) or row.left.build_type) else 'No Build' }}</span></div>
                         <div><strong>Missing Traits</strong><span>+{{ 0 if row.right.build_source_display == 'Recessive' else ((row.gene_pair_metrics.right_only_count if row.gene_pair_metrics else 0) or 0) }}</span></div>
+                        {% set left_instinct_aligned = build_prefers_instinct(row.left, row.left.build_type) %}
+                        <div><strong>Instinct</strong><span>{{ row.left.instinct or '' }}{% if row.left.instinct %} <span class="instinct-align instinct-align-{{ 'match' if left_instinct_aligned else 'miss' }}">({{ '+' if left_instinct_aligned else '-' }})</span>{% endif %}</span></div>
                         <div><strong>Breed Count</strong><span>{{ row.left.breed_count if row.left.breed_count is not none else '' }}</span></div>
-                        <div><strong>Ninuno</strong><span>{{ row.left.ownership_percent or 0 }}%</span></div>
                     </div>
                     <div class="multi-match-item-bar">
                         <div class="multi-match-item-inner multi-match-item-inner-right">
@@ -1861,10 +1873,13 @@
                 <div class="multi-match-side multi-match-side-boxed">
                     <h4>Chicken #{{ row.right.token_id }}</h4>
                     <div class="multi-match-details-grid">
-						<div><strong>Build</strong><span>{{ ((row.right.build_match_display or '') ~ (' (' ~ (row.right.build_type|title) ~ ')' if row.right.build_type else '')) if (row.right.build_match_display or row.right.build_type) else 'No Build' }}</span></div>
+						{% set right_visible_match_count = row.right.recessive_build_match_count if row.right.build_source_display == 'Recessive' else (row.right.primary_build_match_count if row.right.primary_build_match_total else row.right.build_match_count) %}
+						{% set right_visible_match_total = row.right.recessive_build_match_total if row.right.build_source_display == 'Recessive' else (row.right.primary_build_match_total if row.right.primary_build_match_total else row.right.build_match_total) %}
+						<div><strong>Build</strong><span>{{ ((((right_visible_match_count or 0)|string) ~ '/' ~ ((right_visible_match_total or 0)|string)) if (right_visible_match_total or 0) else '') ~ (' (' ~ (row.right.build_type|title) ~ ')' if row.right.build_type else '') if ((right_visible_match_total or 0) or row.right.build_type) else 'No Build' }}</span></div>
                         <div><strong>Missing Traits</strong><span>+{{ 0 if row.left.build_source_display == 'Recessive' else ((row.gene_pair_metrics.left_only_count if row.gene_pair_metrics else 0) or 0) }}</span></div>
+                        {% set right_instinct_aligned = build_prefers_instinct(row.right, row.right.build_type) %}
+                        <div><strong>Instinct</strong><span>{{ row.right.instinct or '' }}{% if row.right.instinct %} <span class="instinct-align instinct-align-{{ 'match' if right_instinct_aligned else 'miss' }}">({{ '+' if right_instinct_aligned else '-' }})</span>{% endif %}</span></div>
                         <div><strong>Breed Count</strong><span>{{ row.right.breed_count if row.right.breed_count is not none else '' }}</span></div>
-                        <div><strong>Ninuno</strong><span>{{ row.right.ownership_percent or 0 }}%</span></div>
                     </div>
                     <div class="multi-match-item-bar">
                         {% set right_item_image = get_item_image_url(row.right_item.name) if row.right_item else '' %}
@@ -1976,7 +1991,8 @@
 					<div class="selected-chicken-group-box">
 						<div class="selected-chicken-group-box-title">Traits</div>
 						<div class="stats-grid">
-							<div><strong>Build:</strong> {{ selected_chicken.build_type|title or "" }}</div>
+							{% set selected_preview_instinct_aligned = build_prefers_instinct(selected_chicken, selected_chicken.build_type) %}
+							<div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}{% if selected_chicken.instinct %} <span class="instinct-align instinct-align-{{ 'match' if selected_preview_instinct_aligned else 'miss' }}">({{ '+' if selected_preview_instinct_aligned else '-' }})</span>{% endif %}</div>
 
 							{% if selected_chicken.build_source_display == "Recessive" %}
 								<div><strong>Beak:</strong> {{ selected_chicken.beak_h1 or "" }}</div>
@@ -1999,7 +2015,9 @@
 					</div>
 						<div class="compare-item-box compare-item-box-right">
 							<div class="stats-grid compare-gene-summary-grid">
-								<div><strong>Build:</strong> {{ ((selected_chicken.build_match_display or '') ~ (' (' ~ (selected_chicken.build_type|title) ~ ')' if selected_chicken.build_type else '')) if (selected_chicken.build_match_display or selected_chicken.build_type) else 'No Build' }}</div>
+								{% set selected_preview_match_count = selected_chicken.recessive_build_match_count if selected_chicken.build_source_display == 'Recessive' else (selected_chicken.primary_build_match_count if selected_chicken.primary_build_match_total else selected_chicken.build_match_count) %}
+								{% set selected_preview_match_total = selected_chicken.recessive_build_match_total if selected_chicken.build_source_display == 'Recessive' else (selected_chicken.primary_build_match_total if selected_chicken.primary_build_match_total else selected_chicken.build_match_total) %}
+								<div><strong>Build:</strong> {{ ((((selected_preview_match_count or 0)|string) ~ '/' ~ ((selected_preview_match_total or 0)|string)) if (selected_preview_match_total or 0) else '') ~ (' (' ~ (selected_chicken.build_type|title) ~ ')' if selected_chicken.build_type else '') if ((selected_preview_match_total or 0) or selected_chicken.build_type) else 'No Build' }}</div>
 								<div><strong>Missing traits:</strong> +{{ 0 if row.candidate.build_source_display == 'Recessive' else ((row.gene_pair_metrics.right_only_count if row.gene_pair_metrics else 0) or 0) }}</div>
 								<div><strong>Breed Count:</strong> {{ selected_chicken.breed_count if selected_chicken.breed_count is not none else '' }}</div>
 								<div><strong>Ninuno:</strong> {{ selected_chicken.ownership_percent or 0 }}%</div>
@@ -2031,7 +2049,8 @@
 					<div class="selected-chicken-group-box">
 						<div class="selected-chicken-group-box-title">Traits</div>
 						<div class="stats-grid">
-							<div><strong>Build:</strong> {{ row.candidate.build_type|title or "" }}</div>
+							{% set candidate_preview_instinct_aligned = build_prefers_instinct(row.candidate, row.candidate.build_type) %}
+							<div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}{% if row.candidate.instinct %} <span class="instinct-align instinct-align-{{ 'match' if candidate_preview_instinct_aligned else 'miss' }}">({{ '+' if candidate_preview_instinct_aligned else '-' }})</span>{% endif %}</div>
 
 							{% if row.candidate.build_source_display == "Recessive" %}
 								<div><strong>Beak:</strong> {{ row.candidate.beak_h1 or "" }}</div>
@@ -2054,7 +2073,9 @@
 					</div>
 					<div class="compare-item-box">
 						<div class="stats-grid compare-gene-summary-grid">
-							<div><strong>Build:</strong> {{ ((row.candidate.build_match_display or '') ~ (' (' ~ (row.candidate.build_type|title) ~ ')' if row.candidate.build_type else '')) if (row.candidate.build_match_display or row.candidate.build_type) else 'No Build' }}</div>
+							{% set candidate_preview_match_count = row.candidate.recessive_build_match_count if row.candidate.build_source_display == 'Recessive' else (row.candidate.primary_build_match_count if row.candidate.primary_build_match_total else row.candidate.build_match_count) %}
+							{% set candidate_preview_match_total = row.candidate.recessive_build_match_total if row.candidate.build_source_display == 'Recessive' else (row.candidate.primary_build_match_total if row.candidate.primary_build_match_total else row.candidate.build_match_total) %}
+							<div><strong>Build:</strong> {{ ((((candidate_preview_match_count or 0)|string) ~ '/' ~ ((candidate_preview_match_total or 0)|string)) if (candidate_preview_match_total or 0) else '') ~ (' (' ~ (row.candidate.build_type|title) ~ ')' if row.candidate.build_type else '') if ((candidate_preview_match_total or 0) or row.candidate.build_type) else 'No Build' }}</div>
 							<div><strong>Missing traits:</strong> +{{ 0 if selected_chicken.build_source_display == 'Recessive' else ((row.gene_pair_metrics.left_only_count if row.gene_pair_metrics else 0) or 0) }}</div>
 							<div><strong>Breed Count:</strong> {{ row.candidate.breed_count if row.candidate.breed_count is not none else '' }}</div>
 							<div><strong>Ninuno:</strong> {{ row.candidate.ownership_percent or 0 }}%</div>

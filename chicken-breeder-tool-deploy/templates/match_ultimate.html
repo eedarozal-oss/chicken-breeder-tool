@@ -132,6 +132,45 @@
 			</div>
 
 			<div class="panel breeding-panel" id="available-chickens">
+				<div class="ultimate-filter-notice{% if ultimate_include_lower_values %} is-relaxed{% endif %}">
+						<div class="ultimate-filter-notice-copy">
+							<div class="ultimate-filter-notice-title">Ultimate Pool Filter</div>
+							<p class="ultimate-filter-notice-text">
+								Default filter: <strong>265+ IP</strong>,
+								<strong>5/7+ Build</strong>, or <strong>175+ IP with 3/7+ Build</strong>.
+							</p>
+							<p class="ultimate-filter-notice-status">
+								{% if ultimate_include_lower_values %}
+									Lower IP/build chickens are currently included in this pool.
+								{% else %}
+									Lower IP/build chickens are currently hidden from this pool.
+								{% endif %}
+							</p>
+						</div>
+					{% if ultimate_relaxed_available %}
+						<form method="GET" action="{{ url_for('match_ultimate_page') }}" class="ultimate-filter-notice-action">
+							<input type="hidden" name="wallet_address" value="{{ wallet }}">
+							{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
+							<input type="hidden" name="sort_by" value="{{ sort_by }}">
+							<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+							<input type="hidden" name="ultimate_filter_type" value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}">
+							<input type="hidden" name="ultimate_filter_build" value="{{ ultimate_filter_build if ultimate_filter_build != 'all' else '' }}">
+							<input type="hidden" name="ultimate_filter_build_match" value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}">
+							<input type="hidden" name="ultimate_min_ip" value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}">
+							<input type="hidden" name="ultimate_filter_generation" value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}">
+							<input type="hidden" name="ultimate_filter_breed_count" value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}">
+							<input type="hidden" name="ultimate_filter_ninuno" value="{{ ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else '' }}">
+							<input type="hidden" name="ultimate_include_lower" value="{{ 0 if ultimate_include_lower_values else 1 }}">
+							<button
+								type="submit"
+								class="link-btn secondary-link-btn ultimate-filter-toggle-btn"
+								title="Donator exclusive: include lower IP/build chickens in the Ultimate pool."
+							>
+								{{ 'Restore Strict Filter' if ultimate_include_lower_values else 'Include Lower Values' }}
+							</button>
+						</form>
+					{% endif %}
+				</div>
 				{% if breedable_chickens %}
 					<div class="available-search-toolbar">
 						<div class="available-search-box">
