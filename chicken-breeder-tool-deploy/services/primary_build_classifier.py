@@ -30,6 +30,7 @@ def classify_primary_build(chicken):
         evaluations,
         min_matches=3,
         traits=primary_traits,
+        instinct=chicken.get("instinct"),
     )
 
     if not qualified:

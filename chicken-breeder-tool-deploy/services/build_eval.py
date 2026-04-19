@@ -1,4 +1,4 @@
-from services.builds_config import BUILD_PRIORITY, TRAIT_SLOTS, BUILD_RULES
+from services.builds_config import BUILD_PRIORITY, BUILD_INSTINCT_TIERS, TRAIT_SLOTS, BUILD_RULES
 from services.build_utils import trait_matches_allowed_value
 
 
@@ -56,6 +56,22 @@ def get_main_builds_with_unique_traits(traits):
 
     return matched
 
+
+def normalize_instinct_name(value):
+    return str(value or "").strip().lower()
+
+
+def build_matches_instinct(instinct_name, build_name):
+    build_key = str(build_name or "").strip().lower()
+    instinct_key = normalize_instinct_name(instinct_name)
+    if not instinct_key:
+        return False
+    return instinct_key in BUILD_INSTINCT_TIERS.get(build_key, [])
+
+
+def get_instinct_tie_rank(instinct_name, build_name):
+    return 0 if build_matches_instinct(instinct_name, build_name) else 1
+
 def qualifies_for_hybrid_2(traits):
     hybrid_eval = evaluate_build(traits, "hybrid 2")
     return hybrid_eval.get("match_count", 0) == hybrid_eval.get("match_total", 0) and hybrid_eval.get("match_total", 0) > 0
@@ -104,7 +120,7 @@ def evaluate_all_builds(traits):
     return {build_name: evaluate_build(traits, build_name) for build_name in BUILD_RULES}
 
 
-def select_qualified_build(evaluations, min_matches, traits=None):
+def select_qualified_build(evaluations, min_matches, traits=None, instinct=None):
     traits = dict(traits or {})
 
     main_builds_with_unique = get_main_builds_with_unique_traits(traits)
@@ -130,6 +146,7 @@ def select_qualified_build(evaluations, min_matches, traits=None):
                 "result": result,
                 "match_count": match_count,
                 "completion_ratio": completion_ratio,
+                "instinct_tie_rank": get_instinct_tie_rank(instinct, build_name),
                 "priority_index": BUILD_PRIORITY.index(build_name),
             })
 
@@ -138,6 +155,7 @@ def select_qualified_build(evaluations, min_matches, traits=None):
                 key=lambda item: (
                     -item["match_count"],
                     -item["completion_ratio"],
+                    item["instinct_tie_rank"],
                     item["priority_index"],
                 )
             )

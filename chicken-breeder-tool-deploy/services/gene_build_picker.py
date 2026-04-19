@@ -1,4 +1,5 @@
 from services.builds_config import BUILD_PRIORITY
+from services.build_eval import get_instinct_tie_rank
 from services.gene_breeding import get_gene_build_target_info
 
 
@@ -41,12 +42,14 @@ def get_best_available_gene_build_info(chicken, build_options=None):
             current["sort_source_rank"],
             -(current["sort_match_count"] or 0),
             -(current["sort_match_total"] or 0),
+            get_instinct_tie_rank(chicken.get("instinct"), build_key),
             build_rank.get(build_key, 999),
         )
         best_rank = (
             best_info["sort_source_rank"],
             -(best_info["sort_match_count"] or 0),
             -(best_info["sort_match_total"] or 0),
+            get_instinct_tie_rank(chicken.get("instinct"), best_info["build_key"]),
             build_rank.get(best_info["build_key"], 999),
         )
 

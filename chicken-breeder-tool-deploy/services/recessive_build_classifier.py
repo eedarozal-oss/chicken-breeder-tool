@@ -10,6 +10,7 @@ def classify_recessive_build(chicken):
         evaluations,
         min_matches=4,
         traits=h1_traits,
+        instinct=chicken.get("instinct"),
     )
 
     if not qualified:

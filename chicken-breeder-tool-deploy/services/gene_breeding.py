@@ -3,6 +3,7 @@ from services.build_eval import (
     count_added_missing_traits,
     build_gene_pair_metrics,
 )
+from services.builds_config import BUILD_INSTINCT_TIERS
 from services.match_rules import (
     is_generation_gap_allowed,
     is_parent_offspring,
@@ -31,12 +32,6 @@ DUPLICATE_ALLOWED_ITEMS = {
     "Gregor's Gift",
     "Mendel's Memento",
     "Soulknot",
-}
-
-BUILD_INSTINCT_TIERS = {
-    "killua": ["aggressive", "swift", "reckless", "elusive", "relentless", "blazing"],
-    "shanks": ["steadfast", "stalwart", "resolute", "tenacious", "bulwark", "enduring"],
-    "levi": ["balanced", "unyielding", "vicious", "adaptive", "versatile"],
 }
 
 GENE_PRIMARY_MIN_MATCH = 2
@@ -186,10 +181,6 @@ def get_instinct_tier_rank(instinct_name, build_type):
 
 
 def build_prefers_instinct(chicken, build_type):
-    build_source = str((chicken or {}).get("build_source_display") or "").strip().lower()
-    if build_source != "primary":
-        return False
-
     if str(build_type or "").strip().lower() not in BUILD_INSTINCT_TIERS:
         return False
 

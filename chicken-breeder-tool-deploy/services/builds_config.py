@@ -1,5 +1,11 @@
 BUILD_PRIORITY = ["killua", "shanks", "levi", "hybrid 2", "hybrid 1"]
 
+BUILD_INSTINCT_TIERS = {
+    "killua": ["aggressive", "swift", "reckless", "elusive", "relentless", "blazing"],
+    "shanks": ["steadfast", "stalwart", "resolute", "tenacious", "bulwark", "enduring"],
+    "levi": ["balanced", "unyielding", "vicious", "adaptive", "versatile"],
+}
+
 TRAIT_SLOTS = [
     "beak",
     "comb",

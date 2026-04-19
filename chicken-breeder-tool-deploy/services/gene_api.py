@@ -21,7 +21,7 @@ def fetch_gene_profile(token_id: str):
 
     response = requests.get(
         GENE_API_TEMPLATE.format(token_id=token_id),
-        timeout=30,
+        timeout=(3, 8),
     )
     response.raise_for_status()
 
