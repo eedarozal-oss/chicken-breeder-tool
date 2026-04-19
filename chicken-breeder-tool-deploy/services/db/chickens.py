@@ -3,6 +3,52 @@ import json
 from datetime import datetime, timezone
 from services.db.connection import get_connection
 
+JSON_FIELD_DEFAULTS = {
+    "primary_build_matched_slots": [],
+    "primary_build_missing_slots": [],
+    "primary_build_evaluations": {},
+    "recessive_build_matched_slots": [],
+    "recessive_build_missing_slots": [],
+    "recessive_build_evaluations": {},
+}
+
+
+def decode_json_value(value, default):
+    if value is None or value == "":
+        return list(default) if isinstance(default, list) else dict(default)
+    if isinstance(value, str) and len(value) > 1_000_000:
+        return list(default) if isinstance(default, list) else dict(default)
+
+    decoded = value
+    for _ in range(8):
+        if not isinstance(decoded, str):
+            break
+        try:
+            next_value = json.loads(decoded)
+        except (TypeError, ValueError):
+            return list(default) if isinstance(default, list) else dict(default)
+        if next_value == decoded:
+            break
+        decoded = next_value
+
+    if isinstance(default, list) and isinstance(decoded, list):
+        return decoded
+    if isinstance(default, dict) and isinstance(decoded, dict):
+        return decoded
+    return list(default) if isinstance(default, list) else dict(default)
+
+
+def encode_json_value(value, default):
+    decoded = decode_json_value(value, default)
+    return json.dumps(decoded)
+
+
+def decode_chicken_json_fields(row):
+    result = dict(row or {})
+    for field, default in JSON_FIELD_DEFAULTS.items():
+        result[field] = decode_json_value(result.get(field), default)
+    return result
+
 
 def upsert_chicken(record: dict):
     now_utc = datetime.now(timezone.utc).isoformat()
@@ -355,18 +401,18 @@ def upsert_chicken(record: dict):
                 "primary_build_match_count": record.get("primary_build_match_count"),
                 "primary_build_match_total": record.get("primary_build_match_total"),
 
-                "primary_build_matched_slots": json.dumps(record.get("primary_build_matched_slots") or []),
-                "primary_build_missing_slots": json.dumps(record.get("primary_build_missing_slots") or []),
-                "primary_build_evaluations": json.dumps(record.get("primary_build_evaluations") or {}),
+                "primary_build_matched_slots": encode_json_value(record.get("primary_build_matched_slots"), []),
+                "primary_build_missing_slots": encode_json_value(record.get("primary_build_missing_slots"), []),
+                "primary_build_evaluations": encode_json_value(record.get("primary_build_evaluations"), {}),
 
                 "recessive_build": record.get("recessive_build"),
                 "recessive_build_match_count": record.get("recessive_build_match_count"),
                 "recessive_build_match_total": record.get("recessive_build_match_total"),
                 "recessive_build_repeat_bonus": record.get("recessive_build_repeat_bonus"),
 
-                "recessive_build_matched_slots": json.dumps(record.get("recessive_build_matched_slots") or []),
-                "recessive_build_missing_slots": json.dumps(record.get("recessive_build_missing_slots") or []),
-                "recessive_build_evaluations": json.dumps(record.get("recessive_build_evaluations") or {}),
+                "recessive_build_matched_slots": encode_json_value(record.get("recessive_build_matched_slots"), []),
+                "recessive_build_missing_slots": encode_json_value(record.get("recessive_build_missing_slots"), []),
+                "recessive_build_evaluations": encode_json_value(record.get("recessive_build_evaluations"), {}),
 
                 "ultimate_type": record.get("ultimate_type"),
 
@@ -396,7 +442,7 @@ def get_chicken_by_token(token_id: str):
             (str(token_id),),
         ).fetchone()
 
-    return dict(row) if row else None
+    return decode_chicken_json_fields(row) if row else None
 
 
 def get_chickens_by_wallet(wallet_address: str):
@@ -421,7 +467,7 @@ def get_chickens_by_wallet(wallet_address: str):
             (wallet_address, wallet_address),
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    return [decode_chicken_json_fields(row) for row in rows]
 
 
 def get_static_chickens_by_token_ids(token_ids):

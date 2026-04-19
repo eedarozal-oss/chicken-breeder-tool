@@ -1,4 +1,42 @@
+import json
+import os
+import sqlite3
+
 from services.db.connection import DB_PATH, get_connection
+from services.gene_classifier import classify_gene_profile
+
+
+BUILD_JSON_COMPACTION_KEY = "compact_chicken_build_json_v1"
+BUILD_JSON_BLOAT_THRESHOLD = 1_000_000
+
+BUILD_JSON_FIELDS = [
+    "primary_build_matched_slots",
+    "primary_build_missing_slots",
+    "primary_build_evaluations",
+    "recessive_build_matched_slots",
+    "recessive_build_missing_slots",
+    "recessive_build_evaluations",
+]
+
+CHICKEN_CLASSIFICATION_SOURCE_FIELDS = [
+    "token_id",
+    "ip",
+    "instinct",
+    "beak",
+    "comb",
+    "eyes",
+    "feet",
+    "wings",
+    "tail",
+    "body",
+    "beak_h1",
+    "comb_h1",
+    "eyes_h1",
+    "feet_h1",
+    "wings_h1",
+    "tail_h1",
+    "body_h1",
+]
 
 
 def ensure_column(conn, table_name: str, column_name: str, column_def: str):
@@ -7,6 +45,129 @@ def ensure_column(conn, table_name: str, column_name: str, column_def: str):
 
     if column_name not in existing_names:
         conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
+
+
+def ensure_migration_state_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_migration_state (
+            key TEXT PRIMARY KEY,
+            applied_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+
+def migration_state_exists(conn, key):
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM app_migration_state
+        WHERE key = ?
+        """,
+        (key,),
+    ).fetchone()
+    return bool(row)
+
+
+def mark_migration_state(conn, key):
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO app_migration_state (key, applied_at)
+        VALUES (?, CURRENT_TIMESTAMP)
+        """,
+        (key,),
+    )
+
+
+def oversized_build_json_exists(conn):
+    checks = " OR ".join([f"LENGTH({field}) > ?" for field in BUILD_JSON_FIELDS])
+    params = [BUILD_JSON_BLOAT_THRESHOLD] * len(BUILD_JSON_FIELDS)
+    row = conn.execute(
+        f"""
+        SELECT 1
+        FROM chickens
+        WHERE {checks}
+        LIMIT 1
+        """,
+        params,
+    ).fetchone()
+    return bool(row)
+
+
+def compact_chicken_build_json(conn):
+    if migration_state_exists(conn, BUILD_JSON_COMPACTION_KEY):
+        return False
+
+    if not oversized_build_json_exists(conn):
+        mark_migration_state(conn, BUILD_JSON_COMPACTION_KEY)
+        return False
+
+    columns_sql = ", ".join(CHICKEN_CLASSIFICATION_SOURCE_FIELDS)
+    rows = conn.execute(f"SELECT {columns_sql} FROM chickens").fetchall()
+
+    for row in rows:
+        record = dict(row)
+        classified = classify_gene_profile(record)
+        conn.execute(
+            """
+            UPDATE chickens
+            SET
+                primary_build = ?,
+                primary_build_match_count = ?,
+                primary_build_match_total = ?,
+                primary_build_matched_slots = ?,
+                primary_build_missing_slots = ?,
+                primary_build_evaluations = ?,
+                recessive_build = ?,
+                recessive_build_match_count = ?,
+                recessive_build_match_total = ?,
+                recessive_build_repeat_bonus = ?,
+                recessive_build_matched_slots = ?,
+                recessive_build_missing_slots = ?,
+                recessive_build_evaluations = ?,
+                ultimate_type = ?
+            WHERE token_id = ?
+            """,
+            (
+                classified.get("primary_build"),
+                classified.get("primary_build_match_count"),
+                classified.get("primary_build_match_total"),
+                json.dumps(classified.get("primary_build_matched_slots") or []),
+                json.dumps(classified.get("primary_build_missing_slots") or []),
+                json.dumps(classified.get("primary_build_evaluations") or {}),
+                classified.get("recessive_build"),
+                classified.get("recessive_build_match_count"),
+                classified.get("recessive_build_match_total"),
+                classified.get("recessive_build_repeat_bonus", 0) or 0,
+                json.dumps(classified.get("recessive_build_matched_slots") or []),
+                json.dumps(classified.get("recessive_build_missing_slots") or []),
+                json.dumps(classified.get("recessive_build_evaluations") or {}),
+                classified.get("ultimate_type"),
+                str(record.get("token_id") or ""),
+            ),
+        )
+
+    mark_migration_state(conn, BUILD_JSON_COMPACTION_KEY)
+    return True
+
+
+def env_flag(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def vacuum_after_compaction():
+    if env_flag("APEX_SKIP_AUTO_VACUUM", default=False):
+        return
+
+    try:
+        with get_connection() as conn:
+            conn.execute("VACUUM")
+    except Exception:
+        pass
 
 
 def init_db():
@@ -211,4 +372,14 @@ def init_db():
         ensure_column(conn, "chicken_family_root_items", "is_dead_root", "INTEGER DEFAULT 0")
         ensure_column(conn, "chicken_family_root_items", "last_checked_at", "TEXT")
 
+        try:
+            ensure_migration_state_table(conn)
+            compacted_build_json = compact_chicken_build_json(conn)
+        except sqlite3.OperationalError:
+            conn.rollback()
+            compacted_build_json = False
+
         conn.commit()
+
+    if compacted_build_json:
+        vacuum_after_compaction()
