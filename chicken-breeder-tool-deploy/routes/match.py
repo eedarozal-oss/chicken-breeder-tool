@@ -509,7 +509,7 @@ def register_match_routes(app, deps):
                     chickens = get_wallet_chickens(wallet, ensure_loaded=True)
                 access_expiry = get_wallet_access_expiry_display(wallet)
                 wallet_summary = build_wallet_summary(wallet=wallet, chickens=chickens, access_expiry=access_expiry)
-                batch_result = enrich_missing_gene_data_in_batches(chickens=chickens, wallet=wallet, page_key="gene", batch_size=5, prioritized_token_id=selected_token_id or None)
+                batch_result = enrich_missing_gene_data_in_batches(chickens=chickens, wallet=wallet, page_key="gene", batch_size=0, prioritized_token_id=selected_token_id or None)
                 gene_enrichment_loaded = batch_result["loaded"]
                 chickens = get_wallet_chickens(wallet, ensure_loaded=False)
                 gene_enrichment_remaining = batch_result["remaining"]
@@ -876,7 +876,7 @@ def register_match_routes(app, deps):
             return {"ok": False, "error": "Unauthorized"}, 403
         try:
             chickens = get_wallet_chickens(wallet, ensure_loaded=True)
-            batch_result = enrich_missing_recessive_data_in_batches(chickens=chickens, wallet=wallet, page_key="gene", batch_size=5, prioritized_token_id=selected_token_id or None)
+            batch_result = enrich_missing_recessive_data_in_batches(chickens=chickens, wallet=wallet, page_key="gene", batch_size=2, prioritized_token_id=selected_token_id or None)
             return {"ok": True, "loaded": batch_result["loaded"], "remaining": batch_result["remaining"]}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}, 500
