@@ -445,6 +445,92 @@ def get_chicken_by_token(token_id: str):
     return decode_chicken_json_fields(row) if row else None
 
 
+def get_chickens_by_parent_token(token_id: str):
+    token_id = str(token_id or "").strip()
+    if not token_id:
+        return []
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM chickens
+            WHERE parent_1 = ?
+               OR parent_2 = ?
+            ORDER BY CAST(token_id AS INTEGER) DESC
+            """,
+            (token_id, token_id),
+        ).fetchall()
+
+    return [decode_chicken_json_fields(row) for row in rows]
+
+
+def get_static_chickens_by_parent_token(token_id: str):
+    token_id = str(token_id or "").strip()
+    if not token_id:
+        return []
+
+    with get_connection() as conn:
+        table_exists = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'chicken_static'
+            """
+        ).fetchone()
+
+        if not table_exists:
+            return []
+
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM chicken_static
+            WHERE parent_1 = ?
+               OR parent_2 = ?
+            ORDER BY CAST(token_id AS INTEGER) DESC
+            """,
+            (token_id, token_id),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def get_max_known_chicken_token_id():
+    max_ids = []
+
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT MAX(CAST(token_id AS INTEGER)) AS max_token_id
+            FROM chickens
+            WHERE token_id GLOB '[0-9]*'
+            """
+        ).fetchone()
+        if row and row["max_token_id"] is not None:
+            max_ids.append(int(row["max_token_id"]))
+
+        static_table_exists = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'chicken_static'
+            """
+        ).fetchone()
+        if static_table_exists:
+            static_row = conn.execute(
+                """
+                SELECT MAX(CAST(token_id AS INTEGER)) AS max_token_id
+                FROM chicken_static
+                WHERE token_id GLOB '[0-9]*'
+                """
+            ).fetchone()
+            if static_row and static_row["max_token_id"] is not None:
+                max_ids.append(int(static_row["max_token_id"]))
+
+    return max(max_ids) if max_ids else 0
+
+
 def get_chickens_by_wallet(wallet_address: str):
     with get_connection() as conn:
         rows = conn.execute(
