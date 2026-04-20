@@ -258,10 +258,15 @@
 					Step 5 — Review all pairs and items before final breeding confirmation.
 				{% endif %}
 			</p>
+			{% if skipped_pair_count %}
+				<p class="section-note" style="margin-top:12px;">
+					The game can process only {{ script_pair_limit }} mass-breeding pairs at a time. This script includes the first {{ script_pair_count }} planner pairs only. After processing them, remove those first {{ script_pair_count }} pairs from the planner, then regenerate the script for the next batch.
+				</p>
+			{% endif %}
         </div>
 
         <div class="warning-box">
-            Final blockchain confirmation should still be reviewed manually.
+            Final blockchain confirmation should still be reviewed manually. Mass-breeding scripts are limited to {{ script_pair_limit }} pairs per batch.
         </div>
     </div>
 	<div class="section-card">
@@ -301,6 +306,12 @@
 		<p class="section-note" style="margin-bottom:14px;">
 			Planner pairs: <strong>{{ planner_summary.count }}</strong>
 			<br>
+			Generated in this script: <strong>{{ script_pair_count }}</strong>
+			{% if skipped_pair_count %}
+				<br>
+				Remaining after this batch: <strong>{{ skipped_pair_count }}</strong>
+			{% endif %}
+			<br>
 			Mode:
 			<strong>
 				{% if script_mode == "full" %}
@@ -313,9 +324,15 @@
 			</strong>
 		</p>
 
-        {% if planner_queue %}
+		{% if skipped_pair_count %}
+			<div class="warning-box" style="margin-top:0;margin-bottom:14px;">
+				Only the first {{ script_pair_count }} planner pairs below are included in this script. Remove those pairs after processing, then regenerate to create the next batch.
+			</div>
+		{% endif %}
+
+        {% if script_queue %}
             <div class="planner-pairs">
-                {% for row in planner_queue %}
+                {% for row in script_queue %}
                     <div class="planner-pair-row">
                         <strong>#{{ row["left"]["token_id"] }}</strong>
                         💜
@@ -334,7 +351,7 @@
                 {% endfor %}
             </div>
         {% else %}
-            <p class="empty-note">No planner pairs found.</p>
+            <p class="empty-note">No planner pairs found for this script.</p>
         {% endif %}
     </div>
 

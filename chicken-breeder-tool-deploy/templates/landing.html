@@ -214,6 +214,35 @@
             </div>
         </section>
 
+		{% if donor_access %}
+		<section class="donor-analysis-section">
+			<div class="donor-analysis-section-label">Exclusive View</div>
+			<a
+				class="donor-analysis-feature"
+				href="{{ url_for('chicken_analysis_page', wallet_address=wallet) }}"
+				aria-label="Start Single Chicken Analysis"
+			>
+				<img
+					src="{{ url_for('static', filename='images/exclusive.png') }}"
+					alt="Exclusive View"
+					class="exclusive-view-badge exclusive-view-badge-landing"
+				>
+				<img
+					src="{{ url_for('static', filename='images/chicken_analysis.png') }}"
+					alt=""
+					class="donor-analysis-feature-image"
+					aria-hidden="true"
+				>
+				<div class="donor-analysis-feature-shade"></div>
+				<div class="donor-analysis-feature-content">
+					<h2>Single Chicken Analysis</h2>
+					<p>Analyze any chicken ID against your current wallet for build fit, instinct alignment, recommended partners, and offspring.</p>
+					<span class="donor-analysis-start">Click to start analysis</span>
+				</div>
+			</a>
+		</section>
+		{% endif %}
+
 		<section class="landing-about-section" id="about-section">
 			<div class="landing-section-header landing-section-header-centered">
 				<div>
@@ -259,7 +288,7 @@
 									<span>Breeding Planner</span>
 									<span class="landing-feature-toggle">+</span>
 								</summary>
-								<p>Save promising pairs to the planner, keep them out of the active matching pool, and export the queue to Excel when needed.</p>
+								<p>Save promising pairs to the planner and export them to Excel or generate a script for use in ChickenSaga.</p>
 							</details>
 
 							<details class="landing-about-feature-card">
@@ -267,7 +296,18 @@
 									<span>Clearer breeding decisions</span>
 									<span class="landing-feature-toggle">+</span>
 								</summary>
-								<p>Use pair quality stamps, build match, weakest stat, breed count, Ninuno, and recommended item guidance to make faster and more informed breeding choices.</p>
+								<p>Use pair quality stamps, build match, weakest stat, breed count, instinct alignment, Ninuno, and recommended item guidance to make faster and more informed breeding choices.</p>
+							</details>
+
+							<details class="landing-about-feature-card">
+								<summary>
+									<span class="landing-exclusive-summary">
+										<img src="{{ url_for('static', filename='images/exclusive.png') }}" alt="" class="exclusive-view-inline-badge" aria-hidden="true">
+										<span>Exclusive views</span>
+									</span>
+									<span class="landing-feature-toggle">+</span>
+								</summary>
+								<p>Some views and sections marked with the exclusive badge are available only to users who support Apex Breeder, and are not included in whitelisted access.</p>
 							</details>
 						</div>
 				</div>

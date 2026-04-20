@@ -7,23 +7,27 @@
 					class="featured-market-toggle"
 					href="{{ toggle_market_url }}"
 					data-loading-shell-trigger="#featured-market-shell"
+					title="{% if market_open %}Hide market listings from this view.{% else %}Load current Ronin Market listings.{% endif %}"
+					aria-label="{% if market_open %}Hide market listings{% else %}Check Ronin Market listings{% endif %}"
 				>
 					<div class="featured-market-toggle-copy">
-						<div class="featured-market-toggle-kicker">Exclusive Donor View</div>
+						<div class="featured-market-toggle-kicker featured-market-toggle-kicker-badged">
+							<img
+								src="{{ url_for('static', filename='images/exclusive.png') }}"
+								alt=""
+								class="exclusive-view-badge exclusive-view-badge-market"
+								aria-hidden="true"
+							>
+							<span>Exclusive View</span>
+						</div>
 						<div class="featured-market-toggle-title">Ronin Market Hunter</div>
 						<div class="featured-market-toggle-note">
 							{% if market_open %}
-								Thanks for supporting Apex Breeder. This exclusive donor-only feed shows the top listed chickens for this mode.
+								Thanks for supporting Apex Breeder. This exclusive feed shows the top listed chickens for this mode.
 							{% else %}
-								Thanks for supporting Apex Breeder. This donor-only view shows top chickens currently for sale in Ronin Market for this mode.
+								Thanks for supporting Apex Breeder. This exclusive view shows top chickens currently for sale in Ronin Market for this mode.
 							{% endif %}
 						</div>
-					</div>
-
-					<div class="featured-market-toggle-action">
-						<span class="featured-market-toggle-btn">
-							{% if market_open %}Hide{% else %}Load{% endif %}
-						</span>
 					</div>
 				</a>
 
@@ -86,7 +90,7 @@
 				<div class="featured-market-content">
 					<div class="loading-shell-status">
 						<span class="loading-shell-spinner" aria-hidden="true"></span>
-						<span>Loading featured market listings...</span>
+						<span>Checking market listings...</span>
 					</div>
 
 					<div class="loading-skeleton-grid">

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Chicken Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container breeding-page">
+        <div class="topbar">
+            <div class="page-header">
+                <div class="exclusive-page-title-row">
+                    <img
+                        src="{{ url_for('static', filename='images/exclusive.png') }}"
+                        alt="Exclusive View"
+                        class="exclusive-view-badge exclusive-view-badge-page"
+                    >
+                    <h1>Single Chicken Analysis</h1>
+                </div>
+                <p class="page-description">Exclusive analysis for any chicken ID against your current wallet.</p>
+            </div>
+            <div class="topbar-actions">
+                <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Home</a>
+            </div>
+        </div>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <div class="loading-shell" id="analysis-loading-shell">
+            <div class="loading-shell-live">
+                <section class="panel analysis-search-panel">
+                    <form method="GET" action="{{ url_for('chicken_analysis_page') }}" class="analysis-search-form" data-loading-shell-form="#analysis-loading-shell">
+                        <input type="hidden" name="wallet_address" value="{{ wallet }}">
+                        <div class="analysis-input-group">
+                            <label for="analysis-chicken-id">Chicken ID</label>
+                            <input
+                                id="analysis-chicken-id"
+                                name="chicken_id"
+                                type="number"
+                                min="1"
+                                inputmode="numeric"
+                                placeholder="e.g. 11110"
+                                value="{{ token_id or '' }}"
+                                {% if not donor_access %}disabled{% endif %}
+                            >
+                        </div>
+                        <button type="submit" data-loading-label="Analyzing..." {% if not donor_access %}disabled{% endif %}>Analyze</button>
+                    </form>
+                </section>
+
+                {% if analysis %}
+        <section class="breeding-section">
+            <div class="breeding-section-header">
+                <div>
+                    <div class="breeding-section-kicker">Chicken Analysis</div>
+                    <h2>#{{ analysis.chicken.token_id }}</h2>
+                </div>
+            </div>
+            <div class="panel analysis-main-card">
+                <img
+                    src="{{ analysis.chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ analysis.chicken.token_id ~ '.png') }}"
+                    alt="Chicken {{ analysis.chicken.token_id }}"
+                    class="analysis-chicken-image"
+                >
+                <div class="analysis-stat-grid">
+                    <div><strong>Build</strong><span>{{ analysis.chicken.build or 'No Build' }}</span></div>
+                    <div><strong>Build Match</strong><span>{{ analysis.build_match or '' }}</span></div>
+                    <div><strong>IP</strong><span>{{ analysis.chicken.ip if analysis.chicken.ip is not none else '' }}</span></div>
+                    <div><strong>Instinct</strong><span>{{ analysis.chicken.instinct or '' }}{% if analysis.chicken.instinct %} ({{ '+' if analysis.instinct_aligned else '-' }}){% endif %}</span></div>
+                    <div><strong>Breed Count</strong><span>{{ analysis.chicken.breed_count if analysis.chicken.breed_count is not none else '' }}</span></div>
+                    <div><strong>Generation</strong><span>{{ analysis.chicken.generation_text or '' }}</span></div>
+                    <div><strong>Weakest Stat</strong><span>{{ analysis.weakest_stat.display or '' }}</span></div>
+                    <div><strong>State</strong><span>{{ analysis.state or '' }}</span></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="breeding-section">
+            <div class="breeding-section-header">
+                <div>
+                    <div class="breeding-section-kicker">Parent Info</div>
+                    <h2>Lineage inputs</h2>
+                </div>
+            </div>
+            {% if family.is_genesis_or_legacy %}
+                <div class="panel analysis-lineage-note">
+                    <div class="empty-state-kicker">Genesis / Legacy</div>
+                    <h3>This chicken does not have recorded parents.</h3>
+                    <p>Genesis and Legacy chickens are root lineage chickens, so parent inputs are not available.</p>
+                </div>
+            {% elif family.parents %}
+                <div class="analysis-parent-grid">
+                    {% for row in family.parents %}
+                        <div class="panel analysis-parent-card">
+                            <img
+                                src="{{ row.chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.chicken.token_id ~ '.png') }}"
+                                alt="Chicken {{ row.chicken.token_id }}"
+                                class="analysis-parent-image"
+                            >
+                            <div>
+                                <h3>#{{ row.chicken.token_id }}</h3>
+                                <div class="analysis-mini-grid">
+                                    <div><strong>Total IP</strong><span>{{ row.chicken.ip if row.chicken.ip is not none else '' }}</span></div>
+                                    <div><strong>Build</strong><span>{{ row.chicken.build or '' }}</span></div>
+                                    <div><strong>Build Count</strong><span>{{ row.chicken.build_match or '' }}</span></div>
+                                    <div><strong>Instinct</strong><span>{{ row.chicken.instinct_display or row.chicken.instinct or '' }}</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="panel empty-state-card empty-state-card-wide">
+                    <div class="empty-state-kicker">No parents</div>
+                    <h3>No parent data found.</h3>
+                </div>
+            {% endif %}
+        </section>
+
+        <section class="breeding-section">
+            <div class="breeding-section-header">
+                <div>
+                    <div class="breeding-section-kicker">Recommended Matches</div>
+                    <h2>Best wallet partner by mode</h2>
+                </div>
+            </div>
+            <div class="analysis-match-grid">
+                {% for row in recommendations %}
+                    <div class="panel analysis-match-card">
+                        <div class="analysis-match-mode">{{ row.mode if row else 'Mode' }}</div>
+                        {% if row and row.candidate %}
+                            <div class="analysis-match-body">
+                                <img
+                                    src="{{ row.candidate.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.candidate.token_id ~ '.png') }}"
+                                    alt="Chicken {{ row.candidate.token_id }}"
+                                    class="analysis-match-image"
+                                >
+                                <div>
+                                    <h3>#{{ row.candidate.token_id }}</h3>
+                                    <div class="analysis-mini-grid">
+                                        <div><strong>Quality</strong><span>{{ row.quality or '' }}</span></div>
+                                        {% if row.mode == 'IP' %}
+                                            <div><strong>Total IP</strong><span>{{ row.candidate.ip if row.candidate.ip is not none else '' }}</span></div>
+                                            <div><strong>IP Difference</strong><span>{{ row.ip_difference if row.ip_difference != '' else '' }}</span></div>
+                                            <div><strong>Matched Stat</strong><span>{{ row.matched_stat or '' }}</span></div>
+                                        {% else %}
+                                            <div><strong>Build</strong><span>{{ row.candidate.build or '' }}{% if row.mode == 'Ultimate' and row.candidate.build_match %} ({{ row.candidate.build_match }}){% endif %}</span></div>
+                                            {% if row.mode == 'Ultimate' %}
+                                                <div><strong>Total IP</strong><span>{{ row.candidate.ip if row.candidate.ip is not none else '' }}</span></div>
+                                            {% else %}
+                                                <div><strong>Build Match</strong><span>{{ row.candidate.build_match or '' }}</span></div>
+                                            {% endif %}
+                                            <div><strong>Instinct</strong><span>{{ row.build_instinct or row.candidate.instinct_display or row.candidate.instinct or '' }}</span></div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="empty-state-card empty-state-card-wide">
+                                <div class="empty-state-kicker">No match</div>
+                                <h3>No recommended partner found.</h3>
+                                <p>The current wallet did not have a valid partner for this mode.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="breeding-section">
+            <div class="breeding-section-header">
+                <div>
+                    <div class="breeding-section-kicker">Family / Offspring Information</div>
+                    <h2>Known lineage</h2>
+                </div>
+            </div>
+            {% if family.partner_rows %}
+                <div class="analysis-family-pair-list">
+                    {% for row in family.partner_rows %}
+                        <div class="panel analysis-family-pair-row">
+                            <div class="analysis-family-partner">
+                                <div class="analysis-family-label">Partner</div>
+                                <div class="analysis-family-chicken-summary">
+                                    <img
+                                        src="{{ row.partner.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.partner.token_id ~ '.png') }}"
+                                        alt="Chicken {{ row.partner.token_id }}"
+                                        class="analysis-family-image"
+                                    >
+                                    <div>
+                                        <strong>#{{ row.partner.token_id }}</strong>
+                                        {% if not row.partner.is_egg %}
+                                            <span>{{ row.partner.build or '' }}{% if row.partner.build_match %} ({{ row.partner.build_match }}){% endif %}</span>
+                                            <small>IP {{ row.partner.ip if row.partner.ip is not none else '' }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="analysis-family-offspring">
+                                <div class="analysis-family-label">Offspring</div>
+                                <div class="analysis-offspring-grid">
+                                    {% for child in row.offspring %}
+                                        <div class="analysis-family-chicken-summary">
+                                            <img
+                                                src="{{ child.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ child.token_id ~ '.png') }}"
+                                                alt="Chicken {{ child.token_id }}"
+                                                class="analysis-family-image"
+                                            >
+                                            <div>
+                                                <strong>#{{ child.token_id }}</strong>
+                                                {% if not child.is_egg %}
+                                                    <span>{{ child.build or '' }}{% if child.build_match %} ({{ child.build_match }}){% endif %}</span>
+                                                    <small>IP {{ child.ip if child.ip is not none else '' }}</small>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="panel empty-state-card empty-state-card-wide">
+                    <div class="empty-state-kicker">No partner history</div>
+                    <h3>No known partner or offspring found yet.</h3>
+                </div>
+            {% endif %}
+        </section>
+                {% endif %}
+            </div>
+            <div class="loading-shell-skeleton">
+                <section class="panel analysis-search-panel analysis-loading-panel">
+                    <div class="loading-shell-status">
+                        <span class="loading-shell-spinner" aria-hidden="true"></span>
+                        <span>Analyzing chicken, checking wallet matches, and refreshing lineage...</span>
+                    </div>
+                    <div class="loading-skeleton-grid analysis-loading-grid">
+                        <div class="loading-skeleton-card">
+                            <div class="loading-skeleton-image"></div>
+                            <div class="loading-skeleton-body">
+                                <div class="loading-skeleton-line"></div>
+                                <div class="loading-skeleton-line is-mid"></div>
+                                <div class="loading-skeleton-line is-short"></div>
+                            </div>
+                        </div>
+                        <div class="loading-skeleton-card">
+                            <div class="loading-skeleton-image"></div>
+                            <div class="loading-skeleton-body">
+                                <div class="loading-skeleton-line"></div>
+                                <div class="loading-skeleton-line is-mid"></div>
+                                <div class="loading-skeleton-line is-short"></div>
+                            </div>
+                        </div>
+                        <div class="loading-skeleton-card">
+                            <div class="loading-skeleton-image"></div>
+                            <div class="loading-skeleton-body">
+                                <div class="loading-skeleton-line"></div>
+                                <div class="loading-skeleton-line is-mid"></div>
+                                <div class="loading-skeleton-line is-short"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

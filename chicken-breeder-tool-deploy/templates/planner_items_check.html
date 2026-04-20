@@ -445,13 +445,17 @@
     <div class="section-card">
         <h1 class="section-title">Check Wallet Items</h1>
         <p class="section-note">
-            This page checks whether your wallet has enough recommended breeding items for the current planner queue.
+            This page checks whether your wallet has enough recommended breeding items for the next script batch.
         </p>
 
         <div class="summary-badges">
             <div class="summary-badge">
                 <div class="summary-badge-label">Planner Pairs</div>
                 <div class="summary-badge-value">{{ planner_summary.count }}</div>
+            </div>
+            <div class="summary-badge">
+                <div class="summary-badge-label">Checked Batch</div>
+                <div class="summary-badge-value">{{ script_pair_count }}</div>
             </div>
             <div class="summary-badge">
                 <div class="summary-badge-label">Required Item Types</div>
@@ -474,9 +478,15 @@
             </div>
         </div>
 
+		{% if skipped_pair_count %}
+			<div class="warning-box">
+				The game can process only {{ script_pair_limit }} mass-breeding pairs at a time, so this item check covers the first {{ script_pair_count }} planner pairs only. After processing them, remove those pairs from the planner and regenerate/check the next batch.
+			</div>
+		{% endif %}
+
         {% if item_check_summary["overall_status"] == 'ready' %}
             <div class="success-box">
-                All recommended items are available in the wallet for the current planner queue.
+                All recommended items are available in the wallet for the next script batch.
             </div>
 		{% elif item_check_summary["overall_status"] == 'missing' %}
 			<div class="warning-box">
@@ -544,6 +554,11 @@
 
     <div class="section-card">
         <h2 class="section-title">Per Pair Status</h2>
+		{% if skipped_pair_count %}
+			<p class="section-note" style="margin-bottom:14px;">
+				Showing the first {{ script_pair_count }} planner pairs included in the next script. {{ skipped_pair_count }} pair(s) will be checked after this batch is removed.
+			</p>
+		{% endif %}
 
         {% if per_pair_status_rows %}
             <div class="pair-list">
@@ -603,7 +618,7 @@
                 {% endfor %}
             </div>
         {% else %}
-            <p class="empty-note">No planner pairs found.</p>
+            <p class="empty-note">No planner pairs found for this script batch.</p>
         {% endif %}
     </div>
 
@@ -643,7 +658,7 @@
 				</div>
 
 				<div class="automation-note">
-					Note: Full Script is available when all required items are complete. If items are missing, you can still generate a Partial Script or a Without Items script.
+					Note: Full Script is based on the next {{ script_pair_limit }}-pair script batch. If items are missing, you can still generate a Partial Script or a Without Items script.
 				</div>
 			</div>
 

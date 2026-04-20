@@ -164,8 +164,14 @@
 							<button
 								type="submit"
 								class="link-btn secondary-link-btn ultimate-filter-toggle-btn"
-								title="Donator exclusive: include lower IP/build chickens in the Ultimate pool."
+								title="Exclusive view: include lower IP/build chickens in the Ultimate pool."
 							>
+								<img
+									src="{{ url_for('static', filename='images/exclusive.png') }}"
+									alt=""
+									class="exclusive-view-button-badge"
+									aria-hidden="true"
+								>
 								{{ 'Restore Strict Filter' if ultimate_include_lower_values else 'Include Lower Values' }}
 							</button>
 						</form>
@@ -1420,109 +1426,8 @@
     </div>
 </div>
 
-<div id="auto-match-config-modal" class="compare-modal hidden">
-    <div class="compare-backdrop" data-close-auto-match-config></div>
-    <div class="compare-dialog auto-match-config-dialog">
-        <div class="compare-header">
-            <div class="compare-header-main">
-                <h3>Auto Match Setup</h3>
-                <div class="match-disclaimer">
-					Match chickens from the filtered list on this page. In Mode, choose Single to find one best pair, or Multiple to build several non-repeating pairs.
-                </div>
-            </div>
-			<button
-					type="button"
-					class="selected-chicken-clear-btn"
-					data-close-auto-match-config
-					aria-label="Close"
-					title="Close"
-				>
-					×
-			</button>
-        </div>
-        <div class="compare-body">
-            <form method="GET" action="{{ url_for('match_ultimate_page') }}" class="filter-form auto-match-config-form">
-                <input type="hidden" name="wallet_address" value="{{ wallet }}">
-				{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
-                <input type="hidden" name="sort_by" value="{{ sort_by }}">
-                <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
-                <input type="hidden" name="auto_match" value="1">
-                <input type="hidden" name="auto_match_source" value="available">
-				<input type="hidden" name="ultimate_filter_type" value="{{ ','.join(ultimate_filter_type_values) if ultimate_filter_type_values else '' }}">
-				<input type="hidden" name="ultimate_filter_build" value="{{ ultimate_filter_build if ultimate_filter_build != 'all' else '' }}">
-				<input type="hidden" name="ultimate_filter_build_match" value="{{ ','.join(ultimate_filter_build_match_values) if ultimate_filter_build_match_values else '' }}">
-				<input type="hidden" name="ultimate_min_ip" value="{{ ultimate_min_ip if ultimate_min_ip is not none else '' }}">
-				<input type="hidden" name="ultimate_filter_generation" value="{{ ','.join(ultimate_filter_generation_values) if ultimate_filter_generation_values else '' }}">
-				<input type="hidden" name="ultimate_filter_breed_count" value="{{ ','.join(ultimate_filter_breed_count_values) if ultimate_filter_breed_count_values else '' }}">
-				<input type="hidden" name="ultimate_filter_ninuno" value="{{ ultimate_filter_ninuno if ultimate_filter_ninuno != 'all' else '' }}">
-
-                <div class="auto-match-config-grid auto-match-config-grid-ultimate">
-                    <div class="auto-match-field">
-                        <label><strong>Mode</strong></label>
-                        <select name="auto_match_mode">
-                            <option value="single" {% if auto_match_mode == 'single' %}selected{% endif %}>Single</option>
-                            <option value="multiple" {% if auto_match_mode == 'multiple' %}selected{% endif %}>Multiple</option>
-                        </select>
-                    </div>
-
-					<div class="auto-match-field">
-						<label><strong>Build</strong></label>
-						<select name="popup_build" id="ultimate-popup-build">
-							<option value="all" {% if popup_build == 'all' %}selected{% endif %}>All</option>
-							{% for option in ultimate_available_filter_options.build_options %}
-								<option value="{{ option.value }}" {% if popup_build == option.value %}selected{% endif %}>
-									{{ option.label }}
-								</option>
-							{% endfor %}
-						</select>
-					</div>
-					<div class="auto-match-field">
-						<label><strong>Minimum Build Count</strong></label>
-						<input
-							type="number"
-							name="popup_min_build_count"
-							id="ultimate-popup-min-build-count"
-							min="0"
-							value="{{ popup_min_build_count if popup_min_build_count is not none else '' }}"
-						>
-					</div>
-
-                    <div class="auto-match-field">
-                        <label><strong>Breed Count Difference</strong></label>
-                        <input type="number" name="popup_breed_diff" min="0" value="{{ popup_breed_diff if popup_breed_diff is not none else '' }}">
-                    </div>
-
-                    <div class="auto-match-field">
-                        <label><strong>Ninuno</strong></label>
-                        <select name="popup_ninuno">
-                            <option value="all" {% if popup_ninuno == 'all' %}selected{% endif %}>All</option>
-                            <option value="gt0" {% if popup_ninuno == 'gt0' %}selected{% endif %}>Above 0%</option>
-                            <option value="100" {% if popup_ninuno == '100' %}selected{% endif %}>100% Only</option>
-                        </select>
-                    </div>
-
-                    <div class="auto-match-field multi-match-count-wrap">
-                        <label><strong>Number of Matches</strong></label>
-						<input
-							type="number"
-							name="popup_match_count"
-							id="ultimate-popup-match-count"
-							min="1"
-							max="{{ available_pair_max }}"
-							value="{{ popup_match_count if popup_match_count is not none else 1 }}"
-						>
-						<div class="note">Max from current pool: <span id="ultimate-available-pair-max">{{ available_pair_max }}</span></div>
-                    </div>
-
-                    <div class="auto-match-field auto-match-submit-field">
-                        <button type="submit">Run Auto Match</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
+{% set auto_match_kind = 'ultimate' %}
+{% include 'partials/auto_match_modal.html' %}
 {% if multi_match_rows %}
 <div id="auto-match-result-modal" class="compare-modal hidden">
     <div class="compare-backdrop" data-close-auto-match-result></div>

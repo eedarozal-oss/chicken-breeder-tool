@@ -1162,55 +1162,8 @@
     </div>
 </div>
 
-<div id="auto-match-config-modal" class="compare-modal hidden">
-    <div class="compare-backdrop" data-close-auto-match-config></div>
-    <div class="compare-dialog auto-match-config-dialog">
-        <div class="compare-header">
-            <div class="compare-header-main">
-                <h3>Auto Match Setup</h3>
-                <div class="match-disclaimer">
-					Match chickens from the filtered list on this page. In Mode, choose Single to find one best pair, or Multiple to build several non-repeating pairs.
-                </div>
-            </div>
-            <!--<button type="button" data-close-auto-match-config>Close</button>-->
-			<button
-					type="button"
-					class="selected-chicken-clear-btn"
-					data-close-auto-match-config
-					aria-label="Close"
-					title="Close"
-				>
-					×
-			</button>
-        </div>
-        <div class="compare-body">
-			<form method="GET" action="{{ url_for('match_ip_page') }}#available-chickens" class="filter-form auto-match-config-form">
-				<input type="hidden" name="wallet_address" value="{{ wallet }}">
-				<input type="hidden" name="min_ip" value="{{ min_ip if min_ip is not none else '' }}">
-				<input type="hidden" name="ip_diff" value="{{ ip_diff if ip_diff is not none else '' }}">
-				<input type="hidden" name="ninuno_100_only" value="{{ 1 if ninuno_100_only else 0 }}">
-				<input type="hidden" name="sort_by" value="{{ sort_by }}">
-				<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
-				<input type="hidden" name="ip_filter_type" value="{{ ','.join(ip_filter_type_values) if ip_filter_type_values else '' }}">
-				<input type="hidden" name="ip_filter_generation" value="{{ ','.join(ip_filter_generation_values) if ip_filter_generation_values else '' }}">
-				<input type="hidden" name="ip_filter_breed_count" value="{{ ','.join(ip_filter_breed_count_values) if ip_filter_breed_count_values else '' }}">
-				<input type="hidden" name="ip_filter_ninuno" value="{{ ip_filter_ninuno if ip_filter_ninuno else 'all' }}">
-				<input type="hidden" name="auto_match" value="1">
-				<input type="hidden" name="auto_match_source" value="available">
-                <div class="filter-grid">
-                    <div><label><strong>Mode</strong></label><select name="auto_match_mode" id="ip-auto-match-mode"><option value="single" {% if auto_match_mode == 'single' %}selected{% endif %}>Single</option><option value="multiple" {% if auto_match_mode == 'multiple' %}selected{% endif %}>Multiple</option></select></div>
-                    <div><label><strong>IP Difference</strong></label><input type="number" name="popup_ip_diff" min="0" value="{{ popup_ip_diff if popup_ip_diff is not none else '10' }}"></div>
-                    <div><label><strong>Breed Count Difference</strong></label><input type="number" name="popup_breed_diff" min="0" value="{{ popup_breed_diff if popup_breed_diff is not none else '1' }}"></div>
-                    <div><label><strong>Ninuno</strong></label><select name="popup_ninuno"><option value="all" {% if popup_ninuno == 'all' %}selected{% endif %}>All</option><option value="gt0" {% if popup_ninuno == 'gt0' %}selected{% endif %}>Above 0%</option><option value="100" {% if popup_ninuno == '100' %}selected{% endif %}>100% Only</option></select></div>
-                    <div class="multi-match-count-wrap"><label><strong>Number of Matches</strong></label><input type="number" name="popup_match_count" min="1" max="{{ available_pair_max }}" value="{{ popup_match_count if popup_match_count is not none else 1 }}"><div class="note">Max from current pool: {{ available_pair_max }}</div></div>
-                    <div class="auto-match-field auto-match-submit-field">
-						<button type="submit">Run Auto Match</button>
-					</div>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+{% set auto_match_kind = 'ip' %}
+{% include 'partials/auto_match_modal.html' %}
 {% if multi_match_rows %}
 <div id="auto-match-result-modal" class="compare-modal hidden">
 <!--<div id="multi-match-modal" class="compare-modal hidden">-->

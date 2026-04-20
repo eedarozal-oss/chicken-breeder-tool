@@ -277,29 +277,6 @@
 										wallet_address=wallet,
 										selected_token_id=selected_token_id or None,
 										ninuno_100_only=1 if ninuno_100_only else 0,
-										sort_by='build_source',
-										sort_dir='desc' if sort_by == 'build_source' and sort_dir == 'asc' else 'asc',
-										gene_filter_type=','.join(gene_filter_type_values) if gene_filter_type_values else None,
-										gene_filter_build=gene_filter_build if gene_filter_build != 'all' else None,
-										gene_filter_build_match=','.join(gene_filter_build_match_values) if gene_filter_build_match_values else None,
-										gene_filter_build_source=','.join(gene_filter_build_source_values) if gene_filter_build_source_values else None,
-										gene_filter_instinct=','.join(gene_filter_instinct_values) if gene_filter_instinct_values else None,
-										gene_min_ip=gene_min_ip if gene_min_ip is not none else None,
-										gene_filter_generation=','.join(gene_filter_generation_values) if gene_filter_generation_values else None,
-										gene_filter_breed_count=','.join(gene_filter_breed_count_values) if gene_filter_breed_count_values else None,
-										gene_filter_ninuno=gene_filter_ninuno if gene_filter_ninuno != 'all' else None
-									) }}#available-chickens">
-										<span class="table-sort-label">Build Source</span>
-										<span class="table-sort-icon">{% if sort_by == 'build_source' %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% else %}⬧{% endif %}</span>
-									</a>
-								</th>
-
-								<th>
-									<a class="table-sort-link" href="{{ url_for(
-										'match_gene_page',
-										wallet_address=wallet,
-										selected_token_id=selected_token_id or None,
-										ninuno_100_only=1 if ninuno_100_only else 0,
 										sort_by='instinct',
 										sort_dir='desc' if sort_by == 'instinct' and sort_dir == 'asc' else 'asc',
 										gene_filter_type=','.join(gene_filter_type_values) if gene_filter_type_values else None,
@@ -566,65 +543,6 @@
 														gene_filter_type=','.join(gene_filter_type_values) if gene_filter_type_values else None,
 														gene_filter_build=gene_filter_build if gene_filter_build != 'all' else None,
 														gene_filter_build_source=','.join(gene_filter_build_source_values) if gene_filter_build_source_values else None,
-														gene_filter_instinct=','.join(gene_filter_instinct_values) if gene_filter_instinct_values else None,
-														gene_min_ip=gene_min_ip if gene_min_ip is not none else None,
-														gene_filter_generation=','.join(gene_filter_generation_values) if gene_filter_generation_values else None,
-														gene_filter_breed_count=','.join(gene_filter_breed_count_values) if gene_filter_breed_count_values else None,
-														gene_filter_ninuno=gene_filter_ninuno if gene_filter_ninuno != 'all' else None
-													) }}#available-chickens">Clear</a>
-												</div>
-											</div>
-										</details>
-									</form>
-								</th>
-
-								<th>
-									<form method="GET" action="{{ url_for('match_gene_page') }}" class="ip-column-filter-form">
-										<input type="hidden" name="wallet_address" value="{{ wallet }}">
-										{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
-										<input type="hidden" name="sort_by" value="{{ sort_by }}">
-										<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
-										<input type="hidden" name="gene_filter_type" value="{{ ','.join(gene_filter_type_values) if gene_filter_type_values else '' }}">
-										<input type="hidden" name="gene_filter_build" value="{{ gene_filter_build if gene_filter_build != 'all' else '' }}">
-										<input type="hidden" name="gene_filter_build_match" value="{{ ','.join(gene_filter_build_match_values) if gene_filter_build_match_values else '' }}">
-										<input type="hidden" name="gene_filter_instinct" value="{{ ','.join(gene_filter_instinct_values) if gene_filter_instinct_values else '' }}">
-										<input type="hidden" name="gene_min_ip" value="{{ gene_min_ip if gene_min_ip is not none else '' }}">
-										<input type="hidden" name="gene_filter_generation" value="{{ ','.join(gene_filter_generation_values) if gene_filter_generation_values else '' }}">
-										<input type="hidden" name="gene_filter_breed_count" value="{{ ','.join(gene_filter_breed_count_values) if gene_filter_breed_count_values else '' }}">
-										<input type="hidden" name="gene_filter_ninuno" value="{{ gene_filter_ninuno if gene_filter_ninuno != 'all' else '' }}">
-
-										<details class="ip-filter-dropdown">
-											<summary class="ip-filter-summary">Filter</summary>
-											<div class="ip-filter-panel">
-												{% for option in gene_available_filter_options.build_source_options %}
-													<label class="ip-filter-check">
-														<input
-															type="checkbox"
-															class="ip-filter-csv-source"
-															data-target-input="gene_filter_build_source_csv"
-															value="{{ option.value }}"
-															{% if option.value in gene_filter_build_source_values %}checked{% endif %}
-														>
-														<span>{{ option.label }}</span>
-													</label>
-												{% endfor %}
-												<input
-													type="hidden"
-													name="gene_filter_build_source"
-													id="gene_filter_build_source_csv"
-													value="{{ ','.join(gene_filter_build_source_values) if gene_filter_build_source_values else '' }}"
-												>
-												<div class="ip-filter-actions">
-													<button type="submit">Apply</button>
-													<a class="link-btn ghost-link-btn" href="{{ url_for(
-														'match_gene_page',
-														wallet_address=wallet,
-														selected_token_id=selected_token_id or None,
-														sort_by=sort_by,
-														sort_dir=sort_dir,
-														gene_filter_type=','.join(gene_filter_type_values) if gene_filter_type_values else None,
-														gene_filter_build=gene_filter_build if gene_filter_build != 'all' else None,
-														gene_filter_build_match=','.join(gene_filter_build_match_values) if gene_filter_build_match_values else None,
 														gene_filter_instinct=','.join(gene_filter_instinct_values) if gene_filter_instinct_values else None,
 														gene_min_ip=gene_min_ip if gene_min_ip is not none else None,
 														gene_filter_generation=','.join(gene_filter_generation_values) if gene_filter_generation_values else None,
@@ -955,7 +873,6 @@
 								{% set chicken_visible_match_total = chicken.recessive_build_match_total if chicken.build_source_display == 'Recessive' else (chicken.primary_build_match_total if chicken.primary_build_match_total else chicken.build_match_total) %}
 								{% set chicken_instinct_aligned = build_prefers_instinct(chicken, chicken.build_type) %}
 								<td>{{ (((chicken_visible_match_count or 0)|string) ~ '/' ~ ((chicken_visible_match_total or 0)|string)) if (chicken_visible_match_total or 0) else '' }}</td>
-								<td>{{ chicken.build_source_display or "" }}</td>
 								<td>{{ chicken.instinct or "" }}{% if chicken.instinct %} <span class="instinct-align instinct-align-{{ 'match' if chicken_instinct_aligned else 'miss' }}">({{ '+' if chicken_instinct_aligned else '-' }})</span>{% endif %}</td>
 								<td>{{ chicken.ip if chicken.ip is not none else "" }}</td>
 								<td>{{ chicken.generation_text or "" }}</td>
@@ -1670,111 +1587,8 @@
     </div>
 </div>
 
-<div id="auto-match-config-modal" class="compare-modal hidden">
-    <div class="compare-backdrop" data-close-auto-match-config></div>
-    <div class="compare-dialog auto-match-config-dialog">
-        <div class="compare-header">
-            <div class="compare-header-main">
-                <h3>Auto Match Setup</h3>
-                <div class="match-disclaimer">
-					Match chickens from the filtered list on this page. In Mode, choose Single to find one best pair, or Multiple to build several non-repeating pairs.
-                </div>
-            </div>
-            <!--<button type="button" data-close-auto-match-config>Close</button>-->
-				<button
-					type="button"
-					class="selected-chicken-clear-btn"
-					data-close-auto-match-config
-					aria-label="Close"
-					title="Close"
-				>
-					×
-				</button>
-        </div>
-        <div class="compare-body">
-            <form method="GET" action="{{ url_for('match_gene_page') }}" class="filter-form auto-match-config-form">
-                <input type="hidden" name="wallet_address" value="{{ wallet }}">
-				{% if selected_token_id %}<input type="hidden" name="selected_token_id" value="{{ selected_token_id }}">{% endif %}
-				<input type="hidden" name="gene_filter_type" value="{{ ','.join(gene_filter_type_values) if gene_filter_type_values else '' }}">
-				<input type="hidden" name="gene_filter_build" value="{{ gene_filter_build or '' }}">
-				<input type="hidden" name="gene_filter_build_match" value="{{ ','.join(gene_filter_build_match_values) if gene_filter_build_match_values else '' }}">
-				<input type="hidden" name="gene_filter_build_source" value="{{ ','.join(gene_filter_build_source_values) if gene_filter_build_source_values else '' }}">
-				<input type="hidden" name="gene_filter_instinct" value="{{ ','.join(gene_filter_instinct_values) if gene_filter_instinct_values else '' }}">
-				<input type="hidden" name="gene_min_ip" value="{{ gene_min_ip if gene_min_ip is not none else '' }}">
-				<input type="hidden" name="gene_filter_generation" value="{{ ','.join(gene_filter_generation_values) if gene_filter_generation_values else '' }}">
-				<input type="hidden" name="gene_filter_breed_count" value="{{ ','.join(gene_filter_breed_count_values) if gene_filter_breed_count_values else '' }}">
-				<input type="hidden" name="gene_filter_ninuno" value="{{ gene_filter_ninuno if gene_filter_ninuno != 'all' else '' }}">
-                <input type="hidden" name="sort_by" value="{{ sort_by }}">
-                <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
-                <input type="hidden" name="auto_match" value="1">
-                <input type="hidden" name="auto_match_source" value="available">
-				<div class="auto-match-config-grid">
-					<div class="auto-match-field">
-						<label><strong>Mode</strong></label>
-						<select name="auto_match_mode">
-							<option value="single" {% if auto_match_mode == 'single' %}selected{% endif %}>Single</option>
-							<option value="multiple" {% if auto_match_mode == 'multiple' %}selected{% endif %}>Multiple</option>
-						</select>
-					</div>
-
-					<div class="auto-match-field">
-						<label><strong>Build</strong></label>
-						<select name="popup_build" id="gene-popup-build">
-							<option value="all" {% if popup_build == 'all' %}selected{% endif %}>All</option>
-							{% for option in gene_available_filter_options.build_options %}
-								<option value="{{ option.value }}" {% if popup_build == option.value %}selected{% endif %}>
-									{{ option.label }}
-								</option>
-							{% endfor %}
-						</select>
-					</div>
-
-					<div class="auto-match-field">
-						<label><strong>Minimum Build Count</strong></label>
-						<input
-							type="number"
-							name="popup_min_build_count"
-							id="gene-popup-min-build-count"
-							min="0"
-							value="{{ popup_min_build_count if popup_min_build_count is not none else '' }}"
-						>
-					</div>
-
-					<div class="auto-match-field">
-						<label><strong>Breed Count Difference</strong></label>
-						<input type="number" name="popup_breed_diff" min="0" value="{{ popup_breed_diff if popup_breed_diff is not none else '' }}">
-					</div>
-					
-					<div class="auto-match-field">
-						<label><strong>Ninuno</strong></label>
-						<select name="popup_ninuno">
-							<option value="all" {% if popup_ninuno == 'all' %}selected{% endif %}>All</option>
-							<option value="gt0" {% if popup_ninuno == 'gt0' %}selected{% endif %}>Above 0%</option>
-							<option value="100" {% if popup_ninuno == '100' %}selected{% endif %}>100% Only</option>
-						</select>
-					</div>
-
-					<div class="auto-match-field multi-match-count-wrap">
-						<label><strong>Number of Matches</strong></label>
-						<input
-							type="number"
-							name="popup_match_count"
-							id="gene-popup-match-count"
-							min="1"
-							max="{{ available_pair_max }}"
-							value="{{ popup_match_count if popup_match_count is not none else 1 }}"
-						>
-						<div class="note">Max from current pool: <span id="gene-available-pair-max">{{ available_pair_max }}</span></div>
-					</div>
-
-					<div class="auto-match-field auto-match-submit-field">
-						<button type="submit">Run Auto Match</button>
-					</div>
-				</div>
-            </form>
-        </div>
-    </div>
-</div>
+{% set auto_match_kind = 'gene' %}
+{% include 'partials/auto_match_modal.html' %}
 {% if multi_match_rows %}
 <div id="auto-match-result-modal" class="compare-modal hidden">
     <div class="compare-backdrop" data-close-auto-match-result></div>
