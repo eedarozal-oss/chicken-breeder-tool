@@ -109,29 +109,13 @@ def register_match_routes(app, deps):
         wallet_key = str(wallet or "").strip().lower()
         return f"ultimate_include_lower::{wallet_key}"
 
-    def filter_popup_candidate_pool(rows, popup_build, popup_min_build_count, build_key_fn, match_count_fn):
-        filtered_rows = list(rows or [])
-
-        if popup_build and popup_build != "all":
-            filtered_rows = [
-                row for row in filtered_rows
-                if str(build_key_fn(row) or "").strip().lower() == popup_build
-            ]
-
-        if popup_min_build_count is not None:
-            filtered_rows = [
-                row for row in filtered_rows
-                if (safe_int(match_count_fn(row), 0) or 0) >= popup_min_build_count
-            ]
-
-        return filtered_rows
-
     def build_available_pair_max(rows):
         return max(0, len(rows or []) // 2)
 
     def parse_ip_popup_params():
         popup_ip_diff = safe_int(request.args.get("popup_ip_diff"))
         popup_breed_diff = safe_int(request.args.get("popup_breed_diff"))
+        popup_same_build = str(request.args.get("popup_same_build") or "").strip().lower() in {"1", "true", "on", "yes"}
         if popup_ip_diff is None:
             popup_ip_diff = 10
         if popup_breed_diff is None:
@@ -139,28 +123,35 @@ def register_match_routes(app, deps):
         return {
             "popup_ip_diff": popup_ip_diff,
             "popup_breed_diff": popup_breed_diff,
-            "popup_ninuno": normalize_auto_ninuno_filter(request.args.get("popup_ninuno")),
+            "popup_ninuno": "all",
+            "popup_same_build": popup_same_build,
             "popup_match_count": max(1, safe_int(request.args.get("popup_match_count"), 1) or 1),
         }
 
     def parse_build_popup_params():
+        popup_ip_diff = safe_int(request.args.get("popup_ip_diff"))
+        popup_breed_diff = safe_int(request.args.get("popup_breed_diff"))
+        if popup_ip_diff is None:
+            popup_ip_diff = 10
+        if popup_breed_diff is None:
+            popup_breed_diff = 1
+        popup_same_build = str(request.args.get("popup_same_build") or "").strip().lower() in {"1", "true", "on", "yes"}
+        popup_same_instinct = str(request.args.get("popup_same_instinct") or "").strip().lower() in {"1", "true", "on", "yes"}
         return {
-            "popup_build": (request.args.get("popup_build") or "all").strip().lower(),
-            "popup_min_build_count": safe_int(request.args.get("popup_min_build_count")),
-            "popup_breed_diff": safe_int(request.args.get("popup_breed_diff")),
-            "popup_ninuno": normalize_auto_ninuno_filter(request.args.get("popup_ninuno")),
+            "popup_build": "all",
+            "popup_min_build_count": None,
+            "popup_ip_diff": popup_ip_diff,
+            "popup_breed_diff": popup_breed_diff,
+            "popup_ninuno": "all",
+            "popup_same_build": popup_same_build,
+            "popup_same_instinct": popup_same_instinct,
             "popup_match_count": max(1, safe_int(request.args.get("popup_match_count"), 1) or 1),
         }
 
-    def build_popup_available_pool(rows, popup_build, popup_min_build_count, build_key_fn, match_count_fn):
-        pool = filter_popup_candidate_pool(
-            rows,
-            popup_build,
-            popup_min_build_count,
-            build_key_fn=build_key_fn,
-            match_count_fn=match_count_fn,
-        )
-        return pool, build_available_pair_max(pool)
+    def resolve_auto_match_mode(auto_match, popup_match_count, requested_mode=""):
+        if not auto_match:
+            return str(requested_mode or "").strip().lower()
+        return "multiple" if (safe_int(popup_match_count, 1) or 1) > 1 else "single"
 
     def resolve_selected_chicken(rows, selected_token_id):
         if not selected_token_id:
@@ -216,7 +207,9 @@ def register_match_routes(app, deps):
         popup_ip_diff = popup_params["popup_ip_diff"]
         popup_breed_diff = popup_params["popup_breed_diff"]
         popup_ninuno = popup_params["popup_ninuno"]
+        popup_same_build = popup_params["popup_same_build"]
         popup_match_count = popup_params["popup_match_count"]
+        auto_match_mode = resolve_auto_match_mode(auto_match, popup_match_count, auto_match_mode)
 
         market_context = build_market_context(wallet)
 
@@ -320,7 +313,8 @@ def register_match_routes(app, deps):
                         breedable_chickens=breedable_chickens,
                         ip_diff=popup_ip_diff,
                         breed_diff=popup_breed_diff,
-                        ninuno_filter=popup_ninuno,
+                        ninuno_filter="all",
+                        same_build=popup_same_build,
                         target_count=multi_match_target,
                         ),
                         multi_match_target,
@@ -334,11 +328,14 @@ def register_match_routes(app, deps):
                     ranked_sources = []
                     effective_ip_diff = popup_ip_diff if auto_match_source == "available" and auto_match_mode == "single" else ip_diff
                     effective_breed_diff = popup_breed_diff if auto_match_source == "available" and auto_match_mode == "single" else None
-                    effective_ninuno = popup_ninuno if auto_match_source == "available" and auto_match_mode == "single" else "all"
                     for source in breedable_chickens:
-                        if not chicken_passes_auto_ninuno_filter(source, effective_ninuno):
-                            continue
                         candidate_pool = [row for row in breedable_chickens if str(row["token_id"]) != str(source["token_id"])]
+                        if auto_match_source == "available" and auto_match_mode == "single" and popup_same_build:
+                            source_build = str(source.get("build_type") or source.get("gene_build_key") or source.get("primary_build") or "").strip().lower()
+                            candidate_pool = [
+                                row for row in candidate_pool
+                                if source_build and str(row.get("build_type") or row.get("gene_build_key") or row.get("primary_build") or "").strip().lower() == source_build
+                            ]
                         if effective_ip_diff is not None:
                             source_ip = safe_int(source.get("ip"))
                             if source_ip is not None:
@@ -347,7 +344,6 @@ def register_match_routes(app, deps):
                             source_breed = safe_int(source.get("breed_count"))
                             if source_breed is not None:
                                 candidate_pool = [row for row in candidate_pool if safe_int(row.get("breed_count")) is not None and abs(safe_int(row.get("breed_count")) - source_breed) <= effective_breed_diff]
-                        candidate_pool = [row for row in candidate_pool if chicken_passes_auto_ninuno_filter(row, effective_ninuno)]
                         matches = find_potential_matches(source, candidate_pool, settings=match_settings)
                         matches = [row for row in matches if row.get("evaluation", {}).get("is_ip_recommended") and row.get("evaluation", {}).get("is_breed_count_recommended") and pair_has_usable_ip_items(source, row.get("candidate"))]
                         if matches:
@@ -369,11 +365,31 @@ def register_match_routes(app, deps):
                 selected_weakest_stat_name = ""
                 selected_weakest_stat_label = "Selected Weakest Stat"
                 if selected_chicken:
+                    selected_weakest_info = get_weakest_ip_stat_info(selected_chicken)
+                    selected_weakest_stat_name = selected_weakest_info.get("name") or ""
+                    selected_weakest_stat_label = selected_weakest_info.get("label") or selected_weakest_stat_label
+                    selected_weakest_stat_column_label = (
+                        f"Matched {selected_weakest_stat_label}"
+                        if selected_weakest_stat_label != "Selected Weakest Stat"
+                        else selected_weakest_stat_column_label
+                    )
                     candidate_pool = [row for row in breedable_chickens if str(row["token_id"]) != selected_token_id]
-                    if ip_diff is not None:
+                    is_available_single_auto = auto_match and auto_match_source == "available" and auto_match_mode == "single"
+                    if is_available_single_auto and popup_same_build:
+                        selected_build = str(selected_chicken.get("build_type") or selected_chicken.get("gene_build_key") or selected_chicken.get("primary_build") or "").strip().lower()
+                        candidate_pool = [
+                            row for row in candidate_pool
+                            if selected_build and str(row.get("build_type") or row.get("gene_build_key") or row.get("primary_build") or "").strip().lower() == selected_build
+                        ]
+                    preview_ip_diff = popup_ip_diff if is_available_single_auto else ip_diff
+                    if preview_ip_diff is not None:
                         selected_ip = safe_int(selected_chicken.get("ip"))
                         if selected_ip is not None:
-                            candidate_pool = [row for row in candidate_pool if safe_int(row.get("ip")) is not None and abs(safe_int(row.get("ip")) - selected_ip) <= ip_diff]
+                            candidate_pool = [row for row in candidate_pool if safe_int(row.get("ip")) is not None and abs(safe_int(row.get("ip")) - selected_ip) <= preview_ip_diff]
+                    if is_available_single_auto and popup_breed_diff is not None:
+                        selected_breed = safe_int(selected_chicken.get("breed_count"))
+                        if selected_breed is not None:
+                            candidate_pool = [row for row in candidate_pool if safe_int(row.get("breed_count")) is not None and abs(safe_int(row.get("breed_count")) - selected_breed) <= popup_breed_diff]
                     potential_matches = find_potential_matches(selected_chicken, candidate_pool, settings=match_settings)
                     if auto_match:
                         potential_matches = [
@@ -423,6 +439,7 @@ def register_match_routes(app, deps):
             popup_ip_diff=popup_ip_diff,
             popup_breed_diff=popup_breed_diff,
             popup_ninuno=popup_ninuno,
+            popup_same_build=popup_same_build,
             popup_match_count=popup_match_count,
             multi_match_rows=multi_match_rows,
             multi_match_target=multi_match_target,
@@ -458,13 +475,17 @@ def register_match_routes(app, deps):
         popup_params = parse_build_popup_params()
         popup_build = popup_params["popup_build"]
         popup_min_build_count = popup_params["popup_min_build_count"]
+        popup_ip_diff = None
         popup_breed_diff = popup_params["popup_breed_diff"]
         popup_ninuno = popup_params["popup_ninuno"]
+        popup_same_build = popup_params["popup_same_build"]
+        popup_same_instinct = popup_params["popup_same_instinct"]
         popup_match_count = popup_params["popup_match_count"]
+        auto_match_mode = resolve_auto_match_mode(auto_match, popup_match_count, auto_match_mode)
         market_context = build_market_context(wallet)
         gene_sort_by = str(request.args.get("sort_by") or "build").strip().lower()
         gene_sort_dir = str(request.args.get("sort_dir") or "asc").strip().lower()
-        if gene_sort_by not in {"token_id", "build", "build_match", "build_source", "instinct", "ip", "generation", "breed_count", "ninuno"}:
+        if gene_sort_by not in {"token_id", "build", "build_match", "instinct", "ip", "generation", "breed_count", "ninuno"}:
             gene_sort_by = "build"
         if gene_sort_dir not in {"asc", "desc"}:
             gene_sort_dir = "asc"
@@ -472,7 +493,7 @@ def register_match_routes(app, deps):
         gene_filter_type_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_type")))
         gene_filter_build = normalize_gene_available_build_filter(request.args.get("gene_filter_build"), build_order=GENE_BUILD_ORDER)
         gene_filter_build_match_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_build_match")))
-        gene_filter_build_source_values = normalize_gene_available_source_values(parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_build_source"))))
+        gene_filter_build_source_values = []
         gene_filter_instinct_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_instinct")))
         gene_min_ip = safe_int(request.args.get("gene_min_ip"))
         gene_filter_generation_values = parse_gene_csv_query_values(",".join(request.args.getlist("gene_filter_generation")))
@@ -528,25 +549,20 @@ def register_match_routes(app, deps):
                     row for row in gene_original_available_pool
                     if chicken_matches_gene_available_filters(
                         row, safe_int=safe_int, selected_types=gene_filter_type_values, selected_build=gene_filter_build,
-                        selected_build_matches=gene_filter_build_match_values, selected_build_sources=gene_filter_build_source_values,
+                        selected_build_matches=gene_filter_build_match_values, selected_build_sources=[],
                         selected_instincts=gene_filter_instinct_values, min_ip=gene_min_ip, selected_generations=gene_filter_generation_values,
                         selected_breed_counts=gene_filter_breed_count_values, ninuno_mode=gene_filter_ninuno, build_order=GENE_BUILD_ORDER,
                     )
                 ]
                 breedable_chickens = sort_gene_available_chickens(breedable_chickens, sort_by=gene_sort_by, sort_dir=gene_sort_dir, build_order=GENE_BUILD_ORDER)
                 match_empty_state = build_gene_match_empty_state(selected_chicken.get("build_type") if selected_chicken else "", ninuno_100_only=ninuno_100_only, auto_match=auto_match, same_instinct=False, min_build_count=None)
-                auto_match_empty_state = build_gene_match_empty_state(popup_build if popup_build != "all" else (selected_chicken.get("build_type") if selected_chicken else ""), ninuno_100_only=(popup_ninuno == "100" or ninuno_100_only), auto_match=True, same_instinct=False, min_build_count=popup_min_build_count)
+                auto_match_empty_state = build_gene_match_empty_state(selected_chicken.get("build_type") if selected_chicken else "", ninuno_100_only=ninuno_100_only, auto_match=True, same_instinct=popup_same_instinct, min_build_count=None)
 
-                available_auto_match_pool, available_pair_max = build_popup_available_pool(
-                    breedable_chickens,
-                    popup_build,
-                    popup_min_build_count,
-                    build_key_fn=lambda row: row.get("build_type"),
-                    match_count_fn=lambda row: row.get("build_match_count"),
-                )
+                available_auto_match_pool = breedable_chickens
+                available_pair_max = build_available_pair_max(available_auto_match_pool)
                 if auto_match and auto_match_source == "available" and auto_match_mode == "multiple":
                     multi_match_target = min(popup_match_count, available_pair_max)
-                    pair_candidates = build_gene_available_auto_candidates_same_build(available_auto_match_pool, min_build_count=popup_min_build_count, breed_diff=popup_breed_diff, same_instinct=False, ninuno_mode=popup_ninuno)
+                    pair_candidates = build_gene_available_auto_candidates_same_build(available_auto_match_pool, min_build_count=None, ip_diff=popup_ip_diff, breed_diff=popup_breed_diff, same_instinct=popup_same_instinct, ninuno_mode="all", same_build=True)
                     multi_match_feedback = build_multi_match_feedback(
                         pick_multi_pairs_from_candidates(pair_candidates, multi_match_target),
                         multi_match_target,
@@ -558,7 +574,26 @@ def register_match_routes(app, deps):
                     auto_open_multi_match = multi_match_feedback["auto_open_multi_match"]
                 elif auto_match and not selected_token_id:
                     if auto_match_source == "available" and auto_match_mode == "single":
-                        selected_chicken, potential_matches = pick_best_gene_auto_match_from_pool(breedable_chickens=breedable_chickens, popup_build=popup_build, popup_min_build_count=popup_min_build_count, popup_breed_diff=popup_breed_diff, popup_ninuno=popup_ninuno)
+                        pair_candidates = build_gene_available_auto_candidates_same_build(available_auto_match_pool, min_build_count=None, ip_diff=popup_ip_diff, breed_diff=popup_breed_diff, same_instinct=popup_same_instinct, ninuno_mode="all", same_build=True)
+                        if pair_candidates:
+                            selected_chicken, selected_token_id = select_left_pair_candidate(pair_candidates)
+                            top_pair = pair_candidates[0]
+                            potential_matches = [
+                                {
+                                    "candidate": top_pair.get("right") or {},
+                                    "candidate_eval": top_pair.get("candidate_eval"),
+                                    "selected_eval": top_pair.get("selected_eval"),
+                                    "build_type": top_pair.get("build_type"),
+                                    "added_missing_traits": top_pair.get("added_missing_traits") or 0,
+                                    "combined_match_count": top_pair.get("combined_match_count", 0),
+                                    "combined_match_total": top_pair.get("combined_match_total", 0),
+                                    "selected_build_match_count": top_pair.get("selected_build_match_count", 0),
+                                    "candidate_build_match_count": top_pair.get("candidate_build_match_count", 0),
+                                    "gene_pair_metrics": top_pair.get("gene_pair_metrics") or {},
+                                    "gene_priority_metrics": top_pair.get("gene_priority_metrics") or {},
+                                    "ranking": top_pair.get("ranking"),
+                                }
+                            ]
                     else:
                         selected_chicken, potential_matches = pick_best_gene_auto_match_from_pool(breedable_chickens=breedable_chickens, popup_build="all", popup_min_build_count=None, popup_breed_diff=None, popup_ninuno="all")
                     if selected_chicken:
@@ -619,7 +654,7 @@ def register_match_routes(app, deps):
             gene_filter_breed_count_values=gene_filter_breed_count_values,
             gene_filter_ninuno=gene_filter_ninuno,
             gene_available_filter_options=gene_available_filter_options,
-            gene_active_filters=build_gene_active_filters(selected_types=gene_filter_type_values, selected_build=gene_filter_build, selected_build_matches=gene_filter_build_match_values, selected_build_sources=gene_filter_build_source_values, selected_instincts=gene_filter_instinct_values, min_ip=gene_min_ip, selected_generations=gene_filter_generation_values, selected_breed_counts=gene_filter_breed_count_values, ninuno_mode=gene_filter_ninuno, build_order=GENE_BUILD_ORDER),
+            gene_active_filters=build_gene_active_filters(selected_types=gene_filter_type_values, selected_build=gene_filter_build, selected_build_matches=gene_filter_build_match_values, selected_build_sources=[], selected_instincts=gene_filter_instinct_values, min_ip=gene_min_ip, selected_generations=gene_filter_generation_values, selected_breed_counts=gene_filter_breed_count_values, ninuno_mode=gene_filter_ninuno, build_order=GENE_BUILD_ORDER),
             gene_original_available_count=len(gene_original_available_pool),
             ninuno_100_only=ninuno_100_only,
             sort_by=gene_sort_by,
@@ -629,8 +664,11 @@ def register_match_routes(app, deps):
             auto_match_mode=auto_match_mode,
             popup_build=popup_build,
             popup_min_build_count=popup_min_build_count,
+            popup_ip_diff=popup_ip_diff,
             popup_breed_diff=popup_breed_diff,
             popup_ninuno=popup_ninuno,
+            popup_same_build=popup_same_build,
+            popup_same_instinct=popup_same_instinct,
             popup_match_count=popup_match_count,
             multi_match_rows=multi_match_rows,
             multi_match_target=multi_match_target,
@@ -663,9 +701,12 @@ def register_match_routes(app, deps):
         popup_params = parse_build_popup_params()
         popup_build = popup_params["popup_build"]
         popup_min_build_count = popup_params["popup_min_build_count"]
+        popup_ip_diff = popup_params["popup_ip_diff"]
         popup_breed_diff = popup_params["popup_breed_diff"]
         popup_ninuno = popup_params["popup_ninuno"]
+        popup_same_build = popup_params["popup_same_build"]
         popup_match_count = popup_params["popup_match_count"]
+        auto_match_mode = resolve_auto_match_mode(auto_match, popup_match_count, auto_match_mode)
         market_context = build_market_context(wallet)
         ultimate_relaxed_available = has_active_payment_access_in_db(wallet)
         ultimate_include_lower_arg = str(request.args.get("ultimate_include_lower") or "").strip().lower()
@@ -722,7 +763,7 @@ def register_match_routes(app, deps):
         ultimate_filter_ninuno = normalize_ultimate_available_ninuno_filter(request.args.get("ultimate_filter_ninuno"))
         available_empty_state = build_ultimate_available_empty_state()
         match_empty_state = build_ultimate_match_empty_state(auto_match=auto_match, ninuno_mode="all", breed_diff=None)
-        auto_match_empty_state = build_ultimate_match_empty_state(auto_match=True, ninuno_mode=popup_ninuno, breed_diff=popup_breed_diff)
+        auto_match_empty_state = build_ultimate_match_empty_state(auto_match=True, ninuno_mode="all", breed_diff=popup_breed_diff)
         available_pair_max = 0
 
         if wallet:
@@ -750,20 +791,17 @@ def register_match_routes(app, deps):
                 if ultimate_original_available_pool and not breedable_chickens:
                     available_empty_state = {"kicker": "No filtered chickens", "title": "No chickens match the current filters.", "body": "Try removing one or more filters to widen the available Ultimate pool."}
 
-                available_auto_match_pool, available_pair_max = build_popup_available_pool(
-                    breedable_chickens,
-                    popup_build,
-                    popup_min_build_count,
-                    build_key_fn=lambda row: row.get("ultimate_build_key") or row.get("primary_build"),
-                    match_count_fn=lambda row: row.get("ultimate_build_match_count"),
-                )
+                available_auto_match_pool = breedable_chickens
+                available_pair_max = build_available_pair_max(available_auto_match_pool)
                 if auto_match and auto_match_source == "available" and auto_match_mode == "multiple":
                     multi_match_target = min(popup_match_count, available_pair_max)
                     pair_candidates = build_ultimate_available_auto_candidates(
                         available_auto_match_pool,
+                        ip_diff=popup_ip_diff,
                         breed_diff=popup_breed_diff,
-                        ninuno_mode=popup_ninuno,
+                        ninuno_mode="all",
                         include_lower_values=ultimate_include_lower_values,
+                        same_build=True,
                     )
                     multi_match_feedback = build_multi_match_feedback(
                         pick_multi_pairs_from_candidates(pair_candidates, multi_match_target),
@@ -780,12 +818,31 @@ def register_match_routes(app, deps):
                         if auto_match_source == "available" and auto_match_mode == "single":
                             pair_candidates = build_ultimate_available_auto_candidates(
                                 available_auto_match_pool,
+                                ip_diff=popup_ip_diff,
                                 breed_diff=popup_breed_diff,
-                                ninuno_mode=popup_ninuno,
+                                ninuno_mode="all",
                                 include_lower_values=ultimate_include_lower_values,
+                                same_build=True,
                             )
                             if pair_candidates:
                                 selected_chicken, selected_token_id = select_left_pair_candidate(pair_candidates)
+                                top_pair = pair_candidates[0]
+                                potential_matches = [
+                                    {
+                                        "candidate": top_pair.get("right") or {},
+                                        "selected_build": top_pair.get("build_type"),
+                                        "build_type": top_pair.get("build_type"),
+                                        "left_item": top_pair.get("left_item"),
+                                        "right_item": top_pair.get("right_item"),
+                                        "ranking": top_pair.get("ranking"),
+                                        "ultimate_build_metrics": top_pair.get("ultimate_build_metrics") or {},
+                                        "ultimate_ip_metrics": top_pair.get("ultimate_ip_metrics") or {},
+                                        "ultimate_build_priority_metrics": top_pair.get("ultimate_build_priority_metrics") or {},
+                                        "ultimate_ip_priority_metrics": top_pair.get("ultimate_ip_priority_metrics") or {},
+                                        "ultimate_ip_threshold_metrics": top_pair.get("ultimate_ip_threshold_metrics") or {},
+                                        "ultimate_ip_burden_metrics": top_pair.get("ultimate_ip_burden_metrics") or {},
+                                    }
+                                ]
                             else:
                                 auto_match_single_empty = True
                         else:
@@ -845,8 +902,10 @@ def register_match_routes(app, deps):
             auto_match=auto_match,
             auto_match_source=auto_match_source,
             auto_match_mode=auto_match_mode,
+            popup_ip_diff=popup_ip_diff,
             popup_breed_diff=popup_breed_diff,
             popup_ninuno=popup_ninuno,
+            popup_same_build=popup_same_build,
             popup_match_count=popup_match_count,
             popup_build=popup_build,
             popup_min_build_count=popup_min_build_count,

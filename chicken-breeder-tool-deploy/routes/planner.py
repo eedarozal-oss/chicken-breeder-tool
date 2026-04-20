@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 
 from flask import redirect, render_template, request, send_file, url_for
 
+from services.planner_bookmarklet import MAX_MASS_BREEDING_PAIRS
+
 
 def register_planner_routes(app, deps):
     def add_to_breeding_planner():
@@ -109,6 +111,10 @@ def register_planner_routes(app, deps):
 
         error = None
         planner_queue = deps["get_breeding_planner_queue"](wallet)
+        script_pair_limit = MAX_MASS_BREEDING_PAIRS
+        script_queue = list(planner_queue or [])[:script_pair_limit]
+        script_pair_count = len(script_queue)
+        skipped_pair_count = max(0, len(planner_queue or []) - script_pair_count)
         summary = {
             "overall_status": "unknown",
             "all_available": False,
@@ -134,12 +140,12 @@ def register_planner_routes(app, deps):
             )
             summary = deps["build_wallet_planner_item_requirements_summary"](
                 wallet_address=wallet,
-                queue_rows=planner_queue,
+                queue_rows=script_queue,
             )
             inventory_lookup = deps["build_wallet_inventory_lookup"](wallet)
             per_pair_status_rows = [
                 deps["build_per_pair_item_status"](row, inventory_lookup)
-                for row in planner_queue
+                for row in script_queue
             ]
         except Exception as exc:
             error = f"Failed to check planner items: {exc}"
@@ -149,6 +155,10 @@ def register_planner_routes(app, deps):
             wallet=wallet,
             wallet_summary=wallet_summary,
             planner_queue=planner_queue,
+            script_queue=script_queue,
+            script_pair_limit=script_pair_limit,
+            script_pair_count=script_pair_count,
+            skipped_pair_count=skipped_pair_count,
             planner_summary=deps["build_planner_summary"](planner_queue),
             item_check_summary=summary,
             per_pair_status_rows=per_pair_status_rows,
@@ -164,6 +174,10 @@ def register_planner_routes(app, deps):
             return redirect(url_for("index"))
 
         planner_queue = deps["get_breeding_planner_queue"](wallet)
+        script_pair_limit = MAX_MASS_BREEDING_PAIRS
+        script_queue = list(planner_queue or [])[:script_pair_limit]
+        script_pair_count = len(script_queue)
+        skipped_pair_count = max(0, len(planner_queue or []) - script_pair_count)
         wallet_summary = None
         error = None
         summary = {
@@ -212,6 +226,7 @@ def register_planner_routes(app, deps):
                 planner_queue,
                 script_mode=script_mode,
                 inventory_name_lookup=inventory_name_lookup,
+                max_pairs=script_pair_limit,
             )
         except Exception as exc:
             error = f"Failed to generate script page: {exc}"
@@ -222,6 +237,10 @@ def register_planner_routes(app, deps):
             source_page=source_page,
             wallet_summary=wallet_summary,
             planner_queue=planner_queue,
+            script_queue=script_queue,
+            script_pair_limit=script_pair_limit,
+            script_pair_count=script_pair_count,
+            skipped_pair_count=skipped_pair_count,
             planner_summary=deps["build_planner_summary"](planner_queue),
             item_check_summary=summary,
             bookmarklet_code=bookmarklet_code,

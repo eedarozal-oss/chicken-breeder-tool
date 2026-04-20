@@ -124,6 +124,7 @@ def register_core_routes(app, deps):
         refresh_status = str(request.args.get("refresh_status") or "").strip().lower()
         refresh_message = str(request.args.get("refresh_message") or "").strip()
         wallet_summary = None
+        donor_access = False
 
         if refresh_status == "success" and refresh_message:
             success = refresh_message
@@ -137,6 +138,7 @@ def register_core_routes(app, deps):
             chickens = deps["get_wallet_chickens"](wallet, ensure_loaded=True)
             breedable_chickens = [deps["enrich_chicken_media"](row) for row in chickens if deps["is_breedable"](row)]
             access_expiry = deps["get_wallet_access_expiry_display"](wallet)
+            donor_access = deps["has_active_payment_access_in_db"](wallet)
             wallet_summary = deps["build_wallet_summary"](
                 wallet=wallet,
                 chickens=chickens,
@@ -151,6 +153,7 @@ def register_core_routes(app, deps):
             breedable_count=len(breedable_chickens),
             access_expiry=access_expiry,
             wallet_summary=wallet_summary,
+            donor_access=donor_access,
             error=error,
             success=success,
         )
