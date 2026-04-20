@@ -771,6 +771,15 @@ def chicken_passes_auto_ninuno_filter(chicken, mode):
     return True
 
 
+def get_chicken_build_key(chicken):
+    return str(
+        (chicken or {}).get("build_type")
+        or (chicken or {}).get("gene_build_key")
+        or (chicken or {}).get("primary_build")
+        or ""
+    ).strip().lower()
+
+
 def build_ip_available_auto_candidates(breedable_chickens, ip_diff=None, breed_diff=None, ninuno_mode="all"):
     pair_rows = []
 
@@ -914,7 +923,7 @@ def pick_best_ip_auto_match_from_pool(pool, ip_diff=10, breed_diff=1):
     return best_selected, best_matches
 
 
-def build_ip_multi_matches(breedable_chickens, ip_diff=10, breed_diff=1, ninuno_filter="all", target_count=1):
+def build_ip_multi_matches(breedable_chickens, ip_diff=10, breed_diff=1, ninuno_filter="all", target_count=1, same_build=False):
     pool = list(breedable_chickens or [])
     results = []
 
@@ -935,10 +944,23 @@ def build_ip_multi_matches(breedable_chickens, ip_diff=10, breed_diff=1, ninuno_
 
         if selected:
             selected_token_id = str(selected.get("token_id") or "")
+            selected_build = get_chicken_build_key(selected)
+            if same_build and not selected_build:
+                pool = [
+                    row
+                    for row in pool
+                    if str(row.get("token_id") or "") != selected_token_id
+                ]
+                continue
+
             candidate_pool = [
                 row
                 for row in pool
                 if str(row.get("token_id") or "") != selected_token_id
+                and (
+                    not same_build
+                    or get_chicken_build_key(row) == selected_build
+                )
             ]
 
             if ip_diff is not None:

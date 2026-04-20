@@ -6,10 +6,14 @@ from services.wallet_item_inventory import (
     normalize_item_name,
 )
 
+MAX_MASS_BREEDING_PAIRS = 10
+
+
 def build_bookmarklet_payload_rows(
     planner_queue,
     script_mode="full",
     inventory_name_lookup=None,
+    max_pairs=MAX_MASS_BREEDING_PAIRS,
 ):
     payload_rows = []
 
@@ -31,7 +35,13 @@ def build_bookmarklet_payload_rows(
 
         inventory_remaining[canonical_name] = balance
 
-    for row in planner_queue or []:
+    try:
+        max_pairs = int(max_pairs)
+    except (TypeError, ValueError):
+        max_pairs = MAX_MASS_BREEDING_PAIRS
+    max_pairs = max(0, max_pairs)
+
+    for row in list(planner_queue or [])[:max_pairs]:
         left = row.get("left") or {}
         right = row.get("right") or {}
         left_item = row.get("left_item") or {}
@@ -73,6 +83,7 @@ def build_apex_breeder_bookmarklet_code(
     planner_queue,
     script_mode="full",
     inventory_name_lookup=None,
+    max_pairs=MAX_MASS_BREEDING_PAIRS,
 ):
     script_mode = str(script_mode or "full").strip().lower()
     if script_mode not in {"full", "partial", "no_items"}:
@@ -82,6 +93,7 @@ def build_apex_breeder_bookmarklet_code(
         planner_queue,
         script_mode=script_mode,
         inventory_name_lookup=inventory_name_lookup,
+        max_pairs=max_pairs,
     )
     payload_json = json.dumps(payload_rows, separators=(",", ":"))
     script_mode_json = json.dumps(script_mode)

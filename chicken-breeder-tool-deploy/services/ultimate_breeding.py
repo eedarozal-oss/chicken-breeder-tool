@@ -1318,16 +1318,35 @@ def pick_best_ultimate_auto_match(breedable_chickens, include_lower_values=False
     return best_selected, best_matches
 
 
-def build_ultimate_available_auto_candidates(breedable_chickens, breed_diff=None, ninuno_mode="all", include_lower_values=False):
+def build_ultimate_available_auto_candidates(
+    breedable_chickens,
+    ip_diff=None,
+    breed_diff=None,
+    ninuno_mode="all",
+    include_lower_values=False,
+    same_build=False,
+):
     pair_rows = []
 
     for index, source in enumerate(breedable_chickens or []):
         if not chicken_passes_auto_ninuno_filter(source, ninuno_mode):
             continue
 
+        source_build = str(source.get("ultimate_build_key") or source.get("build_type") or source.get("primary_build") or "").strip().lower()
+
         for candidate in (breedable_chickens or [])[index + 1:]:
             if not chicken_passes_auto_ninuno_filter(candidate, ninuno_mode):
                 continue
+
+            candidate_build = str(candidate.get("ultimate_build_key") or candidate.get("build_type") or candidate.get("primary_build") or "").strip().lower()
+            if same_build and (not source_build or source_build != candidate_build):
+                continue
+
+            if ip_diff is not None:
+                source_ip = safe_int(source.get("ip"), default=None)
+                candidate_ip = safe_int(candidate.get("ip"), default=None)
+                if source_ip is None or candidate_ip is None or abs(candidate_ip - source_ip) > ip_diff:
+                    continue
 
             if breed_diff is not None:
                 source_breed = safe_int(source.get("breed_count"), default=None)

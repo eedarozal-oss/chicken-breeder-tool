@@ -965,9 +965,11 @@ def chicken_passes_auto_ninuno_filter(chicken, mode):
 def build_gene_available_auto_candidates_same_build(
     breedable_chickens,
     min_build_count=None,
+    ip_diff=None,
     breed_diff=None,
     same_instinct=False,
     ninuno_mode="all",
+    same_build=False,
 ):
     pair_rows = []
 
@@ -984,7 +986,10 @@ def build_gene_available_auto_candidates_same_build(
 
         for candidate in (breedable_chickens or [])[index + 1:]:
             candidate_build = str(candidate.get("build_type") or "").strip().lower()
-            if not gene_builds_are_compatible(source_build, candidate_build):
+            if same_build and source_build != candidate_build:
+                continue
+
+            if not same_build and not gene_builds_are_compatible(source_build, candidate_build):
                 continue
 
             if not chicken_passes_auto_ninuno_filter(candidate, ninuno_mode):
@@ -993,14 +998,21 @@ def build_gene_available_auto_candidates_same_build(
             if min_build_count is not None and safe_int(candidate.get("build_match_count"), 0) < min_build_count:
                 continue
 
+            if ip_diff is not None:
+                source_ip = safe_int(source.get("ip"))
+                candidate_ip = safe_int(candidate.get("ip"))
+                if source_ip is None or candidate_ip is None or abs(candidate_ip - source_ip) > ip_diff:
+                    continue
+
             if breed_diff is not None:
                 source_breed = safe_int(source.get("breed_count"))
                 candidate_breed = safe_int(candidate.get("breed_count"))
                 if source_breed is None or candidate_breed is None or abs(candidate_breed - source_breed) > breed_diff:
                     continue
 
-            if same_instinct and normalize_instinct_name(source.get("instinct")) != normalize_instinct_name(
-                candidate.get("instinct")
+            if same_instinct and not (
+                build_prefers_instinct(source, source_build)
+                and build_prefers_instinct(candidate, source_build)
             ):
                 continue
 
