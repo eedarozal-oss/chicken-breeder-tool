@@ -102,7 +102,9 @@ document.addEventListener("DOMContentLoaded", function () {
 		url.searchParams.delete("popup_ip_diff");
 		url.searchParams.delete("popup_breed_diff");
 		url.searchParams.delete("popup_ninuno");
+		url.searchParams.delete("popup_build");
 		url.searchParams.delete("popup_min_build_count");
+		url.searchParams.delete("popup_same_build");
 		url.searchParams.delete("popup_same_instinct");
 
 		url.searchParams.set("skip_auto_open", "1");
@@ -387,9 +389,12 @@ document.addEventListener("DOMContentLoaded", function () {
     function syncAutoMatchConfigState() {
         const modeSelect = document.querySelector('select[name="auto_match_mode"]');
         const modeInputs = document.querySelectorAll('input[name="auto_match_mode"]');
+        const hasModeControl = Boolean(modeSelect) || Boolean(modeInputs.length);
         const countWrap =
             document.querySelector("[data-auto-match-count-wrap]") ||
             document.querySelector(".multi-match-count-wrap");
+        const sameBuildInput = document.querySelector('input[name="popup_same_build"]');
+        const sameInstinctInput = document.querySelector('input[name="popup_same_instinct"]');
 
         const countInput =
             document.querySelector('input[name="multi_count"]') ||
@@ -405,10 +410,12 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         }
 
-        const isMultiple = selectedMode === "multiple";
+        const isMultiple = !hasModeControl || selectedMode === "multiple";
 
         if (countWrap) countWrap.classList.toggle("hidden", !isMultiple);
         if (countInput) countInput.disabled = !isMultiple;
+        if (sameBuildInput) sameBuildInput.disabled = !isMultiple;
+        if (sameInstinctInput) sameInstinctInput.disabled = !isMultiple;
     }
 
     document.querySelectorAll('input[name="auto_match_mode"], select[name="auto_match_mode"]').forEach((input) => {
@@ -534,6 +541,10 @@ document.addEventListener("DOMContentLoaded", function () {
 		url.searchParams.delete("popup_ip_diff");
 		url.searchParams.delete("popup_breed_diff");
 		url.searchParams.delete("popup_ninuno");
+		url.searchParams.delete("popup_build");
+		url.searchParams.delete("popup_min_build_count");
+		url.searchParams.delete("popup_same_build");
+		url.searchParams.delete("popup_same_instinct");
 
 		url.hash = "selected-chicken";
 		window.location.href = url.toString();
@@ -951,6 +962,23 @@ document.addEventListener("DOMContentLoaded", function () {
 
             const shell = document.querySelector(targetSelector);
             activateLoadingShell(shell);
+        });
+    });
+
+    document.querySelectorAll("form[data-loading-shell-form]").forEach(function (form) {
+        form.addEventListener("submit", function () {
+            const targetSelector = form.getAttribute("data-loading-shell-form");
+            if (!targetSelector) return;
+
+            const shell = document.querySelector(targetSelector);
+            activateLoadingShell(shell);
+
+            const button = form.querySelector('button[type="submit"]');
+            if (button) {
+                button.disabled = true;
+                button.classList.add("is-pending");
+                button.textContent = button.getAttribute("data-loading-label") || "Analyzing...";
+            }
         });
     });
 	
