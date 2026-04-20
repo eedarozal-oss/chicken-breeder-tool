@@ -8,8 +8,8 @@ import hmac
 import secrets
 from io import BytesIO
 from openpyxl import Workbook
-from routes import register_core_routes, register_match_routes, register_planner_routes
-from services.ronin_api import fetch_all_owned_chickens
+from routes import register_analysis_routes, register_core_routes, register_match_routes, register_planner_routes
+from services.ronin_api import fetch_all_owned_chickens, fetch_chicken_by_token
 from services.metadata_parser import parse_chicken_record
 from services.match_rules import (
     find_potential_matches,
@@ -26,7 +26,7 @@ from services.market_candidate_cache import init_market_candidate_cache_table
 from services.market_featured_service import get_featured_market_feed
 from services.market_listing_cache import init_market_listing_cache_table
 
-from services.chicken_enricher import enrich_chicken_records
+from services.chicken_enricher import enrich_chicken_record, enrich_chicken_records
 from services.gene_build_picker import get_best_available_gene_build_info
 from services.build_eval import evaluate_build, count_added_missing_traits
 from services.wallet_access import get_wallet_access_expiry_display
@@ -34,7 +34,11 @@ from services.gene_classifier import classify_gene_profile
 from services.database import (
     init_db,
     upsert_chicken,
+    get_chicken_by_token,
+    get_chickens_by_parent_token,
     get_chickens_by_wallet,
+    get_max_known_chicken_token_id,
+    get_static_chickens_by_parent_token,
     clear_family_roots_for_wallet,
     clear_family_roots_for_token,
     clear_stale_family_root_summaries,
@@ -1406,9 +1410,9 @@ def build_gene_match_empty_state(build_type, ninuno_100_only=False, auto_match=F
         )
     if same_instinct:
         return make_empty_state(
-            "Same instinct required",
-            "No gene pair survived the same-instinct filter.",
-            "Turn off Same Instinct to allow more compatible partners.",
+            "Build instinct required",
+            "No gene pair survived the build-instinct filter.",
+            "Turn off Build Instinct to allow more compatible partners.",
         )
     if ninuno_100_only:
         return make_empty_state(
@@ -1484,12 +1488,21 @@ def parse_build_match_count(value):
             best = max(best, safe_int(part, 0) or 0)
     return best
 
-def build_ultimate_available_auto_candidates(breedable_chickens, breed_diff=None, ninuno_mode="all", include_lower_values=False):
+def build_ultimate_available_auto_candidates(
+    breedable_chickens,
+    ip_diff=None,
+    breed_diff=None,
+    ninuno_mode="all",
+    include_lower_values=False,
+    same_build=False,
+):
     return service_build_ultimate_available_auto_candidates(
         breedable_chickens=breedable_chickens,
+        ip_diff=ip_diff,
         breed_diff=breed_diff,
         ninuno_mode=ninuno_mode,
         include_lower_values=include_lower_values,
+        same_build=same_build,
     )
 
 
@@ -1589,6 +1602,7 @@ register_core_routes(app, {
     "get_wallet_access_rows": get_wallet_access_rows,
     "get_wallet_chickens": get_wallet_chickens,
     "grant_manual_access": grant_manual_access,
+    "has_active_payment_access_in_db": has_active_payment_access_in_db,
     "has_wallet_access": has_wallet_access,
     "is_authorized_wallet": is_authorized_wallet,
     "is_breedable": is_breedable,
@@ -1603,6 +1617,37 @@ register_core_routes(app, {
     "static_export_db_path": STATIC_EXPORT_DB_PATH,
     "sync_static_export_tables_to_main_db": sync_static_export_tables_to_main_db,
     "sync_wallet_data": sync_wallet_data,
+})
+
+register_analysis_routes(app, {
+    "build_gene_pair_quality": build_gene_pair_quality,
+    "build_gene_potential_matches_strict": build_gene_potential_matches_strict,
+    "build_ip_pair_quality": build_ip_pair_quality,
+    "build_prefers_instinct": build_prefers_instinct,
+    "build_ultimate_pair_quality_from_items": build_ultimate_pair_quality_from_items,
+    "CONTRACTS": CONTRACTS,
+    "enrich_chicken_media": enrich_chicken_media,
+    "enrich_chicken_record": enrich_chicken_record,
+    "enrich_gene_available_display": enrich_gene_available_display,
+    "enrich_ultimate_display": enrich_ultimate_display,
+    "fetch_chicken_by_token": fetch_chicken_by_token,
+    "filter_and_sort_ultimate_candidates": filter_and_sort_ultimate_candidates,
+    "find_potential_matches": find_potential_matches,
+    "get_chicken_by_token": get_chicken_by_token,
+    "get_chickens_by_parent_token": get_chickens_by_parent_token,
+    "get_effective_ip_stat": get_effective_ip_stat,
+    "get_max_known_chicken_token_id": get_max_known_chicken_token_id,
+    "get_static_chickens_by_parent_token": get_static_chickens_by_parent_token,
+    "get_wallet_chickens": get_wallet_chickens,
+    "get_weakest_ip_stat_info": get_weakest_ip_stat_info,
+    "has_active_payment_access_in_db": has_active_payment_access_in_db,
+    "is_breedable": is_breedable,
+    "match_settings": MATCH_SETTINGS,
+    "pair_has_usable_ip_items": pair_has_usable_ip_items,
+    "parse_chicken_record": parse_chicken_record,
+    "require_authorized_wallet": require_authorized_wallet,
+    "sort_ip_match_rows": sort_ip_match_rows,
+    "upsert_chicken": upsert_chicken,
 })
 
 register_planner_routes(app, {
