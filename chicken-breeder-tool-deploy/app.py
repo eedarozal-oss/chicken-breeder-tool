@@ -8,7 +8,7 @@ import hmac
 import secrets
 from io import BytesIO
 from openpyxl import Workbook
-from routes import register_analysis_routes, register_core_routes, register_match_routes, register_planner_routes
+from routes import register_analysis_routes, register_best_pair_routes, register_core_routes, register_match_routes, register_planner_routes
 from services.ronin_api import fetch_all_owned_chickens, fetch_chicken_by_token
 from services.metadata_parser import parse_chicken_record
 from services.match_rules import (
@@ -27,6 +27,7 @@ from services.market_featured_service import get_featured_market_feed
 from services.market_listing_cache import init_market_listing_cache_table
 
 from services.chicken_enricher import enrich_chicken_record, enrich_chicken_records
+from services.chicken_quick_view import build_chicken_quick_view
 from services.gene_build_picker import get_best_available_gene_build_info
 from services.build_eval import evaluate_build, count_added_missing_traits
 from services.wallet_access import get_wallet_access_expiry_display
@@ -858,15 +859,35 @@ def get_breeding_planner_queue(wallet):
     queue = session.get(get_breeding_planner_session_key(wallet)) or []
     if not isinstance(queue, list):
         return []
+
+    def hydrate_side(side):
+        side = dict(side or {})
+        token_id = str(side.get("token_id") or "").strip()
+        if not token_id:
+            return side
+
+        chicken = get_chicken_by_token(token_id) or {}
+        if chicken:
+            hydrated = enrich_chicken_media(dict(chicken))
+            hydrated.update(side)
+            hydrated["token_id"] = token_id
+            hydrated["image"] = side.get("image") or hydrated.get("image") or ""
+            return hydrated
+
+        return side
+
     cleaned = []
     for row in queue:
         if not isinstance(row, dict):
             continue
         pair_key = str(row.get("pair_key") or "").strip()
-        left = row.get("left") or {}
-        right = row.get("right") or {}
+        left = hydrate_side(row.get("left"))
+        right = hydrate_side(row.get("right"))
         if not pair_key or not left.get("token_id") or not right.get("token_id"):
             continue
+        row = dict(row)
+        row["left"] = left
+        row["right"] = right
         cleaned.append(row)
     return cleaned
 
@@ -923,16 +944,17 @@ def build_planner_queue_row(mode, left, right, left_item=None, right_item=None, 
 
     elif str(mode or "").strip().lower() == "gene":
         current_build_type = str(build_type or "").strip().lower()
-        build_label = str(build_type or "").strip().title()
 
         if current_build_type:
             left_gene = enrich_gene_display(left, current_build_type)
             right_gene = enrich_gene_display(right, current_build_type)
 
             if left_gene.get("build_match_display"):
-                left_summary = f"{left_gene['build_match_display']} ({build_label})"
+                left_build_label = left_gene.get("build_label") or str(build_type or "").strip().title()
+                left_summary = f"{left_gene['build_match_display']} ({left_build_label})"
             if right_gene.get("build_match_display"):
-                right_summary = f"{right_gene['build_match_display']} ({build_label})"
+                right_build_label = right_gene.get("build_label") or str(build_type or "").strip().title()
+                right_summary = f"{right_gene['build_match_display']} ({right_build_label})"
 
     elif str(mode or "").strip().lower() == "ultimate":
         left_ultimate = enrich_ultimate_display(left)
@@ -953,7 +975,6 @@ def build_planner_queue_row(mode, left, right, left_item=None, right_item=None, 
                 if right_build else right_ultimate["ultimate_build_match_display"]
             )
 
-    
     return {
         "pair_key": pair_key,
         "mode": str(mode or "").strip().lower(),
@@ -1281,6 +1302,7 @@ def inject_breeding_item_helpers():
         "build_gene_pair_quality": build_gene_pair_quality,
         "build_ultimate_pair_quality": build_ultimate_pair_quality,
         "build_prefers_instinct": build_prefers_instinct,
+        "build_chicken_quick_view": build_chicken_quick_view,
         "planner_pair_exists": lambda wallet, left_token_id, right_token_id: planner_pair_exists(wallet, left_token_id, right_token_id),
     }
 
@@ -1290,6 +1312,8 @@ def enrich_gene_display(chicken, build_type):
 
     row["build_source_display"] = ""
     row["build_match_display"] = ""
+    row["build_label"] = str(build_type or "").strip().title()
+    row["build_display"] = row["build_label"]
     row["gene_sort_source_rank"] = 9
     row["gene_sort_match_count"] = 0
     row["gene_sort_match_total"] = 0
@@ -1300,6 +1324,8 @@ def enrich_gene_display(chicken, build_type):
 
     target_info = get_gene_build_target_info(row, build_type)
     row["build_source_display"] = target_info["display_source"]
+    row["build_label"] = target_info.get("display_build_label") or row["build_label"]
+    row["build_display"] = row["build_label"]
     row["build_match_display"] = target_info["display_match"]
     row["gene_sort_source_rank"] = target_info["sort_source_rank"]
     row["gene_sort_match_count"] = target_info["sort_match_count"]
@@ -1315,6 +1341,7 @@ def enrich_gene_available_display(chicken):
 
     row["build_type"] = best_info.get("build_key") or ""
     row["build_label"] = best_info.get("build_label") or ""
+    row["build_display"] = row["build_label"]
     row["build_match_display"] = best_info.get("build_count_display") or ""
     row["build_match_count"] = best_info.get("sort_match_count", 0) or 0
     row["build_match_total"] = best_info.get("sort_match_total", 0) or 0
@@ -1326,6 +1353,8 @@ def enrich_gene_available_display(chicken):
     if build_type:
         target_info = get_gene_build_target_info(row, build_type)
         row["build_source_display"] = target_info.get("display_source") or ""
+        row["build_label"] = target_info.get("display_build_label") or row["build_label"]
+        row["build_display"] = row["build_label"]
         row["gene_effective_source"] = target_info.get("source") or ""
     else:
         row["build_source_display"] = ""
@@ -1642,6 +1671,9 @@ register_analysis_routes(app, {
     "get_weakest_ip_stat_info": get_weakest_ip_stat_info,
     "has_active_payment_access_in_db": has_active_payment_access_in_db,
     "is_breedable": is_breedable,
+    "is_full_siblings": is_full_siblings,
+    "is_generation_gap_allowed": is_generation_gap_allowed,
+    "is_parent_offspring": is_parent_offspring,
     "match_settings": MATCH_SETTINGS,
     "pair_has_usable_ip_items": pair_has_usable_ip_items,
     "parse_chicken_record": parse_chicken_record,
@@ -1666,6 +1698,31 @@ register_planner_routes(app, {
     "get_wallet_chickens": get_wallet_chickens,
     "planner_pair_exists": planner_pair_exists,
     "require_authorized_wallet": require_authorized_wallet,
+    "save_breeding_planner_queue": save_breeding_planner_queue,
+})
+
+register_best_pair_routes(app, {
+    "build_planner_queue_row": build_planner_queue_row,
+    "build_planner_summary": build_planner_summary,
+    "build_wallet_summary": build_wallet_summary,
+    "enrich_chicken_media": enrich_chicken_media,
+    "enrich_gene_available_display": enrich_gene_available_display,
+    "enrich_ip_available_chicken_row": enrich_ip_available_chicken_row,
+    "enrich_ultimate_available_chicken_row": enrich_ultimate_available_chicken_row,
+    "enrich_ultimate_display": enrich_ultimate_display,
+    "filter_out_planner_tokens": filter_out_planner_tokens,
+    "get_breeding_planner_queue": get_breeding_planner_queue,
+    "get_effective_ip_stat": get_effective_ip_stat,
+    "get_ultimate_build_display": get_ultimate_build_display,
+    "get_ultimate_type_display": get_ultimate_type_display,
+    "get_wallet_access_expiry_display": get_wallet_access_expiry_display,
+    "get_wallet_chickens": get_wallet_chickens,
+    "get_weakest_ip_stat_info": get_weakest_ip_stat_info,
+    "is_breedable": is_breedable,
+    "is_ultimate_eligible": is_ultimate_eligible,
+    "planner_pair_exists": planner_pair_exists,
+    "require_authorized_wallet": require_authorized_wallet,
+    "safe_int": safe_int,
     "save_breeding_planner_queue": save_breeding_planner_queue,
 })
 
