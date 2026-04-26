@@ -379,6 +379,43 @@ def register_analysis_routes(app, deps):
             "build_instinct": format_instinct_alignment(candidate, candidate_build) if mode != "IP" else "",
         }
 
+    def is_recommendation_pair_allowed(selected, candidate):
+        if not selected or not candidate:
+            return False
+
+        selected_id = str((selected or {}).get("token_id") or "").strip()
+        candidate_id = str((candidate or {}).get("token_id") or "").strip()
+        if not selected_id or not candidate_id or selected_id == candidate_id:
+            return False
+
+        if deps.get("is_parent_offspring") and deps["is_parent_offspring"](selected, candidate):
+            return False
+
+        if deps.get("is_full_siblings") and deps["is_full_siblings"](selected, candidate):
+            return False
+
+        if deps.get("is_generation_gap_allowed") and not deps["is_generation_gap_allowed"](
+            selected,
+            candidate,
+            max_gap=deps["match_settings"].get("max_generation_gap", 3),
+        ):
+            return False
+
+        return True
+
+    def filter_recommendation_pool(target, candidates):
+        return [
+            row for row in candidates
+            if is_recommendation_pair_allowed(target, row)
+        ]
+
+    def first_allowed_recommendation(selected, rows):
+        for row in rows or []:
+            candidate = (row or {}).get("candidate") or (row or {}).get("right") or {}
+            if is_recommendation_pair_allowed(selected, candidate):
+                return row
+        return None
+
     def build_recommendations(target, wallet_chickens):
         wallet_pool = [
             deps["enrich_chicken_media"](dict(row or {}))
@@ -386,6 +423,7 @@ def register_analysis_routes(app, deps):
             if deps["is_breedable"](row)
             and str(row.get("token_id") or "") != str(target.get("token_id") or "")
         ]
+        wallet_pool = filter_recommendation_pool(target, wallet_pool)
 
         ip_rows = deps["find_potential_matches"](target, wallet_pool, settings=deps["match_settings"])
         ip_rows = [
@@ -395,10 +433,12 @@ def register_analysis_routes(app, deps):
             and deps["pair_has_usable_ip_items"](target, row.get("candidate"))
         ]
         ip_rows = deps["sort_ip_match_rows"](target, ip_rows)
+        ip_row = first_allowed_recommendation(target, ip_rows)
 
         gene_target = deps["enrich_gene_available_display"](target)
         gene_pool = [deps["enrich_gene_available_display"](row) for row in wallet_pool]
         gene_rows = deps["build_gene_potential_matches_strict"](gene_target, gene_pool)
+        gene_row = first_allowed_recommendation(gene_target, gene_rows)
 
         ultimate_target = deps["enrich_ultimate_display"](target)
         ultimate_pool = [deps["enrich_ultimate_display"](row) for row in wallet_pool]
@@ -407,11 +447,12 @@ def register_analysis_routes(app, deps):
             ultimate_pool,
             include_lower_values=True,
         )
+        ultimate_row = first_allowed_recommendation(ultimate_target, ultimate_rows)
 
         return [
-            build_match_summary("IP", target, ip_rows[0] if ip_rows else None),
-            build_match_summary("Gene", gene_target, gene_rows[0] if gene_rows else None),
-            build_match_summary("Ultimate", ultimate_target, ultimate_rows[0] if ultimate_rows else None),
+            build_match_summary("IP", target, ip_row),
+            build_match_summary("Gene", gene_target, gene_row),
+            build_match_summary("Ultimate", ultimate_target, ultimate_row),
         ]
 
     def build_family_context(target):

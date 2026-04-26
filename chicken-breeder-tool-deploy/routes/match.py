@@ -95,8 +95,30 @@ def register_match_routes(app, deps):
 
     def build_planner_context(wallet):
         planner_queue = deps["get_breeding_planner_queue"](wallet)
+        wallet_chickens = deps["get_wallet_chickens"](wallet, ensure_loaded=False) if wallet else []
+        chicken_lookup = {
+            str(chicken.get("token_id") or "").strip(): chicken
+            for chicken in wallet_chickens or []
+        }
+
+        def hydrate_planner_chicken(snapshot):
+            snapshot = dict(snapshot or {})
+            token_id = str(snapshot.get("token_id") or "").strip()
+            merged = dict(chicken_lookup.get(token_id) or {})
+            merged.update(snapshot)
+            if "ownership_percent" not in merged and snapshot.get("ninuno") is not None:
+                merged["ownership_percent"] = snapshot.get("ninuno")
+            return merged
+
+        hydrated_queue = []
+        for row in planner_queue or []:
+            hydrated_row = dict(row or {})
+            hydrated_row["left"] = hydrate_planner_chicken(hydrated_row.get("left"))
+            hydrated_row["right"] = hydrate_planner_chicken(hydrated_row.get("right"))
+            hydrated_queue.append(hydrated_row)
+
         return {
-            "planner_queue": planner_queue,
+            "planner_queue": hydrated_queue,
             "planner_summary": build_planner_summary(planner_queue),
         }
 

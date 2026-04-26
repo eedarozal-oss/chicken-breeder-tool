@@ -216,6 +216,8 @@ def register_planner_routes(app, deps):
                 inventory_name_lookup = deps["build_bookmarklet_inventory_name_lookup"](wallet)
 
             if script_mode == "full" and summary.get("overall_status") != "ready":
+                if source_page == "best_pairs":
+                    return redirect(url_for("planner_items_check", wallet_address=wallet, source_page="best_pairs"))
                 if source_page == "gene":
                     return redirect(url_for("planner_items_check", wallet_address=wallet, source_page="gene"))
                 if source_page == "ultimate":
