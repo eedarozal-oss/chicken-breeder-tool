@@ -1,0 +1,13 @@
+{% macro stat_value(row, field, fallback_field='') -%}
+	{%- set direct_value = row.get(field) -%}
+	{%- set fallback_value = row.get(fallback_field) if fallback_field else '' -%}
+	{%- set value = direct_value if direct_value is not none and direct_value != '' else fallback_value -%}
+	{%- set has_value = value is not none and value != '' -%}
+	<span class="compare-coded-value{% if has_value %} {{ 'chicken-quick-stat-low' if (value|int) < 25 else 'chicken-quick-stat-max' if (value|int) == 40 else 'chicken-quick-stat-mid' }}{% endif %}">{{ value if has_value else '' }}</span>
+{%- endmacro %}
+
+{% macro trait_value(row, field, slot, matched_slots=[]) -%}
+	{%- set value = row.get(field) -%}
+	{%- set is_match = slot in (matched_slots or []) -%}
+	<span class="compare-coded-value{% if is_match %} chicken-quick-trait-match{% endif %}">{{ value if value is not none else '' }}</span>
+{%- endmacro %}

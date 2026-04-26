@@ -1,0 +1,61 @@
+{% macro render_quick_card(chicken, card_label, compare_chicken=none) %}
+{% set quick_view = build_chicken_quick_view(chicken, compare_chicken) %}
+<article class="chicken-quick-card" aria-label="Chicken {{ quick_view.token_id }} quick view">
+    <div class="chicken-quick-card-top">
+        <img
+            src="{{ quick_view.image }}"
+            alt="Chicken {{ quick_view.token_id }}"
+            class="chicken-quick-card-image"
+            loading="lazy"
+        >
+        <div class="chicken-quick-card-title">
+            <div class="chicken-quick-card-kicker">{{ card_label or "Chicken" }}</div>
+            <strong>#{{ quick_view.token_id }}</strong>
+            <span>{{ quick_view.build_display or "No build" }}</span>
+            <span class="chicken-quick-card-subline">Build Count: {{ quick_view.build_count_display or "N/A" }}</span>
+        </div>
+    </div>
+    <div class="chicken-quick-section">
+        <div class="chicken-quick-section-title">Stats</div>
+        <div class="chicken-quick-grid">
+            {% for item in quick_view.stats %}
+                <div class="chicken-quick-field">
+                    <span>{{ item.label }}</span>
+                    <strong class="chicken-quick-stat-value{% if item.tone %} chicken-quick-stat-{{ item.tone }}{% endif %}">{{ item.value or "N/A" }}</strong>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="chicken-quick-section">
+        <div class="chicken-quick-section-title">Traits</div>
+            <div class="chicken-quick-grid">
+                {% for item in quick_view.traits %}
+                <div class="chicken-quick-field{% if item.is_match %} chicken-quick-field-match{% endif %}">
+                    <span>{{ item.label }}</span>
+                    <strong>
+                        {{ item.value or "N/A" }}
+                        {% if item.label == "Instinct" and item.value %}
+                            <span class="chicken-quick-instinct-mark instinct-align instinct-align-{{ 'match' if quick_view.instinct_fit else 'miss' }}">({{ '+' if quick_view.instinct_fit else '-' }})</span>
+                        {% endif %}
+                    </strong>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</article>
+{% endmacro %}
+
+<div class="chicken-quick-view-template">
+    {% if quick_view_compare_chicken %}
+        {% set action_note = quick_view_action_note if quick_view_action_note is defined else "Click row to match" %}
+        {% if action_note %}
+            <div class="chicken-quick-action-note">{{ action_note }}</div>
+        {% endif %}
+        <div class="chicken-quick-compare">
+            {{ render_quick_card(quick_view_chicken, quick_view_primary_label or "Selected", quick_view_compare_chicken) }}
+            {{ render_quick_card(quick_view_compare_chicken, quick_view_compare_label or "Potential", quick_view_chicken) }}
+        </div>
+    {% else %}
+        {{ render_quick_card(quick_view_chicken, quick_view_primary_label or "Chicken") }}
+    {% endif %}
+</div>
