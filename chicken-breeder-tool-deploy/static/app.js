@@ -91,6 +91,139 @@ document.addEventListener("DOMContentLoaded", function () {
         appendCsrfToken(form);
     });
 
+    const quickViewPopup = document.createElement("div");
+    quickViewPopup.className = "chicken-quick-popup hidden";
+    quickViewPopup.setAttribute("role", "tooltip");
+    document.body.appendChild(quickViewPopup);
+
+    let quickViewHideTimer = null;
+    let activeQuickViewSource = null;
+
+    function hideQuickView() {
+        activeQuickViewSource = null;
+        quickViewPopup.classList.add("hidden");
+        quickViewPopup.innerHTML = "";
+    }
+
+    function scheduleQuickViewHide() {
+        if (quickViewHideTimer) {
+            clearTimeout(quickViewHideTimer);
+        }
+        quickViewHideTimer = setTimeout(hideQuickView, 120);
+    }
+
+    function positionQuickView(source) {
+        const popupRect = quickViewPopup.getBoundingClientRect();
+        const isCompare = quickViewPopup.classList.contains("is-compare");
+        const margin = 12;
+
+        if (isCompare) {
+            const sourceRect = source.getBoundingClientRect();
+            const left = Math.max(margin, (window.innerWidth - popupRect.width) / 2);
+            const gap = 14;
+            const aboveSpace = sourceRect.top - margin - gap;
+            const belowSpace = window.innerHeight - sourceRect.bottom - margin - gap;
+            const preferAbove = aboveSpace >= belowSpace;
+
+            const adjustedSourceRect = source.getBoundingClientRect();
+            const aboveTop = adjustedSourceRect.top - popupRect.height - gap;
+            const belowTop = adjustedSourceRect.bottom + gap;
+            let top;
+
+            if (preferAbove && aboveTop >= margin) {
+                top = aboveTop;
+            } else if (!preferAbove && belowTop + popupRect.height + margin <= window.innerHeight) {
+                top = belowTop;
+            } else if (aboveTop >= margin) {
+                top = aboveTop;
+            } else if (belowTop + popupRect.height + margin <= window.innerHeight) {
+                top = belowTop;
+            } else {
+                const rowCenter = adjustedSourceRect.top + (adjustedSourceRect.height / 2);
+                const viewportCenter = window.innerHeight / 2;
+                top = rowCenter < viewportCenter
+                    ? Math.min(window.innerHeight - popupRect.height - margin, belowTop)
+                    : Math.max(margin, aboveTop);
+            }
+
+            quickViewPopup.style.left = `${left}px`;
+            quickViewPopup.style.top = `${top}px`;
+            return;
+        }
+
+        const sourceRect = source.getBoundingClientRect();
+        const gap = 12;
+
+        let left = sourceRect.right + gap;
+        let top = sourceRect.top + Math.min(14, Math.max(0, sourceRect.height / 3));
+
+        if (left + popupRect.width + margin > window.innerWidth) {
+            left = sourceRect.left - popupRect.width - gap;
+        }
+        if (left < margin) {
+            left = Math.max(margin, window.innerWidth - popupRect.width - margin);
+        }
+        if (top + popupRect.height + margin > window.innerHeight) {
+            top = window.innerHeight - popupRect.height - margin;
+        }
+        if (top < margin) {
+            top = margin;
+        }
+
+        quickViewPopup.style.left = `${left}px`;
+        quickViewPopup.style.top = `${top}px`;
+    }
+
+    function showQuickView(source) {
+        const template = source.querySelector(".chicken-quick-view-template");
+        if (!template) return;
+
+        if (quickViewHideTimer) {
+            clearTimeout(quickViewHideTimer);
+            quickViewHideTimer = null;
+        }
+
+        activeQuickViewSource = source;
+        quickViewPopup.innerHTML = template.innerHTML;
+        quickViewPopup.classList.toggle(
+            "is-compare",
+            !!source.dataset.compareTemplateId || !!quickViewPopup.querySelector(".chicken-quick-compare")
+        );
+        quickViewPopup.classList.remove("hidden");
+        positionQuickView(source);
+    }
+
+    document.querySelectorAll("[data-quick-view-source]").forEach((source) => {
+        source.addEventListener("mouseenter", function () {
+            showQuickView(source);
+        });
+
+        source.addEventListener("mouseleave", scheduleQuickViewHide);
+
+        source.addEventListener("focusin", function () {
+            showQuickView(source);
+        });
+
+        source.addEventListener("focusout", scheduleQuickViewHide);
+
+        source.addEventListener("click", function () {
+            if (source.dataset.compareTemplateId) return;
+            showQuickView(source);
+        });
+    });
+
+    window.addEventListener("scroll", function () {
+        if (activeQuickViewSource) {
+            positionQuickView(activeQuickViewSource);
+        }
+    }, true);
+
+    window.addEventListener("resize", function () {
+        if (activeQuickViewSource) {
+            positionQuickView(activeQuickViewSource);
+        }
+    });
+
 	function reloadPageWithoutModalState() {
 		const url = new URL(window.location.href);
 
@@ -165,6 +298,12 @@ document.addEventListener("DOMContentLoaded", function () {
         row.addEventListener("click", function (event) {
             if (event.target.closest("a, button, input, select, textarea, label, form")) return;
 
+            if (row.dataset.compareTemplateId) {
+                hideQuickView();
+                openCompareModal(row.dataset.compareTemplateId);
+                return;
+            }
+
             if (row.dataset.href) {
                 window.location.href = row.dataset.href;
                 return;
@@ -188,6 +327,12 @@ document.addEventListener("DOMContentLoaded", function () {
             if (event.key !== "Enter" && event.key !== " ") return;
 
             event.preventDefault();
+
+            if (row.dataset.compareTemplateId) {
+                hideQuickView();
+                openCompareModal(row.dataset.compareTemplateId);
+                return;
+            }
 
             if (row.dataset.href) {
                 window.location.href = row.dataset.href;
@@ -576,6 +721,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
 			if (mode === "add") {
+				const isBestPairFlow = !!form.closest("[data-best-pair-card]");
 				markPlannerButtonAdded(button);
 				updatePlannerCount(1);
 				updateAvailablePairMax(-1);
@@ -588,7 +734,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
 				form.dataset.submitting = "0";
 				button.classList.remove("is-pending");
-				plannerStateChanged = true;
+				if (isBestPairFlow) {
+					document.dispatchEvent(new CustomEvent("best-pair-planner-added", {
+						detail: { form, button }
+					}));
+				} else {
+					plannerStateChanged = true;
+				}
 
 				if (isSelectedMatchFlow) {
 					reloadWithoutSelectedChicken();
@@ -647,6 +799,10 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     bindPlannerAjaxForms(document);
+
+	document.addEventListener("planner-fragment-refreshed", function () {
+		bindPlannerAjaxForms(document);
+	});
 
     document.addEventListener("keydown", function (event) {
         if (event.key !== "Escape") return;
