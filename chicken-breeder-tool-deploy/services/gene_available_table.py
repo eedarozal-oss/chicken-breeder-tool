@@ -51,10 +51,17 @@ def get_chicken_type_display(value):
     return "Ordinary"
 
 
-def get_gene_build_display(value, build_order=None):
+def get_gene_build_display(value, build_order=None, source=""):
     allowed_builds = [str(item or "").strip().lower() for item in (build_order or []) if str(item or "").strip()]
     value = str(value or "").strip().lower()
-    return value.title() if value in allowed_builds else ""
+    if value not in allowed_builds:
+        return ""
+
+    label = value.title()
+    if str(source or "").strip().lower() == "recessive":
+        return f"R.{label}"
+
+    return label
 
 
 def normalize_gene_build_source_value(value):
@@ -115,7 +122,11 @@ def enrich_gene_available_chicken_row(
     row["type_display"] = get_chicken_type_display(row.get("type_normalized"))
 
     row["gene_build_key"] = gene_build_key
-    row["gene_build_display"] = get_gene_build_display(gene_build_key, build_order=build_order)
+    row["gene_build_display"] = get_gene_build_display(
+        gene_build_key,
+        build_order=build_order,
+        source=gene_build_source,
+    )
     row["gene_build_source"] = gene_build_source
     row["gene_build_source_display"] = get_gene_build_source_display(gene_build_source)
     row["gene_build_match_count"] = gene_build_match_count

@@ -1429,6 +1429,15 @@ def filter_and_sort_ultimate_candidates(selected, chickens, require_items=False,
         if str(candidate.get("token_id") or "") == str(selected.get("token_id") or ""):
             continue
 
+        if is_parent_offspring(selected, candidate):
+            continue
+
+        if is_full_siblings(selected, candidate):
+            continue
+
+        if not is_generation_gap_allowed(selected, candidate, max_gap=3):
+            continue
+
         if not include_lower_values and not is_ultimate_eligible(candidate):
             continue
 

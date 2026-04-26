@@ -1,6 +1,6 @@
 from services.builds_config import BUILD_PRIORITY
 from services.build_eval import get_instinct_tie_rank
-from services.gene_breeding import get_gene_build_target_info
+from services.gene_breeding import get_gene_build_display_label, get_gene_build_target_info
 
 
 def get_best_available_gene_build_info(chicken, build_options=None):
@@ -29,7 +29,7 @@ def get_best_available_gene_build_info(chicken, build_options=None):
 
         current = {
             "build_key": build_key,
-            "build_label": build_key.title(),
+            "build_label": info.get("display_build_label") or get_gene_build_display_label(build_key, info.get("source")),
             "build_count_display": info.get("display_match") or "",
             "source": info.get("source") or "",
             "display_source": info.get("display_source") or "",

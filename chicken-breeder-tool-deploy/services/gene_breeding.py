@@ -37,6 +37,7 @@ DUPLICATE_ALLOWED_ITEMS = {
 GENE_PRIMARY_MIN_MATCH = 2
 GENE_PRIMARY_QUALIFIED_MATCH = 5
 GENE_RECESSIVE_MIN_MATCH = 4
+GENE_RECESSIVE_OVERRIDE_DIFF = 3
 
 GENE_PRIORITY_SLOTS = {
     "killua": ["beak", "tail", "feet", "body"],
@@ -71,6 +72,19 @@ def gene_builds_are_compatible(source_build, candidate_build):
     candidate_compatible = get_gene_build_compatibility(candidate_key)
 
     return candidate_key in source_compatible and source_key in candidate_compatible
+
+
+def get_gene_build_display_label(build_type, source=""):
+    build_key = str(build_type or "").strip().lower()
+    if not build_key:
+        return ""
+
+    label = build_key.title()
+    if str(source or "").strip().lower() == "recessive":
+        return f"R.{label}"
+
+    return label
+
 
 def get_gene_priority_slots(build_type):
     return list(GENE_PRIORITY_SLOTS.get(str(build_type or "").strip().lower(), []))
@@ -278,6 +292,7 @@ def get_gene_build_target_info(chicken, build_type):
         "eligible": False,
         "source": "",
         "display_source": "",
+        "display_build_label": "",
         "display_match": "",
         "effective_eval": _normalize_gene_eval({}),
         "primary_eval": _normalize_gene_eval({}),
@@ -306,6 +321,7 @@ def get_gene_build_target_info(chicken, build_type):
     primary_qualified = primary_build == build_key and primary_count >= GENE_PRIMARY_QUALIFIED_MATCH
     recessive_qualified = recessive_build == build_key and recessive_count >= GENE_RECESSIVE_MIN_MATCH
     primary_supported = primary_count >= GENE_PRIMARY_MIN_MATCH
+    recessive_overrides_primary = recessive_qualified and recessive_count >= primary_count + GENE_RECESSIVE_OVERRIDE_DIFF
 
     source = ""
     display_source = ""
@@ -315,25 +331,7 @@ def get_gene_build_target_info(chicken, build_type):
     sort_match_count = 0
     sort_match_total = 0
 
-    if primary_qualified:
-        source = "primary"
-        display_source = "Primary"
-        display_match = f"{primary_count}/{primary_total}" if primary_total else ""
-        effective_eval = primary_eval
-        sort_source_rank = 0
-        sort_match_count = primary_count
-        sort_match_total = primary_total
-    elif recessive_qualified and primary_supported:
-        source = "mixed"
-        display_source = "Primary + Recessive"
-        primary_display = f"{primary_count}/{primary_total}" if primary_total else ""
-        recessive_display = f"{recessive_count}/{recessive_total}" if recessive_total else ""
-        display_match = " + ".join(part for part in [primary_display, recessive_display] if part)
-        effective_eval = primary_eval
-        sort_source_rank = 1
-        sort_match_count = max(primary_count, recessive_count)
-        sort_match_total = max(primary_total, recessive_total)
-    elif recessive_qualified:
+    if recessive_overrides_primary or (recessive_qualified and not primary_supported):
         source = "recessive"
         display_source = "Recessive"
         display_match = f"{recessive_count}/{recessive_total}" if recessive_total else ""
@@ -341,7 +339,7 @@ def get_gene_build_target_info(chicken, build_type):
         sort_source_rank = 2
         sort_match_count = recessive_count
         sort_match_total = recessive_total
-    elif primary_supported:
+    elif primary_qualified or primary_supported:
         source = "primary"
         display_source = "Primary"
         display_match = f"{primary_count}/{primary_total}" if primary_total else ""
@@ -354,6 +352,7 @@ def get_gene_build_target_info(chicken, build_type):
         "eligible": bool(source),
         "source": source,
         "display_source": display_source,
+        "display_build_label": get_gene_build_display_label(build_key, source),
         "display_match": display_match,
         "effective_eval": effective_eval,
         "primary_eval": primary_eval,
@@ -834,13 +833,19 @@ def rank_gene_pair(
         ),
         99,
     )
+    shared_count = pair_metrics.get("shared_count") or 0
+    combined_count = pair_metrics.get("combined_count") or 0
+    has_added_missing_traits = added_missing_traits > 0
+    added_missing_sort = added_missing_traits if has_added_missing_traits else 999
 
     return (
         quality_rank,
+        -int(has_added_missing_traits),
+        -(candidate_target_info.get("sort_match_count") or 0),
+        -shared_count,
+        added_missing_sort,
         -gene_score,
-        -(pair_metrics.get("combined_count") or 0),
-        -(pair_metrics.get("shared_count") or 0),
-        -(added_missing_traits or 0),
+        -combined_count,
         -(candidate_target_info.get("sort_match_count") or 0),
         -int(bool(priority_metrics.get("selected_priority_satisfied"))),
         -(priority_metrics.get("selected_priority_resolved_count") or 0),

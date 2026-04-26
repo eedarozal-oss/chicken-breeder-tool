@@ -1,4 +1,4 @@
-BUILD_PRIORITY = ["killua", "shanks", "levi", "hybrid 2", "hybrid 1"]
+BUILD_PRIORITY = ["levi", "shanks", "killua", "hybrid 2", "hybrid 1"]
 
 BUILD_INSTINCT_TIERS = {
     "killua": ["aggressive", "swift", "reckless", "elusive", "relentless", "blazing"],
