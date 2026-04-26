@@ -10,6 +10,7 @@
     data-auto-open-template-id="{{ auto_open_template_id or '' }}"
     data-auto-match-result-open="{{ 1 if auto_open_multi_match else 0 }}"
 >
+{% import 'partials/compare_color_helpers.html' as color %}
     <div class="container breeding-page breeding-page-ultimate">
         <section class="breeding-hero breeding-hero-ultimate">
             <div class="panel breeding-hero-main">
@@ -1029,6 +1030,7 @@
 							</a>
 						</div>
 
+						<div class="selected-chicken-compact-card" data-quick-view-source tabindex="0">
 						<div class="selected-chicken-media-wrap">
 							<img
 								src="{{ selected_chicken.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ selected_chicken.token_id ~ '.png') }}"
@@ -1076,34 +1078,10 @@
 								{% endif %}
 							</div>
 						</div>
-
-						<hr>
-						<div class="selected-chicken-group-box">
-							<div class="details-section-title">Traits</div>
-							<div class="selected-chicken-details-grid">
-								<div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
-								<div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
-								<div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
-								<div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
-								<div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
-								<div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
-								<div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
-								<div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
-							</div>
-						</div>
-						<div class="selected-chicken-group-box">
-							<div class="details-section-title">Innate Stats</div>
-
-							<div class="selected-chicken-details-grid">
-								<div><strong>IP:</strong> {{ selected_chicken.ip or "" }}</div>
-								<div><strong>Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
-								<div><strong>Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
-								<div><strong>Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
-								<div><strong>Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
-								<div><strong>Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
-								<div><strong>Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
-								<div><strong>Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
-							</div>
+						{% set quick_view_chicken = selected_chicken %}
+						{% set quick_view_compare_chicken = none %}
+						{% set quick_view_primary_label = "Selected" %}
+						{% include 'partials/chicken_quick_view.html' %}
 						</div>
 						<div class="selected-chicken-actions">
 							<a
@@ -1156,10 +1134,9 @@
 					{% if selected_chicken %}
 						{% if potential_matches %}
 							<div class="table-wrap">
-								<table>
+								<table class="potential-matches-table potential-matches-table-ultimate">
 									<thead>
 										<tr>
-											<th></th>
 											<th>Chicken ID</th>
 											<th>IP</th>
 											<th>Build</th>
@@ -1173,21 +1150,10 @@
 										{% for row in potential_matches %}
 										<tr
 											class="clickable-row"
-											data-target="ultimate-details-{{ row.candidate.token_id }}"
+											data-compare-template-id="compare-ultimate-{{ row.candidate.token_id }}"
+											data-quick-view-source
 											tabindex="0"
 										>
-											<td class="action-cell">
-												<div class="table-row-action-wrap">
-													<span class="table-row-action-placeholder">View</span>
-													<button
-														type="button"
-														class="open-compare-btn table-row-action-btn"
-														data-template-id="compare-ultimate-{{ row.candidate.token_id }}"
-													>
-														Match
-													</button>
-												</div>
-											</td>
 											<td>
 												<div class="chicken-id-card compact-id-card">
 													<img
@@ -1197,6 +1163,11 @@
 													>
 													<div class="chicken-id-card-text">#{{ row.candidate.token_id }}</div>
 												</div>
+												{% set quick_view_chicken = selected_chicken %}
+												{% set quick_view_compare_chicken = row.candidate %}
+												{% set quick_view_primary_label = "Selected" %}
+												{% set quick_view_compare_label = "Potential" %}
+												{% include 'partials/chicken_quick_view.html' %}
 											</td>
 											<td>{{ row.candidate.ip if row.candidate.ip is not none else "" }}</td>
 											<td>{{ row.ultimate_build_display or "" }}</td>
@@ -1234,39 +1205,6 @@
 														</form>
 													</span>
 												{% endif %}
-											</td>
-										</tr>
-										<tr id="ultimate-details-{{ row.candidate.token_id }}" class="details-row hidden">
-											<td colspan="9">
-												<div class="details-card">
-													<h3 class="details-card-title">Chicken {{ row.candidate.token_id }} Details</h3>
-													<div class="selected-chicken-group-box">
-													<div class="details-section-title">Traits:</div>
-														<div class="stats-grid">
-															<div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
-															<div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
-															<div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
-															<div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
-															<div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
-															<div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
-															<div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
-															<div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
-														</div>
-													</div>
-													<div class="selected-chicken-group-box">
-														<div class="details-section-title">Innate Stats:</div>
-														<div class="stats-grid">
-															<div><strong>IP:</strong> {{ row.candidate.ip or "" }}</div>
-															<div><strong>Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
-															<div><strong>Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
-															<div><strong>Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
-															<div><strong>Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
-															<div><strong>Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
-															<div><strong>Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
-															<div><strong>Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
-														</div>
-													</div>
-												</div>
 											</td>
 										</tr>
 										{% endfor %}
@@ -1375,7 +1313,7 @@
                                     </button>
                                 </form>
 
-                                <div class="multi-match-images-row">
+                                <div class="multi-match-images-row" data-quick-view-source tabindex="0">
                                     <img
                                         src="{{ row.left.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.left.token_id ~ '.png') }}"
                                         class="multi-match-image face-right"
@@ -1387,6 +1325,12 @@
                                         class="multi-match-image"
                                         alt="Chicken {{ row.right.label }}"
                                     >
+                                    {% set quick_view_chicken = row.left %}
+                                    {% set quick_view_compare_chicken = row.right %}
+                                    {% set quick_view_primary_label = "Left" %}
+                                    {% set quick_view_compare_label = "Right" %}
+                                    {% set quick_view_action_note = false %}
+                                    {% include 'partials/chicken_quick_view.html' %}
                                 </div>
                             </div>
                         </div>
@@ -1504,7 +1448,7 @@
                             <button type="submit" class="planner-add-btn planner-add-btn-center" title="Add to breeding planner">+</button>
                         </form>
 
-                        <div class="multi-match-images-row">
+                        <div class="multi-match-images-row" data-quick-view-source tabindex="0">
                             <img
                                 src="{{ row.left.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ row.left.token_id ~ '.png') }}"
                                 class="multi-match-image face-right"
@@ -1516,6 +1460,12 @@
                                 class="multi-match-image"
                                 alt="Chicken {{ row.right.token_id }}"
                             >
+                            {% set quick_view_chicken = row.left %}
+                            {% set quick_view_compare_chicken = row.right %}
+                            {% set quick_view_primary_label = "Left" %}
+                            {% set quick_view_compare_label = "Right" %}
+                            {% set quick_view_action_note = false %}
+                            {% include 'partials/chicken_quick_view.html' %}
                         </div>
                     </div>
                 </div>
@@ -1638,27 +1588,28 @@
 					<div class="selected-chicken-group-box">
 						<div class="compare-section-title">Traits</div>
 						<div class="stats-grid">
-							<div><strong>Instinct:</strong> {{ selected_chicken.instinct or "" }}</div>
-							<div><strong>Beak:</strong> {{ selected_chicken.beak or "" }}</div>
-							<div><strong>Comb:</strong> {{ selected_chicken.comb or "" }}</div>
-							<div><strong>Eyes:</strong> {{ selected_chicken.eyes or "" }}</div>
-							<div><strong>Feet:</strong> {{ selected_chicken.feet or "" }}</div>
-							<div><strong>Wings:</strong> {{ selected_chicken.wings or "" }}</div>
-							<div><strong>Tail:</strong> {{ selected_chicken.tail or "" }}</div>
-							<div><strong>Body:</strong> {{ selected_chicken.body or "" }}</div>
+							{% set selected_preview_matched_slots = selected_chicken.ultimate_build_matched_slots or selected_chicken.build_matched_slots or selected_chicken.gene_build_matched_slots or selected_chicken.primary_build_matched_slots or [] %}
+							<div><strong>Instinct:</strong> {{ color.trait_value(selected_chicken, 'instinct', 'instinct', selected_preview_matched_slots) }}</div>
+							<div><strong>Beak:</strong> {{ color.trait_value(selected_chicken, 'beak', 'beak', selected_preview_matched_slots) }}</div>
+							<div><strong>Comb:</strong> {{ color.trait_value(selected_chicken, 'comb', 'comb', selected_preview_matched_slots) }}</div>
+							<div><strong>Eyes:</strong> {{ color.trait_value(selected_chicken, 'eyes', 'eyes', selected_preview_matched_slots) }}</div>
+							<div><strong>Feet:</strong> {{ color.trait_value(selected_chicken, 'feet', 'feet', selected_preview_matched_slots) }}</div>
+							<div><strong>Wings:</strong> {{ color.trait_value(selected_chicken, 'wings', 'wings', selected_preview_matched_slots) }}</div>
+							<div><strong>Tail:</strong> {{ color.trait_value(selected_chicken, 'tail', 'tail', selected_preview_matched_slots) }}</div>
+							<div><strong>Body:</strong> {{ color.trait_value(selected_chicken, 'body', 'body', selected_preview_matched_slots) }}</div>
 						</div>
 					</div>
 					<div class="selected-chicken-group-box">
 						<div class="compare-section-title">Innate Stats</div>
 						<div class="stats-grid">
-							<div><strong>IP:</strong> {{ selected_chicken.ip or "" }}</div>
-							<div><strong>Attack:</strong> {{ selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "" }}</div>
-							<div><strong>Defense:</strong> {{ selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "" }}</div>
-							<div><strong>Speed:</strong> {{ selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "" }}</div>
-							<div><strong>Health:</strong> {{ selected_chicken.innate_health if selected_chicken.innate_health is not none else "" }}</div>
-							<div><strong>Ferocity:</strong> {{ selected_chicken.innate_ferocity if selected_chicken.innate_ferocity is not none and selected_chicken.innate_ferocity != "" else (selected_chicken.innate_attack if selected_chicken.innate_attack is not none else "") }}</div>
-							<div><strong>Cockrage:</strong> {{ selected_chicken.innate_cockrage if selected_chicken.innate_cockrage is not none and selected_chicken.innate_cockrage != "" else (selected_chicken.innate_defense if selected_chicken.innate_defense is not none else "") }}</div>
-							<div><strong>Evasion:</strong> {{ selected_chicken.innate_evasion if selected_chicken.innate_evasion is not none and selected_chicken.innate_evasion != "" else (selected_chicken.innate_speed if selected_chicken.innate_speed is not none else "") }}</div>
+							<div><strong>IP:</strong> {{ color.stat_value(selected_chicken, 'ip') }}</div>
+							<div><strong>Attack:</strong> {{ color.stat_value(selected_chicken, 'innate_attack') }}</div>
+							<div><strong>Defense:</strong> {{ color.stat_value(selected_chicken, 'innate_defense') }}</div>
+							<div><strong>Speed:</strong> {{ color.stat_value(selected_chicken, 'innate_speed') }}</div>
+							<div><strong>Health:</strong> {{ color.stat_value(selected_chicken, 'innate_health') }}</div>
+							<div><strong>Ferocity:</strong> {{ color.stat_value(selected_chicken, 'innate_ferocity', 'innate_attack') }}</div>
+							<div><strong>Cockrage:</strong> {{ color.stat_value(selected_chicken, 'innate_cockrage', 'innate_defense') }}</div>
+							<div><strong>Evasion:</strong> {{ color.stat_value(selected_chicken, 'innate_evasion', 'innate_speed') }}</div>
 						</div>
 					</div>
 					<div class="compare-item-box compare-item-box-right">
@@ -1691,27 +1642,28 @@
 					<div class="selected-chicken-group-box">
 						<div class="compare-section-title">Traits</div>
 						<div class="stats-grid">
-							<div><strong>Instinct:</strong> {{ row.candidate.instinct or "" }}</div>
-							<div><strong>Beak:</strong> {{ row.candidate.beak or "" }}</div>
-							<div><strong>Comb:</strong> {{ row.candidate.comb or "" }}</div>
-							<div><strong>Eyes:</strong> {{ row.candidate.eyes or "" }}</div>
-							<div><strong>Feet:</strong> {{ row.candidate.feet or "" }}</div>
-							<div><strong>Wings:</strong> {{ row.candidate.wings or "" }}</div>
-							<div><strong>Tail:</strong> {{ row.candidate.tail or "" }}</div>
-							<div><strong>Body:</strong> {{ row.candidate.body or "" }}</div>
+							{% set candidate_preview_matched_slots = row.candidate.ultimate_build_matched_slots or row.candidate.build_matched_slots or row.candidate.gene_build_matched_slots or row.candidate.primary_build_matched_slots or [] %}
+							<div><strong>Instinct:</strong> {{ color.trait_value(row.candidate, 'instinct', 'instinct', candidate_preview_matched_slots) }}</div>
+							<div><strong>Beak:</strong> {{ color.trait_value(row.candidate, 'beak', 'beak', candidate_preview_matched_slots) }}</div>
+							<div><strong>Comb:</strong> {{ color.trait_value(row.candidate, 'comb', 'comb', candidate_preview_matched_slots) }}</div>
+							<div><strong>Eyes:</strong> {{ color.trait_value(row.candidate, 'eyes', 'eyes', candidate_preview_matched_slots) }}</div>
+							<div><strong>Feet:</strong> {{ color.trait_value(row.candidate, 'feet', 'feet', candidate_preview_matched_slots) }}</div>
+							<div><strong>Wings:</strong> {{ color.trait_value(row.candidate, 'wings', 'wings', candidate_preview_matched_slots) }}</div>
+							<div><strong>Tail:</strong> {{ color.trait_value(row.candidate, 'tail', 'tail', candidate_preview_matched_slots) }}</div>
+							<div><strong>Body:</strong> {{ color.trait_value(row.candidate, 'body', 'body', candidate_preview_matched_slots) }}</div>
 						</div>
 					</div>
 					<div class="selected-chicken-group-box">
 						<div class="compare-section-title">Innate Stats</div>
 						<div class="stats-grid">
-							<div><strong>IP:</strong> {{ row.candidate.ip or "" }}</div>
-							<div><strong>Attack:</strong> {{ row.candidate.innate_attack if row.candidate.innate_attack is not none else "" }}</div>
-							<div><strong>Defense:</strong> {{ row.candidate.innate_defense if row.candidate.innate_defense is not none else "" }}</div>
-							<div><strong>Speed:</strong> {{ row.candidate.innate_speed if row.candidate.innate_speed is not none else "" }}</div>
-							<div><strong>Health:</strong> {{ row.candidate.innate_health if row.candidate.innate_health is not none else "" }}</div>
-							<div><strong>Ferocity:</strong> {{ row.candidate.innate_ferocity if row.candidate.innate_ferocity is not none and row.candidate.innate_ferocity != "" else (row.candidate.innate_attack if row.candidate.innate_attack is not none else "") }}</div>
-							<div><strong>Cockrage:</strong> {{ row.candidate.innate_cockrage if row.candidate.innate_cockrage is not none and row.candidate.innate_cockrage != "" else (row.candidate.innate_defense if row.candidate.innate_defense is not none else "") }}</div>
-							<div><strong>Evasion:</strong> {{ row.candidate.innate_evasion if row.candidate.innate_evasion is not none and row.candidate.innate_evasion != "" else (row.candidate.innate_speed if row.candidate.innate_speed is not none else "") }}</div>
+							<div><strong>IP:</strong> {{ color.stat_value(row.candidate, 'ip') }}</div>
+							<div><strong>Attack:</strong> {{ color.stat_value(row.candidate, 'innate_attack') }}</div>
+							<div><strong>Defense:</strong> {{ color.stat_value(row.candidate, 'innate_defense') }}</div>
+							<div><strong>Speed:</strong> {{ color.stat_value(row.candidate, 'innate_speed') }}</div>
+							<div><strong>Health:</strong> {{ color.stat_value(row.candidate, 'innate_health') }}</div>
+							<div><strong>Ferocity:</strong> {{ color.stat_value(row.candidate, 'innate_ferocity', 'innate_attack') }}</div>
+							<div><strong>Cockrage:</strong> {{ color.stat_value(row.candidate, 'innate_cockrage', 'innate_defense') }}</div>
+							<div><strong>Evasion:</strong> {{ color.stat_value(row.candidate, 'innate_evasion', 'innate_speed') }}</div>
 						</div>
 					</div>
 					<div class="compare-item-box">

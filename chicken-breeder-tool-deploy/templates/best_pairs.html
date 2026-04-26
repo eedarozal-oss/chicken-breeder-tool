@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Best Pair Selection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="best-pairs-page">
+    <div class="best-pairs-page-bg" aria-hidden="true"></div>
+    <div class="container best-pairs-container">
+        <div class="topbar best-pairs-topbar">
+            <div class="page-header">
+                <div class="exclusive-page-kicker-row">
+					<img
+                        src="{{ url_for('static', filename='images/exclusive.png') }}"
+                        alt="Exclusive View"
+                        class="exclusive-view-badge exclusive-view-badge-kicker"
+                    >
+                    <span class="best-pairs-kicker exclusive-page-kicker">Exclusive Mode</span>
+                </div>
+                <h1>Best Pair Selection</h1>
+                <p class="page-description">Curated top pair candidates across Ultimate, Gene, and IP from your current wallet.</p>
+            </div>
+            <div class="topbar-actions-area">
+                <div class="topbar-actions topbar-actions-wrap">
+                    <a class="link-btn secondary-link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Home</a>
+                </div>
+            </div>
+        </div>
+
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+        {% if message %}
+            <div class="{{ 'success-message' if status == 'success' else 'note' }}">{{ message }}</div>
+        {% endif %}
+
+        <section class="best-pairs-hero">
+            <div class="best-pairs-hero-copy">
+                <h2>Top candidates, no manual browsing.</h2>
+                <p>This board only shows Excellent and Strong matches. Temporary selections reset unless you add them to the Breeding Planner.</p>
+            </div>
+            <div class="best-pairs-counts" aria-label="Per mode selected count">
+                <div><span>Total</span><strong data-best-pair-total>{{ pairs|length }}/10</strong></div>
+                <div><span>Ultimate</span><strong data-best-pair-count="ultimate">{{ mode_counts.ultimate or 0 }}</strong></div>
+                <div><span>Gene</span><strong data-best-pair-count="gene">{{ mode_counts.gene or 0 }}</strong></div>
+                <div><span>IP</span><strong data-best-pair-count="ip">{{ mode_counts.ip or 0 }}</strong></div>
+            </div>
+        </section>
+
+        <section class="best-pairs-controls">
+            <form method="GET" action="{{ url_for('best_pairs_page') }}" class="best-pairs-generate-form">
+                <input type="hidden" name="wallet_address" value="{{ wallet }}">
+                <input type="hidden" name="generate" value="1">
+                <label for="cost_preference">Cost Preference</label>
+                <select id="cost_preference" name="cost_preference">
+                    {% for option in cost_preference_options %}
+                        <option value="{{ option.value }}" {% if option.value == cost_preference %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Generate Best Pairs</button>
+                <a class="link-btn secondary-link-btn" href="{{ url_for('best_pairs_page', wallet_address=wallet) }}">Clear Results</a>
+            </form>
+
+            <form method="POST" action="{{ url_for('add_all_best_pairs_to_planner') }}" id="best-pairs-add-all-form" class="best-pairs-add-all-form">
+                <input type="hidden" name="wallet_address" value="{{ wallet }}">
+                <input type="hidden" name="pair_count" value="{{ pairs|length }}" data-pair-count-input>
+                {% for row in pairs %}
+                    <div class="best-pair-hidden-group" data-hidden-result-id="{{ row.result_id }}">
+                        <input type="hidden" name="pairs[{{ loop.index0 }}][mode]" value="{{ row.mode }}">
+                        <input type="hidden" name="pairs[{{ loop.index0 }}][build_type]" value="{{ row.build_type or row.selected_build or '' }}">
+                        <input type="hidden" name="pairs[{{ loop.index0 }}][left_token_id]" value="{{ row.left.token_id }}">
+                        <input type="hidden" name="pairs[{{ loop.index0 }}][right_token_id]" value="{{ row.right.token_id }}">
+                        <input type="hidden" name="pairs[{{ loop.index0 }}][left_item_name]" value="{{ row.left_item.name if row.left_item else '' }}">
+                        <input type="hidden" name="pairs[{{ loop.index0 }}][right_item_name]" value="{{ row.right_item.name if row.right_item else '' }}">
+                        <input type="hidden" name="pairs[{{ loop.index0 }}][pair_quality]" value="{{ row.pair_quality }}">
+                    </div>
+                {% endfor %}
+                <button type="submit" class="best-pairs-add-all-btn" {% if not pairs %}disabled{% endif %}>Add All to Planner</button>
+            </form>
+        </section>
+
+        {% if generated and not pairs and not error %}
+            <section class="best-pairs-empty">
+                <h2>No top pairs found</h2>
+                <p>No Excellent or Strong pairs were available for the current wallet and cost preference.</p>
+            </section>
+        {% endif %}
+
+        {% if pairs %}
+            <section class="best-pairs-grid" aria-label="Best pair candidates">
+                {% for row in pairs %}
+                    <article class="best-pair-card best-pair-card-{{ row.mode }}" data-best-pair-card data-result-id="{{ row.result_id }}" data-mode="{{ row.mode }}">
+                        <div class="best-pair-card-top">
+                            <span class="best-pair-mode">{{ row.mode_label }}</span>
+                            <img
+                                src="{{ url_for('static', filename='images/' ~ ('excellent.png' if row.quality_key == 'excellent' else 'strong.png')) }}"
+                                alt="{{ row.pair_quality }}"
+                                class="best-pair-quality"
+                            >
+                        </div>
+
+                        <div class="best-pair-chickens">
+                            {% for side in [row.left_compact, row.right_compact] %}
+                                <div class="best-pair-chicken{% if loop.first %} best-pair-chicken-left{% endif %}">
+                                    <img
+                                        src="{{ side.image or ('https://chicken-api-ivory.vercel.app/api/image/' ~ side.token_id ~ '.png') }}"
+                                        alt="Chicken {{ side.token_id }}"
+                                        class="best-pair-chicken-image"
+                                    >
+                                    <div class="best-pair-chicken-id">#{{ side.token_id }}</div>
+                                    <div class="best-pair-chicken-breed">Breed {{ side.breed_count if side.breed_count is not none else '' }}</div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="best-pair-detail-panel">
+                            <div class="best-pair-detail-compare">
+                                {% for side_label, chicken, compare_chicken in [('Left', row.left, row.right), ('Right', row.right, row.left)] %}
+                                    {% set quick_view = build_chicken_quick_view(chicken, compare_chicken) %}
+                                    <article class="chicken-quick-card best-pair-quick-card" aria-label="Chicken {{ quick_view.token_id }} details">
+                                        <div class="best-pair-build-head">
+                                            <strong>{{ quick_view.build_display or "No build" }}</strong>
+                                            <span>Build Count: {{ quick_view.build_count_display or "N/A" }}</span>
+                                        </div>
+                                        <div class="chicken-quick-section">
+                                            <div class="chicken-quick-section-title">Stats</div>
+                                            <div class="chicken-quick-grid">
+                                                {% for item in quick_view.stats %}
+                                                    <div class="chicken-quick-field">
+                                                        <span>{{ item.label }}</span>
+                                                        <strong class="chicken-quick-stat-value{% if item.tone %} chicken-quick-stat-{{ item.tone }}{% endif %}">{{ item.value or "N/A" }}</strong>
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        <div class="chicken-quick-section">
+                                            <div class="chicken-quick-section-title">Traits</div>
+                                            <div class="chicken-quick-grid">
+                                                {% for item in quick_view.traits %}
+                                                    <div class="chicken-quick-field{% if item.is_match %} chicken-quick-field-match{% endif %}">
+                                                        <span>{{ item.label }}</span>
+                                                        <strong>
+                                                            {{ item.value or "N/A" }}
+                                                            {% if item.label == "Instinct" and item.value %}
+                                                                <span class="chicken-quick-instinct-mark instinct-align instinct-align-{{ 'match' if quick_view.instinct_fit else 'miss' }}">({{ '+' if quick_view.instinct_fit else '-' }})</span>
+                                                            {% endif %}
+                                                        </strong>
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    </article>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="best-pair-items-panel">
+                            <div class="best-pair-detail-title">Item Recommendations</div>
+                            <div class="best-pair-item-grid">
+                                <div class="best-pair-item-card">
+                                    <span>Left #{{ row.left.token_id }}</span>
+                                    {% if row.left_item %}
+                                        <div class="best-pair-item-body">
+                                            <img src="{{ get_item_image_url(row.left_item.name) }}" alt="{{ row.left_item.name }}">
+                                            <div>
+                                                <strong>{{ row.left_item.name }}</strong>
+                                                {% if row.left_item.reason %}
+                                                    <p>{{ row.left_item.reason }}</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <strong>No item</strong>
+                                    {% endif %}
+                                </div>
+                                <div class="best-pair-item-card">
+                                    <span>Right #{{ row.right.token_id }}</span>
+                                    {% if row.right_item %}
+                                        <div class="best-pair-item-body">
+                                            <img src="{{ get_item_image_url(row.right_item.name) }}" alt="{{ row.right_item.name }}">
+                                            <div>
+                                                <strong>{{ row.right_item.name }}</strong>
+                                                {% if row.right_item.reason %}
+                                                    <p>{{ row.right_item.reason }}</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <strong>No item</strong>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="best-pair-card-actions">
+                            <form method="POST" action="{{ url_for('add_to_breeding_planner') }}" data-best-pair-add-form>
+                                <input type="hidden" name="wallet_address" value="{{ wallet }}">
+                                <input type="hidden" name="mode" value="{{ row.mode }}">
+                                <input type="hidden" name="return_endpoint" value="best_pairs_page">
+                                <input type="hidden" name="build_type" value="{{ row.build_type or row.selected_build or '' }}">
+                                <input type="hidden" name="left_token_id" value="{{ row.left.token_id }}">
+                                <input type="hidden" name="right_token_id" value="{{ row.right.token_id }}">
+                                <input type="hidden" name="left_item_name" value="{{ row.left_item.name if row.left_item else '' }}">
+                                <input type="hidden" name="right_item_name" value="{{ row.right_item.name if row.right_item else '' }}">
+                                <input type="hidden" name="pair_quality" value="{{ row.pair_quality }}">
+                                <button type="submit" class="best-pair-add-btn planner-add-btn">Add to Planner</button>
+                            </form>
+                            <button type="button" class="best-pair-remove-btn" data-remove-best-pair>Remove</button>
+                        </div>
+                    </article>
+                {% endfor %}
+            </section>
+        {% elif not generated %}
+            <section class="best-pairs-start">
+                <h2>Ready when you are.</h2>
+                <p>Choose a cost preference and generate a fresh temporary set from the current available wallet pool.</p>
+            </section>
+        {% endif %}
+
+        {% include 'partials/best_pairs_planner.html' %}
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            function openBestPairPlannerModal() {
+                const plannerModal = document.getElementById("planner-modal");
+                if (!plannerModal) return;
+                plannerModal.classList.remove("hidden");
+                document.body.classList.add("modal-open");
+            }
+
+            function closeBestPairPlannerModal() {
+                const plannerModal = document.getElementById("planner-modal");
+                if (!plannerModal) return;
+                plannerModal.classList.add("hidden");
+                document.body.classList.remove("modal-open");
+            }
+
+            async function refreshBestPairPlannerFragment() {
+                const fragment = document.getElementById("best-pairs-planner-fragment");
+                if (!fragment || !fragment.dataset.plannerFragmentUrl) return;
+
+                const response = await fetch(fragment.dataset.plannerFragmentUrl, {
+                    method: "GET",
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                    credentials: "same-origin"
+                });
+                if (!response.ok) return;
+
+                const html = await response.text();
+                const template = document.createElement("template");
+                template.innerHTML = html.trim();
+                const nextFragment = template.content.firstElementChild;
+                if (!nextFragment) return;
+
+                fragment.replaceWith(nextFragment);
+                document.dispatchEvent(new CustomEvent("planner-fragment-refreshed"));
+            }
+
+            function syncBestPairHiddenGroups() {
+                const groups = Array.from(document.querySelectorAll(".best-pair-hidden-group"));
+                groups.forEach(function (group, index) {
+                    group.querySelectorAll("input[name^='pairs[']").forEach(function (input) {
+                        input.name = input.name.replace(/^pairs\[\d+\]/, "pairs[" + index + "]");
+                    });
+                });
+                return groups.length;
+            }
+
+            function refreshBestPairState() {
+                const cards = Array.from(document.querySelectorAll("[data-best-pair-card]"));
+                const countInput = document.querySelector("[data-pair-count-input]");
+                const addAllButton = document.querySelector(".best-pairs-add-all-btn");
+                const counts = { ultimate: 0, gene: 0, ip: 0 };
+                const remainingHiddenPairs = syncBestPairHiddenGroups();
+
+                cards.forEach(function (card) {
+                    const mode = card.getAttribute("data-mode");
+                    if (counts[mode] !== undefined) counts[mode] += 1;
+                });
+
+                Object.keys(counts).forEach(function (mode) {
+                    const target = document.querySelector('[data-best-pair-count="' + mode + '"]');
+                    if (target) target.textContent = counts[mode];
+                });
+
+                const totalTarget = document.querySelector("[data-best-pair-total]");
+                if (totalTarget) totalTarget.textContent = cards.length + "/10";
+                if (countInput) countInput.value = remainingHiddenPairs;
+                if (addAllButton) addAllButton.disabled = remainingHiddenPairs === 0;
+            }
+
+            document.querySelectorAll("[data-remove-best-pair]").forEach(function (button) {
+                button.addEventListener("click", function () {
+                    const card = button.closest("[data-best-pair-card]");
+                    if (!card) return;
+                    const resultId = card.getAttribute("data-result-id");
+                    const hiddenGroup = document.querySelector('[data-hidden-result-id="' + resultId + '"]');
+                    if (hiddenGroup) hiddenGroup.remove();
+                    card.remove();
+                    refreshBestPairState();
+                });
+            });
+
+            document.addEventListener("best-pair-planner-added", function (event) {
+                const form = event.detail && event.detail.form;
+                const card = form ? form.closest("[data-best-pair-card]") : null;
+                if (!card) return;
+
+                const resultId = card.getAttribute("data-result-id");
+                const hiddenGroup = document.querySelector('[data-hidden-result-id="' + resultId + '"]');
+                const removeButton = card.querySelector("[data-remove-best-pair]");
+                const addButton = form.querySelector(".best-pair-add-btn");
+
+                if (hiddenGroup) hiddenGroup.remove();
+                if (removeButton) {
+                    removeButton.disabled = true;
+                    removeButton.classList.add("is-disabled", "is-added");
+                    removeButton.setAttribute("aria-disabled", "true");
+                    removeButton.setAttribute("title", "Already added to breeding planner");
+                }
+                if (addButton) {
+                    addButton.textContent = "Added";
+                }
+                card.classList.add("is-planner-added");
+                refreshBestPairState();
+                refreshBestPairPlannerFragment();
+            });
+
+            document.addEventListener("click", function (event) {
+                const openButton = event.target.closest(".best-pairs-page .open-planner-btn");
+                if (openButton) {
+                    event.preventDefault();
+                    openBestPairPlannerModal();
+                    return;
+                }
+
+                const closeButton = event.target.closest(".best-pairs-page [data-close-planner]");
+                if (closeButton) {
+                    event.preventDefault();
+                    closeBestPairPlannerModal();
+                }
+            });
+
+            refreshBestPairState();
+        });
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

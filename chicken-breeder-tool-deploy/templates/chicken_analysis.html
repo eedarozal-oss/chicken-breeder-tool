@@ -6,22 +6,26 @@
     <title>Single Chicken Analysis</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="analysis-page">
+    <div class="analysis-page-bg" aria-hidden="true"></div>
     <div class="container breeding-page">
-        <div class="topbar">
+        <div class="topbar analysis-topbar">
             <div class="page-header">
-                <div class="exclusive-page-title-row">
-                    <img
+                <div class="exclusive-page-kicker-row">
+					<img
                         src="{{ url_for('static', filename='images/exclusive.png') }}"
                         alt="Exclusive View"
-                        class="exclusive-view-badge exclusive-view-badge-page"
+                        class="exclusive-view-badge exclusive-view-badge-kicker"
                     >
-                    <h1>Single Chicken Analysis</h1>
+                    <span class="best-pairs-kicker exclusive-page-kicker">Exclusive Mode</span>
                 </div>
+                <h1>Single Chicken Analysis</h1>
                 <p class="page-description">Exclusive analysis for any chicken ID against your current wallet.</p>
             </div>
-            <div class="topbar-actions">
-                <a class="link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Home</a>
+            <div class="topbar-actions-area">
+                <div class="topbar-actions topbar-actions-wrap">
+                    <a class="link-btn secondary-link-btn" href="{{ url_for('landing_page', wallet_address=wallet) }}">Back to Home</a>
+                </div>
             </div>
         </div>
 

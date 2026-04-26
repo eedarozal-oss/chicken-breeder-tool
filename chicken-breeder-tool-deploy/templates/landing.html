@@ -217,8 +217,34 @@
 		{% if donor_access %}
 		<section class="donor-analysis-section">
 			<div class="donor-analysis-section-label">Exclusive View</div>
+			<div class="donor-analysis-feature-grid">
+			<a
+				class="donor-analysis-feature donor-analysis-feature-compact"
+				style="background-image: linear-gradient(180deg, rgba(8, 15, 24, 0.04) 0%, rgba(8, 15, 24, 0.26) 38%, rgba(8, 15, 24, 0.88) 100%), url('{{ url_for('static', filename='images/bestpair.png') }}');"
+				href="{{ url_for('best_pairs_page', wallet_address=wallet) }}"
+				aria-label="Open Best Pair Selection"
+			>
+				<img
+					src="{{ url_for('static', filename='images/exclusive.png') }}"
+					alt="Exclusive View"
+					class="exclusive-view-badge exclusive-view-badge-landing"
+				>
+				<img
+					src="{{ url_for('static', filename='images/bestpair.png') }}"
+					alt=""
+					class="donor-analysis-feature-image"
+					aria-hidden="true"
+				>
+				<div class="donor-analysis-feature-shade"></div>
+				<div class="donor-analysis-feature-content">
+					<h2>Best Pair Selection</h2>
+					<p>Find top pair candidates across Ultimate, Gene, and IP from your wallet.</p>
+					<span class="donor-analysis-start">Open curated board</span>
+				</div>
+			</a>
 			<a
 				class="donor-analysis-feature"
+				style="background-image: linear-gradient(180deg, rgba(8, 15, 24, 0.04) 0%, rgba(8, 15, 24, 0.26) 38%, rgba(8, 15, 24, 0.88) 100%), url('{{ url_for('static', filename='images/singleanalysis.png') }}');"
 				href="{{ url_for('chicken_analysis_page', wallet_address=wallet) }}"
 				aria-label="Start Single Chicken Analysis"
 			>
@@ -228,7 +254,7 @@
 					class="exclusive-view-badge exclusive-view-badge-landing"
 				>
 				<img
-					src="{{ url_for('static', filename='images/chicken_analysis.png') }}"
+					src="{{ url_for('static', filename='images/singleanalysis.png') }}"
 					alt=""
 					class="donor-analysis-feature-image"
 					aria-hidden="true"
@@ -236,10 +262,11 @@
 				<div class="donor-analysis-feature-shade"></div>
 				<div class="donor-analysis-feature-content">
 					<h2>Single Chicken Analysis</h2>
-					<p>Analyze any chicken ID against your current wallet for build fit, instinct alignment, recommended partners, and offspring.</p>
+					<p>Get a full view of any chicken’s IP, build, instinct, best matches by mode, and breeding history.</p>
 					<span class="donor-analysis-start">Click to start analysis</span>
 				</div>
 			</a>
+			</div>
 		</section>
 		{% endif %}
 
@@ -307,7 +334,7 @@
 									</span>
 									<span class="landing-feature-toggle">+</span>
 								</summary>
-								<p>Some views and sections marked with the exclusive badge are available only to users who support Apex Breeder, and are not included in whitelisted access.</p>
+								<p>Some views, sections, and features are not included in whitelisted access and are available only to users who support Apex Breeder. Supporting users can identify them by the Exclusive badge shown in the top-left corner.</p>
 							</details>
 						</div>
 				</div>

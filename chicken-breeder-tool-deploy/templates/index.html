@@ -14,10 +14,16 @@
                 alt="Apex Breeder welcome screen"
                 class="welcome-hero-image"
             >
+            <div class="welcome-effects" aria-hidden="true">
+                <span class="welcome-aura welcome-aura-left"></span>
+                <span class="welcome-aura welcome-aura-right"></span>
+                <span class="welcome-egg-glow"></span>
+                <span class="welcome-egg-beam"></span>
+            </div>
 
 			<form method="POST" class="welcome-wallet-form" id="wallet-load-form">
 				<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-				<div class="welcome-version-badge">Version 1.6</div>
+				<div class="welcome-version-badge">Version 1.7</div>
 				<div class="wallet-input-shell">
 					<input
 						type="text"

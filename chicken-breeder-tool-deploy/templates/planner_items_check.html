@@ -420,7 +420,9 @@
 
 	<div class="top-actions">
 	    <div class="top-actions-left">
-			{% if source_page == "gene" %}
+			{% if source_page == "best_pairs" %}
+				<a class="action-button" href="{{ url_for('best_pairs_page', wallet_address=wallet) }}">🔙 to Best Pair</a>
+			{% elif source_page == "gene" %}
 				<a class="action-button" href="{{ url_for('match_gene_page', wallet_address=wallet, skip_auto_open=1) }}">🔙 to Gene</a>
 			{% elif source_page == "ultimate" %}
 				<a class="action-button" href="{{ url_for('match_ultimate_page', wallet_address=wallet, skip_auto_open=1) }}">🔙 to Ultimate</a>
@@ -664,7 +666,9 @@
 
 			<div class="top-actions" style="margin-top:18px;">
 				<div class="top-actions-left">
-					{% if source_page == "gene" %}
+					{% if source_page == "best_pairs" %}
+						<a class="action-button" href="{{ url_for('best_pairs_page', wallet_address=wallet, open_planner=1) }}">Back to Planner</a>
+					{% elif source_page == "gene" %}
 						<a class="action-button" href="{{ url_for('match_gene_page', wallet_address=wallet, skip_auto_open=1, open_planner=1) }}">Back to Planner</a>
 					{% elif source_page == "ultimate" %}
 						<a class="action-button" href="{{ url_for('match_ultimate_page', wallet_address=wallet, skip_auto_open=1, open_planner=1) }}">Back to Planner</a>
