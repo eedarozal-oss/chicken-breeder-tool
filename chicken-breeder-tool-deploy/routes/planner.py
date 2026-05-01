@@ -73,6 +73,10 @@ def register_planner_routes(app, deps):
         wallet = request.form.get("wallet_address", "").strip().lower()
         return_endpoint = str(request.form.get("return_endpoint") or "match_ip_page").strip()
         pair_key = str(request.form.get("pair_key") or "").strip()
+
+        if not deps["require_authorized_wallet"](wallet):
+            return redirect(url_for("index"))
+
         queue_rows = [
             row for row in deps["get_breeding_planner_queue"](wallet)
             if str(row.get("pair_key") or "") != pair_key
