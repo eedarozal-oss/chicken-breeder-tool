@@ -1,7 +1,8 @@
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from services.db.connection import DB_PATH
+import json
+from services.db.connection import DB_PATH, get_connection
 from flask import Flask, render_template, request, redirect, url_for, session
 import os
 import hmac
@@ -203,6 +204,7 @@ CSRF_SESSION_KEY = "_csrf_token"
 CSRF_COOKIE_NAME = "apex_csrf_token"
 CSRF_HEADER_NAME = "X-CSRF-Token"
 CSRF_FORM_FIELD = "csrf_token"
+PLANNER_SESSION_ID_KEY = "breeding_planner_session_id"
 OWNER_ADMIN_MAX_ATTEMPTS = 5
 OWNER_ADMIN_LOCK_MINUTES = 15
 
@@ -840,11 +842,90 @@ def get_breeding_planner_session_key(wallet):
     wallet = (wallet or "").strip().lower()
     return f"breeding_planner_queue:{wallet}"
 
+
+def get_breeding_planner_session_id():
+    session_id = str(session.get(PLANNER_SESSION_ID_KEY) or "").strip()
+    if not session_id:
+        session_id = secrets.token_urlsafe(24)
+        session[PLANNER_SESSION_ID_KEY] = session_id
+        session.modified = True
+    return session_id
+
+
+def load_breeding_planner_queue_from_db(wallet):
+    wallet = (wallet or "").strip().lower()
+    if not wallet:
+        return None
+
+    session_id = get_breeding_planner_session_id()
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT queue_json
+            FROM breeding_planner_queues
+            WHERE session_id = ? AND wallet_address = ?
+            """,
+            (session_id, wallet),
+        ).fetchone()
+
+    if not row:
+        return None
+
+    try:
+        queue = json.loads(row["queue_json"] or "[]")
+    except Exception:
+        return []
+
+    return queue if isinstance(queue, list) else []
+
+
+def persist_breeding_planner_queue_to_db(wallet, queue_rows):
+    wallet = (wallet or "").strip().lower()
+    if not wallet:
+        return
+
+    session_id = get_breeding_planner_session_id()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO breeding_planner_queues (session_id, wallet_address, queue_json, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(session_id, wallet_address)
+            DO UPDATE SET
+                queue_json = excluded.queue_json,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (session_id, wallet, json.dumps(list(queue_rows or []), separators=(",", ":"))),
+        )
+        conn.commit()
+
+
+def delete_breeding_planner_queue_from_db(wallet):
+    wallet = (wallet or "").strip().lower()
+    if not wallet:
+        return
+
+    session_id = str(session.get(PLANNER_SESSION_ID_KEY) or "").strip()
+    if not session_id:
+        return
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            DELETE FROM breeding_planner_queues
+            WHERE session_id = ? AND wallet_address = ?
+            """,
+            (session_id, wallet),
+        )
+        conn.commit()
+
+
 def clear_breeding_planner_for_wallet(wallet):
     wallet = (wallet or "").strip().lower()
     if not wallet:
         return
 
+    delete_breeding_planner_queue_from_db(wallet)
     session.pop(get_breeding_planner_session_key(wallet), None)
     session.modified = True
 
@@ -856,7 +937,16 @@ def build_planner_pair_key(left_token_id, right_token_id):
 
 
 def get_breeding_planner_queue(wallet):
-    queue = session.get(get_breeding_planner_session_key(wallet)) or []
+    wallet = (wallet or "").strip().lower()
+    queue = load_breeding_planner_queue_from_db(wallet)
+    if queue is None:
+        legacy_key = get_breeding_planner_session_key(wallet)
+        queue = session.get(legacy_key) or []
+        if isinstance(queue, list) and queue:
+            persist_breeding_planner_queue_to_db(wallet, queue)
+            session.pop(legacy_key, None)
+            session.modified = True
+
     if not isinstance(queue, list):
         return []
 
@@ -893,7 +983,9 @@ def get_breeding_planner_queue(wallet):
 
 
 def save_breeding_planner_queue(wallet, queue_rows):
-    session[get_breeding_planner_session_key(wallet)] = queue_rows
+    wallet = (wallet or "").strip().lower()
+    persist_breeding_planner_queue_to_db(wallet, queue_rows)
+    session.pop(get_breeding_planner_session_key(wallet), None)
     session.modified = True
 
 
