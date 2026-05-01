@@ -317,6 +317,18 @@ def init_db():
 
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS breeding_planner_queues (
+                session_id TEXT NOT NULL,
+                wallet_address TEXT NOT NULL,
+                queue_json TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (session_id, wallet_address)
+            )
+            """
+        )
+
+        conn.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_chicken_family_root_items_wallet_token
             ON chicken_family_root_items(wallet_address, token_id)
             """
@@ -326,6 +338,13 @@ def init_db():
             """
             CREATE INDEX IF NOT EXISTS idx_chicken_family_root_items_wallet_root
             ON chicken_family_root_items(wallet_address, root_token_id)
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_breeding_planner_queues_updated
+            ON breeding_planner_queues(updated_at)
             """
         )
 
