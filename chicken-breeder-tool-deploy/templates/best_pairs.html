@@ -64,6 +64,7 @@
             </form>
 
             <form method="POST" action="{{ url_for('add_all_best_pairs_to_planner') }}" id="best-pairs-add-all-form" class="best-pairs-add-all-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="wallet_address" value="{{ wallet }}">
                 <input type="hidden" name="pair_count" value="{{ pairs|length }}" data-pair-count-input>
                 {% for row in pairs %}
@@ -196,6 +197,7 @@
 
                         <div class="best-pair-card-actions">
                             <form method="POST" action="{{ url_for('add_to_breeding_planner') }}" data-best-pair-add-form>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="wallet_address" value="{{ wallet }}">
                                 <input type="hidden" name="mode" value="{{ row.mode }}">
                                 <input type="hidden" name="return_endpoint" value="best_pairs_page">

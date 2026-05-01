@@ -1305,6 +1305,7 @@
                         <div class="multi-match-center">
                             <div class="multi-match-center-stack planner-center-stack">
                                 <form method="POST" action="{{ url_for('remove_from_breeding_planner') }}" class="planner-center-remove-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="wallet_address" value="{{ wallet }}">
                                     <input type="hidden" name="pair_key" value="{{ row.pair_key }}">
                                     <input type="hidden" name="return_endpoint" value="match_ultimate_page">
@@ -1435,6 +1436,7 @@
                 <div class="multi-match-center">
                     <div class="multi-match-center-stack">
                         <form method="POST" action="{{ url_for('add_to_breeding_planner') }}" class="multi-match-center-add-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <input type="hidden" name="wallet_address" value="{{ wallet }}">
                             <input type="hidden" name="mode" value="ultimate">
                             <input type="hidden" name="return_endpoint" value="match_ultimate_page">
@@ -1507,6 +1509,7 @@
 					</div>
 					<div class="compare-header-actions">
 						<form method="POST" action="{{ url_for('add_to_breeding_planner') }}" id="compare-add-form" class="compare-add-form">
+							<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 							<input type="hidden" name="wallet_address" value="{{ wallet }}">
 							<input type="hidden" name="mode" value="ultimate">
 							<input type="hidden" name="return_endpoint" value="match_ultimate_page">
