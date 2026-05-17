@@ -33,6 +33,7 @@ def register_match_routes(app, deps):
     filter_out_planner_tokens = deps["filter_out_planner_tokens"]
     find_potential_matches = deps["find_potential_matches"]
     get_best_available_gene_build_info = deps["get_best_available_gene_build_info"]
+    get_chicken_build_key = deps["get_chicken_build_key"]
     get_chickens_by_wallet = deps["get_chickens_by_wallet"]
     get_effective_ip_stat = deps["get_effective_ip_stat"]
     get_featured_market_feed = deps["get_featured_market_feed"]
@@ -353,10 +354,10 @@ def register_match_routes(app, deps):
                     for source in breedable_chickens:
                         candidate_pool = [row for row in breedable_chickens if str(row["token_id"]) != str(source["token_id"])]
                         if auto_match_source == "available" and auto_match_mode == "single" and popup_same_build:
-                            source_build = str(source.get("build_type") or source.get("gene_build_key") or source.get("primary_build") or "").strip().lower()
+                            source_build = get_chicken_build_key(source)
                             candidate_pool = [
                                 row for row in candidate_pool
-                                if source_build and str(row.get("build_type") or row.get("gene_build_key") or row.get("primary_build") or "").strip().lower() == source_build
+                                if source_build and get_chicken_build_key(row) == source_build
                             ]
                         if effective_ip_diff is not None:
                             source_ip = safe_int(source.get("ip"))
@@ -398,10 +399,10 @@ def register_match_routes(app, deps):
                     candidate_pool = [row for row in breedable_chickens if str(row["token_id"]) != selected_token_id]
                     is_available_single_auto = auto_match and auto_match_source == "available" and auto_match_mode == "single"
                     if is_available_single_auto and popup_same_build:
-                        selected_build = str(selected_chicken.get("build_type") or selected_chicken.get("gene_build_key") or selected_chicken.get("primary_build") or "").strip().lower()
+                        selected_build = get_chicken_build_key(selected_chicken)
                         candidate_pool = [
                             row for row in candidate_pool
-                            if selected_build and str(row.get("build_type") or row.get("gene_build_key") or row.get("primary_build") or "").strip().lower() == selected_build
+                            if selected_build and get_chicken_build_key(row) == selected_build
                         ]
                     preview_ip_diff = popup_ip_diff if is_available_single_auto else ip_diff
                     if preview_ip_diff is not None:
