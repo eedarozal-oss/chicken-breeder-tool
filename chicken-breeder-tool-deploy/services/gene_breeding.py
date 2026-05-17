@@ -203,35 +203,35 @@ def build_prefers_instinct(chicken, build_type):
     )
 
 
-def get_gene_gregor_priority(parent, other_parent):
+def get_gene_gregor_priority(parent, other_parent, build_type=None):
     build_source = str((parent or {}).get("build_source_display") or "").strip().lower()
     if build_source != "primary":
         return ""
 
     parent_count = safe_int((parent or {}).get("primary_build_match_count"), 0) or 0
     other_count = safe_int((other_parent or {}).get("primary_build_match_count"), 0) or 0
-    build_type = str((parent or {}).get("build_type") or "").strip().lower()
+    build_type = str(build_type or (parent or {}).get("build_type") or "").strip().lower()
 
-    if parent_count >= 7:
-        if other_count < 7:
-            return "forced"
+    if parent_count < 6 or parent_count <= other_count:
         return "blocked"
 
     if build_type:
         supplied_slots = get_build_supply_slots(parent, other_parent, build_type)
+        priority_supplied_slots = [
+            slot for slot in supplied_slots
+            if slot in set(get_gene_priority_slots(build_type))
+        ]
         other_eval = evaluate_build(other_parent or {}, build_type)
         other_missing_count = len(other_eval.get("missing_slots", []))
 
         if (
-            parent_count >= 4
-            and parent_count > other_count
-            and other_missing_count > 0
-            and len(supplied_slots) * 2 >= other_missing_count
+            other_missing_count > 0
+            and (
+                len(priority_supplied_slots) >= 2
+                or len(supplied_slots) * 2 >= other_missing_count
+            )
         ):
             return "forced"
-
-    if parent_count >= 4 and parent_count > other_count:
-        return "fallback"
 
     return "blocked"
 
@@ -385,7 +385,7 @@ def recommend_gene_item(parent, other_parent, build_type):
             "reason": "Best when this parent is being valued for recessive build inheritance.",
         }
 
-    gregor_priority = get_gene_gregor_priority(parent, other_parent)
+    gregor_priority = get_gene_gregor_priority(parent, other_parent, build_type)
     if gregor_priority == "forced":
         return {
             "name": "Gregor's Gift",
@@ -437,7 +437,7 @@ def get_gene_item_candidates(parent, other_parent, build_type):
         )
         return candidates
 
-    gregor_priority = get_gene_gregor_priority(parent, other_parent)
+    gregor_priority = get_gene_gregor_priority(parent, other_parent, build_type)
     if gregor_priority == "forced":
         candidates.append(
             {
@@ -567,6 +567,59 @@ def get_gene_pair_completion_from_row(row):
     }
 
 
+def _gene_pair_side_has_high_coverage_exception(side_count, partner_count, total):
+    total = safe_int(total, 0) or 0
+    if total <= 0:
+        return False
+
+    side_count = safe_int(side_count, 0) or 0
+    partner_count = safe_int(partner_count, 0) or 0
+    return side_count >= max(0, total - 1) and partner_count >= total
+
+
+def _resolve_gene_pair_items_for_quality(row, build_type):
+    row = row or {}
+    left_item = row.get("left_item")
+    right_item = row.get("right_item")
+
+    if left_item or right_item:
+        return left_item, right_item
+
+    left = row.get("left") or {}
+    right = row.get("right") or row.get("candidate") or {}
+    if not left or not right or not build_type:
+        return left_item, right_item
+
+    left_candidates = get_gene_item_candidates(left, right, build_type)
+    right_candidates = get_gene_item_candidates(right, left, build_type)
+    return resolve_pair_item_recommendations(left_candidates, right_candidates)
+
+
+def cap_gene_pair_quality_by_item_plan(quality, row, build_type, selected_count, candidate_count, total):
+    if quality not in {"Excellent match", "Strong match"}:
+        return quality
+
+    if not (row or {}).get("left") or not ((row or {}).get("right") or (row or {}).get("candidate")):
+        return quality
+
+    left_item, right_item = _resolve_gene_pair_items_for_quality(row, build_type)
+    left_allowed = bool(left_item) or _gene_pair_side_has_high_coverage_exception(
+        selected_count,
+        candidate_count,
+        total,
+    )
+    right_allowed = bool(right_item) or _gene_pair_side_has_high_coverage_exception(
+        candidate_count,
+        selected_count,
+        total,
+    )
+
+    if left_allowed and right_allowed:
+        return quality
+
+    return "Good match"
+
+
 def build_gene_pair_quality(row):
     row = row or {}
     selected_eval = row.get("selected_eval") or {}
@@ -636,20 +689,48 @@ def build_gene_pair_quality(row):
     pure_fill = added_missing_traits >= 1 and shared_count == 0
 
     if both_complete:
-        return "Excellent match"
+        return cap_gene_pair_quality_by_item_plan(
+            "Excellent match",
+            row,
+            build_type,
+            selected_count,
+            candidate_count,
+            combined_total,
+        )
 
     if both_finish and combined_count >= combined_total and shared_count >= max(3, combined_total - 2):
-        return "Excellent match"
+        return cap_gene_pair_quality_by_item_plan(
+            "Excellent match",
+            row,
+            build_type,
+            selected_count,
+            candidate_count,
+            combined_total,
+        )
 
     if one_complete_one_near and combined_count >= combined_total and shared_count >= max(3, combined_total - 2):
-        return "Excellent match"
+        return cap_gene_pair_quality_by_item_plan(
+            "Excellent match",
+            row,
+            build_type,
+            selected_count,
+            candidate_count,
+            combined_total,
+        )
 
     if (
         combined_count >= max(4, combined_total - 1)
         and shared_count >= max(2, combined_total - 3)
         and (both_finish or added_missing_traits >= 2)
     ):
-        return "Strong match"
+        return cap_gene_pair_quality_by_item_plan(
+            "Strong match",
+            row,
+            build_type,
+            selected_count,
+            candidate_count,
+            combined_total,
+        )
 
     if pure_fill:
         return "Situational"

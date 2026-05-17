@@ -1,5 +1,6 @@
 from services.match_rules import find_potential_matches, get_ip_difference
 from services.gene_build_picker import get_best_available_gene_build_info
+from services.validation_thresholds import EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
 
 MATCH_SETTINGS = {
     "max_generation_gap": 3,
@@ -479,20 +480,20 @@ def get_ip_priority_metrics(selected_chicken, candidate):
 
     selected_priority_resolved = (
         bool(selected_priority_stat)
-        and selected_priority_value < 25
-        and candidate_on_selected_priority >= 25
+        and selected_priority_value < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+        and candidate_on_selected_priority >= EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
     )
 
     candidate_priority_resolved = (
         bool(candidate_priority_stat)
-        and candidate_priority_value < 25
-        and selected_on_candidate_priority >= 25
+        and candidate_priority_value < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+        and selected_on_candidate_priority >= EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
     )
 
     shared_unresolved_weakness = (
         bool(selected_priority_stat)
         and selected_priority_stat == candidate_priority_stat
-        and max(selected_priority_value, candidate_priority_value) < 25
+        and max(selected_priority_value, candidate_priority_value) < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
     )
 
     return {
@@ -509,7 +510,7 @@ def get_ip_priority_metrics(selected_chicken, candidate):
         "shared_unresolved_weakness": shared_unresolved_weakness,
     }
 
-def get_below_threshold_stats(chicken, threshold=25):
+def get_below_threshold_stats(chicken, threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD):
     return [
         stat_name
         for stat_name in IP_STAT_PRIORITY
@@ -517,7 +518,7 @@ def get_below_threshold_stats(chicken, threshold=25):
     ]
 
 
-def count_fixed_below_threshold_stats(source, target, threshold=25):
+def count_fixed_below_threshold_stats(source, target, threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD):
     fixed = []
 
     for stat_name in IP_STAT_PRIORITY:
@@ -530,7 +531,7 @@ def count_fixed_below_threshold_stats(source, target, threshold=25):
     return fixed
 
 
-def get_pair_threshold_metrics(left_chicken, right_chicken, threshold=25):
+def get_pair_threshold_metrics(left_chicken, right_chicken, threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD):
     left_below = get_below_threshold_stats(left_chicken, threshold)
     right_below = get_below_threshold_stats(right_chicken, threshold)
 
@@ -561,7 +562,7 @@ def get_pair_threshold_metrics(left_chicken, right_chicken, threshold=25):
         "all_threshold_gaps_resolved": len(combined_below_remaining) == 0,
     }
 
-def get_ip_pair_burden_metrics(selected_chicken, candidate, threshold=25):
+def get_ip_pair_burden_metrics(selected_chicken, candidate, threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD):
     selected_below = get_below_threshold_stats(selected_chicken, threshold)
     candidate_below = get_below_threshold_stats(candidate, threshold)
 
@@ -617,8 +618,16 @@ def qualifies_for_ip_excellent_threshold_profile(threshold_metrics):
 def rank_ip_pair(selected_chicken, candidate):
     metrics = build_ip_pair_metrics(selected_chicken, candidate)
     priority_metrics = get_ip_priority_metrics(selected_chicken, candidate)
-    threshold_metrics = get_pair_threshold_metrics(selected_chicken, candidate, threshold=25)
-    burden_metrics = get_ip_pair_burden_metrics(selected_chicken, candidate, threshold=25)
+    threshold_metrics = get_pair_threshold_metrics(
+        selected_chicken,
+        candidate,
+        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+    )
+    burden_metrics = get_ip_pair_burden_metrics(
+        selected_chicken,
+        candidate,
+        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+    )
     unresolved_load_too_high = has_excess_below_threshold_load(burden_metrics)
 
     candidate = candidate or {}
@@ -675,14 +684,61 @@ def sort_ip_match_rows(selected_chicken, match_rows):
     return rows
 
 
+def count_ip_stats_at_max(chicken):
+    return sum(
+        1
+        for stat_name in IP_STAT_PRIORITY
+        if get_effective_ip_stat(chicken, stat_name) >= 40
+    )
+
+
+def _ip_pair_side_has_high_coverage_exception(side, partner):
+    return count_ip_stats_at_max(side) >= 6 and count_ip_stats_at_max(partner) >= 7
+
+
+def _resolve_ip_pair_items_for_quality(left, right, row=None):
+    row = row or {}
+    left_item = row.get("left_item")
+    right_item = row.get("right_item")
+
+    if left_item or right_item:
+        return left_item, right_item
+
+    left_candidates = get_ip_item_candidates(left, right)
+    right_candidates = get_ip_item_candidates(right, left)
+    return resolve_pair_item_recommendations(left_candidates, right_candidates)
+
+
+def cap_ip_pair_quality_by_item_plan(quality, selected_chicken, candidate, row=None):
+    if quality not in {"Excellent match", "Strong match"}:
+        return quality
+
+    left_item, right_item = _resolve_ip_pair_items_for_quality(selected_chicken, candidate, row)
+    left_allowed = bool(left_item) or _ip_pair_side_has_high_coverage_exception(selected_chicken, candidate)
+    right_allowed = bool(right_item) or _ip_pair_side_has_high_coverage_exception(candidate, selected_chicken)
+
+    if left_allowed and right_allowed:
+        return quality
+
+    return "Good match"
+
+
 def build_ip_pair_quality(selected_chicken, candidate, row=None):
     if not selected_chicken or not candidate:
         return "Poor"
 
     metrics = build_ip_pair_metrics(selected_chicken, candidate)
     priority_metrics = get_ip_priority_metrics(selected_chicken, candidate)
-    threshold_metrics = get_pair_threshold_metrics(selected_chicken, candidate, threshold=25)
-    burden_metrics = get_ip_pair_burden_metrics(selected_chicken, candidate, threshold=25)
+    threshold_metrics = get_pair_threshold_metrics(
+        selected_chicken,
+        candidate,
+        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+    )
+    burden_metrics = get_ip_pair_burden_metrics(
+        selected_chicken,
+        candidate,
+        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+    )
     ip_difference = get_ip_difference(selected_chicken, candidate)
     evaluation = (row or {}).get("evaluation") or {}
 
@@ -703,7 +759,7 @@ def build_ip_pair_quality(selected_chicken, candidate, row=None):
             and threshold_metrics.get("mutual_fix_count", 0) >= 2
             and not unresolved_load_too_high
         ):
-            return "Strong match"
+            return cap_ip_pair_quality_by_item_plan("Strong match", selected_chicken, candidate, row)
         if threshold_metrics.get("right_fixes_left_count", 0) >= 1:
             return "Good match"
         return "Situational"
@@ -713,7 +769,7 @@ def build_ip_pair_quality(selected_chicken, candidate, row=None):
         and not unresolved_load_too_high
         and qualifies_for_ip_excellent_threshold_profile(threshold_metrics)
     ):
-        return "Excellent match"
+        return cap_ip_pair_quality_by_item_plan("Excellent match", selected_chicken, candidate, row)
 
     if (
         threshold_metrics.get("right_fixes_left_count", 0) >= 1
@@ -721,7 +777,7 @@ def build_ip_pair_quality(selected_chicken, candidate, row=None):
         and ip_difference <= 10
         and not unresolved_load_too_high
     ):
-        return "Strong match"
+        return cap_ip_pair_quality_by_item_plan("Strong match", selected_chicken, candidate, row)
 
     if (
         threshold_metrics.get("right_fixes_left_count", 0) >= 1
@@ -808,6 +864,12 @@ def chicken_passes_auto_ninuno_filter(chicken, mode):
 def get_chicken_build_key(chicken):
     chicken = chicken or {}
 
+    best_info = get_best_available_gene_build_info(chicken)
+    best_build_key = str(best_info.get("build_key") or "").strip().lower()
+    best_match_count = safe_int(best_info.get("sort_match_count"), 0) or 0
+    if best_build_key and best_match_count >= 2:
+        return best_build_key
+
     explicit_candidates = [
         (
             str(chicken.get("build_type") or "").strip().lower(),
@@ -826,12 +888,6 @@ def get_chicken_build_key(chicken):
     for build_key, match_count in explicit_candidates:
         if build_key and match_count >= 2:
             return build_key
-
-    best_info = get_best_available_gene_build_info(chicken)
-    best_build_key = str(best_info.get("build_key") or "").strip().lower()
-    best_match_count = safe_int(best_info.get("sort_match_count"), 0) or 0
-    if best_build_key and best_match_count >= 2:
-        return best_build_key
 
     for build_key, _match_count in explicit_candidates:
         if build_key:
@@ -924,7 +980,11 @@ def build_ip_available_auto_candidates(breedable_chickens, ip_diff=None, breed_d
                     "ip_overlap_metrics": metrics,
                     "ranking": rank_ip_pair(chosen_left, chosen_right),
                     "ip_priority_metrics": get_ip_priority_metrics(chosen_left, chosen_right),
-                    "ip_threshold_metrics": get_pair_threshold_metrics(chosen_left, chosen_right, threshold=25),
+                    "ip_threshold_metrics": get_pair_threshold_metrics(
+                        chosen_left,
+                        chosen_right,
+                        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+                    ),
                 }
             )
 
@@ -1114,7 +1174,11 @@ def build_ip_multi_matches(breedable_chickens, ip_diff=10, breed_diff=1, ninuno_
                 "selected_weakest_stat_display": selected_weakest_stat_display,
                 "ip_overlap_metrics": build_ip_pair_metrics(selected, candidate),
                 "ip_priority_metrics": get_ip_priority_metrics(selected, candidate),
-                "ip_threshold_metrics": get_pair_threshold_metrics(selected, candidate, threshold=25),
+                "ip_threshold_metrics": get_pair_threshold_metrics(
+                    selected,
+                    candidate,
+                    threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+                ),
             }
         )
 

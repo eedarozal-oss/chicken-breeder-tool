@@ -1,6 +1,7 @@
 from services.build_eval import build_matches_instinct, evaluate_build, get_instinct_tie_rank
 from services.builds_config import BUILD_PRIORITY
 from services.build_utils import build_trait_map
+from services.validation_thresholds import EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
 
 
 STAT_FIELDS = [
@@ -72,7 +73,7 @@ def _stat_tone(value):
     except (TypeError, ValueError):
         return ""
 
-    if numeric_value < 25:
+    if numeric_value < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD:
         return "low"
     if numeric_value == 40:
         return "max"

@@ -12,11 +12,17 @@ from services.match_rules import (
     is_parent_offspring,
     is_full_siblings,
 )
+from services.validation_thresholds import EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
 
 ULTIMATE_IP_STRONG_THRESHOLD = 265
 ULTIMATE_IP_ENTRY_THRESHOLD = 175
 ULTIMATE_BUILD_ENTRY_THRESHOLD = 5
 ULTIMATE_BUILD_PARTIAL_THRESHOLD = 3
+ULTIMATE_STRONG_BUILD_SCORE_THRESHOLD = 320
+ULTIMATE_STRONG_IP_SCORE_THRESHOLD = 350
+ULTIMATE_EXCELLENT_IP_SCORE_THRESHOLD = 425
+ULTIMATE_STRONG_TOTAL_SCORE_THRESHOLD = 1080
+ULTIMATE_EXCELLENT_TOTAL_SCORE_THRESHOLD = 1350
 
 IP_STAT_PRIORITY = [
     "attack",
@@ -529,13 +535,21 @@ def build_ultimate_ip_priority_metrics(left, right):
     right_priority_value = get_effective_ip_stat(right, right_priority_stat) if right_priority_stat else 0
     left_on_right_priority = get_effective_ip_stat(left, right_priority_stat) if right_priority_stat else 0
 
-    left_priority_resolved = bool(left_priority_stat) and left_priority_value < 25 and right_on_left_priority >= 25
-    right_priority_resolved = bool(right_priority_stat) and right_priority_value < 25 and left_on_right_priority >= 25
+    left_priority_resolved = (
+        bool(left_priority_stat)
+        and left_priority_value < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+        and right_on_left_priority >= EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+    )
+    right_priority_resolved = (
+        bool(right_priority_stat)
+        and right_priority_value < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+        and left_on_right_priority >= EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+    )
 
     shared_unresolved_weakness = (
         bool(left_priority_stat)
         and left_priority_stat == right_priority_stat
-        and max(left_priority_value, right_priority_value) < 25
+        and max(left_priority_value, right_priority_value) < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
     )
 
     return {
@@ -547,7 +561,7 @@ def build_ultimate_ip_priority_metrics(left, right):
         "left_on_right_priority": left_on_right_priority,
     }
 
-def get_ultimate_below_threshold_stats(chicken, threshold=25):
+def get_ultimate_below_threshold_stats(chicken, threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD):
     return [
         stat_name
         for stat_name in IP_STAT_PRIORITY
@@ -555,7 +569,7 @@ def get_ultimate_below_threshold_stats(chicken, threshold=25):
     ]
 
 
-def count_ultimate_fixed_below_threshold_stats(source, target, threshold=25):
+def count_ultimate_fixed_below_threshold_stats(source, target, threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD):
     fixed = []
 
     for stat_name in IP_STAT_PRIORITY:
@@ -568,7 +582,7 @@ def count_ultimate_fixed_below_threshold_stats(source, target, threshold=25):
     return fixed
 
 
-def get_ultimate_ip_threshold_metrics(left, right, threshold=25):
+def get_ultimate_ip_threshold_metrics(left, right, threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD):
     left_below = get_ultimate_below_threshold_stats(left, threshold)
     right_below = get_ultimate_below_threshold_stats(right, threshold)
 
@@ -600,7 +614,7 @@ def get_ultimate_ip_threshold_metrics(left, right, threshold=25):
     }
 
 
-def get_ultimate_ip_burden_metrics(left, right, threshold=25):
+def get_ultimate_ip_burden_metrics(left, right, threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD):
     left_below = get_ultimate_below_threshold_stats(left, threshold)
     right_below = get_ultimate_below_threshold_stats(right, threshold)
 
@@ -750,10 +764,10 @@ def compute_ultimate_ip_score(
         score -= 180
 
     if ip_threshold_metrics.get("all_threshold_gaps_resolved"):
-        score += 120
+        score += 80
 
-    score += (safe_int(ip_threshold_metrics.get("right_fixes_left_count"), default=0) or 0) * 45
-    score += (safe_int(ip_threshold_metrics.get("left_fixes_right_count"), default=0) or 0) * 20
+    score += (safe_int(ip_threshold_metrics.get("right_fixes_left_count"), default=0) or 0) * 25
+    score += (safe_int(ip_threshold_metrics.get("left_fixes_right_count"), default=0) or 0) * 15
     score -= (safe_int(ip_threshold_metrics.get("combined_below_remaining_count"), default=0) or 0) * 60
     score -= (safe_int(ip_burden_metrics.get("right_below_count"), default=0) or 0) * 18
     score -= (safe_int(ip_burden_metrics.get("total_below_count"), default=0) or 0) * 8
@@ -763,22 +777,22 @@ def compute_ultimate_ip_score(
     combined_usable = safe_int(ip_metrics.get("combined_usable_count"), default=0) or 0
     edge_count = safe_int(ip_metrics.get("edge_count"), default=0) or 0
 
-    score += shared_strong * 24
-    score += shared_usable * 12
-    score += combined_usable * 8
-    score += edge_count * 3
+    score += shared_strong * 45
+    score += shared_usable * 15
+    score += combined_usable * 5
+    score += edge_count * 2
 
     if shared_strong >= 5:
-        score += 40
+        score += 70
     elif shared_usable >= 5:
-        score += 20
+        score += 30
 
     if ip_metrics.get("elite_stabilization"):
-        score += 80
+        score += 100
     if ip_metrics.get("anchor_finisher"):
-        score += 45
-    if ip_priority_metrics.get("left_priority_resolved"):
         score += 35
+    if ip_priority_metrics.get("left_priority_resolved"):
+        score += 25
 
     return score
 
@@ -915,6 +929,46 @@ def get_trait_item_candidate_for_slot(source, target, build_name, slot_name):
     }
 
 
+def _get_ultimate_build_eval_for(chicken, build_name):
+    build_name = str(build_name or "").strip().lower()
+    evaluations = (chicken or {}).get("primary_build_evaluations") or {}
+    stored = evaluations.get(build_name) if isinstance(evaluations, dict) else None
+    if stored:
+        return stored
+    return get_build_eval(chicken, build_name)
+
+
+def _get_ultimate_build_count_for(chicken, build_name):
+    build_eval = _get_ultimate_build_eval_for(chicken, build_name)
+    return safe_int(build_eval.get("match_count"), default=0) or 0
+
+
+def _ultimate_parent_qualifies_for_gregor(source, target, build_name):
+    build_name = str(build_name or "").strip().lower()
+    if not build_name:
+        return False
+
+    source_count = _get_ultimate_build_count_for(source, build_name)
+    target_count = _get_ultimate_build_count_for(target, build_name)
+    if source_count < 6 or source_count <= target_count:
+        return False
+
+    supplied_slots = get_missing_trait_support_slots(source, target, build_name)
+    target_missing_count = len((_get_ultimate_build_eval_for(target, build_name) or {}).get("missing_slots") or [])
+    priority_supplied_slots = [
+        slot for slot in supplied_slots
+        if slot in set(get_ultimate_build_priority_slots(build_name))
+    ]
+
+    return (
+        target_missing_count > 0
+        and (
+            len(priority_supplied_slots) >= 2
+            or len(supplied_slots) * 2 >= target_missing_count
+        )
+    )
+
+
 def get_ultimate_item_candidates(source, target, build_name=None):
     build_name = build_name or get_primary_build(source) or get_primary_build(target)
     candidates = []
@@ -935,20 +989,12 @@ def get_ultimate_item_candidates(source, target, build_name=None):
             "priority": 95,
         })
 
-    if has_strong_build_count(source):
+    if _ultimate_parent_qualifies_for_gregor(source, target, build_name):
         candidates.append({
             "name": "Gregor's Gift",
             "reason": get_item_helper_text("Gregor's Gift"),
             "category": "special_build",
             "priority": 90,
-        })
-
-    if count_missing_trait_support(source, target, build_name) >= 4:
-        candidates.append({
-            "name": "Gregor's Gift",
-            "reason": get_item_helper_text("Gregor's Gift"),
-            "category": "special_build",
-            "priority": 85,
         })
 
     deduped_special = []
@@ -1053,14 +1099,73 @@ def resolve_ultimate_pair_item_recommendations(left_candidates, right_candidates
     return left_item, right_item
 
 
+def count_ultimate_ip_stats_at_max(chicken):
+    return sum(
+        1
+        for stat_name in IP_STAT_PRIORITY
+        if get_effective_ip_stat(chicken, stat_name) >= 40
+    )
+
+
+def _ultimate_build_side_has_high_coverage_exception(side, partner, build_name):
+    build_eval = _get_ultimate_build_eval_for(side, build_name)
+    partner_eval = _get_ultimate_build_eval_for(partner, build_name)
+    total = safe_int(build_eval.get("match_total"), default=0) or 0
+    if total <= 0:
+        total = safe_int(partner_eval.get("match_total"), default=0) or 0
+    if total <= 0:
+        return False
+
+    side_count = safe_int(build_eval.get("match_count"), default=0) or 0
+    partner_count = safe_int(partner_eval.get("match_count"), default=0) or 0
+    return side_count >= max(0, total - 1) and partner_count >= total
+
+
+def _ultimate_ip_side_has_high_coverage_exception(side, partner):
+    return count_ultimate_ip_stats_at_max(side) >= 6 and count_ultimate_ip_stats_at_max(partner) >= 7
+
+
+def _ultimate_side_missing_item_is_allowed(side, partner, build_name):
+    return (
+        _ultimate_build_side_has_high_coverage_exception(side, partner, build_name)
+        or _ultimate_ip_side_has_high_coverage_exception(side, partner)
+    )
+
+
+def cap_ultimate_pair_quality_by_item_plan(quality, left, right, build_name, left_item=None, right_item=None):
+    if quality not in {"Excellent match", "Strong match"}:
+        return quality
+
+    if not left_item and not right_item:
+        left_candidates = get_ultimate_item_candidates(left, right, build_name)
+        right_candidates = get_ultimate_item_candidates(right, left, build_name)
+        left_item, right_item = resolve_ultimate_pair_item_recommendations(left_candidates, right_candidates)
+
+    left_allowed = bool(left_item) or _ultimate_side_missing_item_is_allowed(left, right, build_name)
+    right_allowed = bool(right_item) or _ultimate_side_missing_item_is_allowed(right, left, build_name)
+
+    if left_allowed and right_allowed:
+        return quality
+
+    return "Good match"
+
+
 def build_ultimate_pair_quality_from_items(left, right, build_name, left_item=None, right_item=None):
     combined_build = get_combined_build_coverage(left, right, build_name)
     build_metrics = combined_build["build_pair_metrics"]
     ip_metrics = build_ultimate_ip_metrics(left, right)
     build_priority_metrics = build_ultimate_build_priority_metrics(left, right, build_name)
     ip_priority_metrics = build_ultimate_ip_priority_metrics(left, right)
-    ip_threshold_metrics = get_ultimate_ip_threshold_metrics(left, right, threshold=25)
-    ip_burden_metrics = get_ultimate_ip_burden_metrics(left, right, threshold=25)
+    ip_threshold_metrics = get_ultimate_ip_threshold_metrics(
+        left,
+        right,
+        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+    )
+    ip_burden_metrics = get_ultimate_ip_burden_metrics(
+        left,
+        right,
+        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+    )
 
     scores = compute_ultimate_pair_score(
         left=left,
@@ -1080,17 +1185,31 @@ def build_ultimate_pair_quality_from_items(left, right, build_name, left_item=No
     build_score = scores["build_score"]
     ip_score = scores["ip_score"]
 
-    if build_score < 320 or ip_score < 350:
+    if build_score < ULTIMATE_STRONG_BUILD_SCORE_THRESHOLD or ip_score < ULTIMATE_STRONG_IP_SCORE_THRESHOLD:
         if total_score >= 900:
             return "Good match"
         if total_score >= 650:
             return "Situational"
         return "Poor match"
 
-    if total_score >= 1350:
-        return "Excellent match"
-    if total_score >= 1080:
-        return "Strong match"
+    if total_score >= ULTIMATE_EXCELLENT_TOTAL_SCORE_THRESHOLD and ip_score >= ULTIMATE_EXCELLENT_IP_SCORE_THRESHOLD:
+        return cap_ultimate_pair_quality_by_item_plan(
+            "Excellent match",
+            left,
+            right,
+            build_name,
+            left_item=left_item,
+            right_item=right_item,
+        )
+    if total_score >= ULTIMATE_STRONG_TOTAL_SCORE_THRESHOLD:
+        return cap_ultimate_pair_quality_by_item_plan(
+            "Strong match",
+            left,
+            right,
+            build_name,
+            left_item=left_item,
+            right_item=right_item,
+        )
     if total_score >= 820:
         return "Good match"
     if total_score >= 620:
@@ -1189,8 +1308,16 @@ def build_ultimate_candidate_row(selected, candidate):
 
     build_priority_metrics = build_ultimate_build_priority_metrics(selected, candidate, build_name)
     ip_priority_metrics = build_ultimate_ip_priority_metrics(selected, candidate)
-    ip_threshold_metrics = get_ultimate_ip_threshold_metrics(selected, candidate, threshold=25)
-    ip_burden_metrics = get_ultimate_ip_burden_metrics(selected, candidate, threshold=25)
+    ip_threshold_metrics = get_ultimate_ip_threshold_metrics(
+        selected,
+        candidate,
+        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+    )
+    ip_burden_metrics = get_ultimate_ip_burden_metrics(
+        selected,
+        candidate,
+        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
+    )
 
     return {
         "candidate": candidate,
