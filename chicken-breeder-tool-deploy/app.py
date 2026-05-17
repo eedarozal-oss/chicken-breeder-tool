@@ -12,6 +12,11 @@ from openpyxl import Workbook
 from routes import register_analysis_routes, register_best_pair_routes, register_core_routes, register_match_routes, register_planner_routes
 from services.ronin_api import fetch_all_owned_chickens, fetch_chicken_by_token
 from services.metadata_parser import parse_chicken_record
+from services.chickensaga_inventory import (
+    build_chickensaga_wallet_records,
+    fetch_chickensaga_inventory,
+    should_use_chickensaga_wallet_records,
+)
 from services.match_rules import (
     find_potential_matches,
     is_generation_gap_allowed,
@@ -29,6 +34,7 @@ from services.market_listing_cache import init_market_listing_cache_table
 
 from services.chicken_enricher import enrich_chicken_record, enrich_chicken_records
 from services.chicken_quick_view import build_chicken_quick_view
+from services.validation_thresholds import EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
 from services.gene_build_picker import get_best_available_gene_build_info
 from services.build_eval import evaluate_build, count_added_missing_traits
 from services.wallet_access import get_wallet_access_expiry_display
@@ -58,6 +64,7 @@ from services.ip_breeding import (
     resolve_pair_item_recommendations,
     get_effective_ip_stat,
     get_weakest_ip_stat_info,
+    get_chicken_build_key,
     build_ip_pair_quality,
     pair_has_usable_ip_items,
     normalize_auto_ninuno_filter,
@@ -166,11 +173,24 @@ def env_flag(name, default=False):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def env_float(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 FLASK_DEBUG_ENABLED = env_flag("FLASK_DEBUG", default=False)
 SESSION_COOKIE_SECURE_ENABLED = env_flag(
     "SESSION_COOKIE_SECURE",
     default=bool(os.environ.get("RAILWAY_ENVIRONMENT", "").strip()),
 )
+CHICKENSAGA_WALLET_FALLBACK_ENABLED = env_flag("CHICKENSAGA_WALLET_FALLBACK_ENABLED", default=True)
+CHICKENSAGA_WALLET_CONNECT_TIMEOUT = env_float("CHICKENSAGA_WALLET_CONNECT_TIMEOUT", 2.0)
+CHICKENSAGA_WALLET_READ_TIMEOUT = env_float("CHICKENSAGA_WALLET_READ_TIMEOUT", 5.0)
 session_secret = os.environ.get("FLASK_SECRET_KEY", "").strip()
 if not session_secret:
     session_secret = secrets.token_hex(32)
@@ -690,7 +710,25 @@ def sync_wallet_data(wallet):
     ensure_static_cache_tables_loaded()
 
     raw_items = fetch_all_owned_chickens(wallet, CONTRACTS)
-    parsed_records = [parse_chicken_record(wallet, item) for item in raw_items]
+    ronin_records = [parse_chicken_record(wallet, item) for item in raw_items]
+    parsed_records = ronin_records
+
+    if CHICKENSAGA_WALLET_FALLBACK_ENABLED:
+        try:
+            chickensaga_tokens = fetch_chickensaga_inventory(
+                wallet,
+                timeout=(CHICKENSAGA_WALLET_CONNECT_TIMEOUT, CHICKENSAGA_WALLET_READ_TIMEOUT),
+            )
+            chickensaga_records = build_chickensaga_wallet_records(wallet, chickensaga_tokens, CONTRACTS)
+            use_chickensaga, fallback_reason = should_use_chickensaga_wallet_records(
+                ronin_records,
+                chickensaga_records,
+            )
+            if use_chickensaga:
+                app.logger.info("Using ChickenSaga wallet inventory fallback: %s", fallback_reason)
+                parsed_records = chickensaga_records
+        except Exception as exc:
+            app.logger.warning("ChickenSaga wallet inventory fallback skipped: %s", exc)
 
     current_token_ids = [
         str(row.get("token_id") or "").strip()
@@ -1395,6 +1433,7 @@ def inject_breeding_item_helpers():
         "build_ultimate_pair_quality": build_ultimate_pair_quality,
         "build_prefers_instinct": build_prefers_instinct,
         "build_chicken_quick_view": build_chicken_quick_view,
+        "excellent_chicken_validation_threshold": EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
         "planner_pair_exists": lambda wallet, left_token_id, right_token_id: planner_pair_exists(wallet, left_token_id, right_token_id),
     }
 
@@ -1853,6 +1892,7 @@ register_match_routes(app, {
     "GENE_BUILD_ORDER": GENE_BUILD_ORDER,
     "get_best_available_gene_build_info": get_best_available_gene_build_info,
     "get_breeding_planner_queue": get_breeding_planner_queue,
+    "get_chicken_build_key": get_chicken_build_key,
     "get_chickens_by_wallet": get_chickens_by_wallet,
     "get_effective_ip_stat": get_effective_ip_stat,
     "get_featured_market_feed": get_featured_market_feed,
