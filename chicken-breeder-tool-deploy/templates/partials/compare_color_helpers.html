@@ -3,7 +3,7 @@
 	{%- set fallback_value = row.get(fallback_field) if fallback_field else '' -%}
 	{%- set value = direct_value if direct_value is not none and direct_value != '' else fallback_value -%}
 	{%- set has_value = value is not none and value != '' -%}
-	<span class="compare-coded-value{% if has_value %} {{ 'chicken-quick-stat-low' if (value|int) < 25 else 'chicken-quick-stat-max' if (value|int) == 40 else 'chicken-quick-stat-mid' }}{% endif %}">{{ value if has_value else '' }}</span>
+	<span class="compare-coded-value{% if has_value %} {{ 'chicken-quick-stat-low' if (value|int) < excellent_chicken_validation_threshold else 'chicken-quick-stat-max' if (value|int) == 40 else 'chicken-quick-stat-mid' }}{% endif %}">{{ value if has_value else '' }}</span>
 {%- endmacro %}
 
 {% macro trait_value(row, field, slot, matched_slots=[]) -%}
