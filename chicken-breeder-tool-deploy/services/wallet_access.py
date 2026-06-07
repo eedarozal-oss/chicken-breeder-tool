@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 import requests
 
@@ -7,9 +8,10 @@ from services.db.connection import get_connection
 TARGET_WALLET = "0x9933199fa3d96d7696d2b2a4cfba48d99e47a079"
 MIN_AMOUNT_WEI = 100000000000000000  # 0.1 RON
 ACCESS_DAYS = 30
+BLOCKSCOUT_TXS_URL = "https://explorer.roninchain.com/api/v2/addresses/{wallet}/transactions"
 SKYNET_TXS_URL = "https://skynet-api.roninchain.com/ronin/explorer/v2/accounts/{wallet}/txs?offset={offset}&limit={limit}"
-SKYNET_PAGE_LIMIT = 100
-SKYNET_MAX_PAGES = 10
+TRANSACTION_PAGE_LIMIT = 100
+TRANSACTION_MAX_PAGES = 10
 
 
 def get_conn():
@@ -211,6 +213,21 @@ def get_latest_active_access_expiry(wallet: str):
         return None
 
 
+def format_ron_amount(value_wei: int) -> str:
+    try:
+        value_wei = int(value_wei or 0)
+    except (TypeError, ValueError):
+        value_wei = 0
+
+    whole = value_wei // 10**18
+    fractional = value_wei % 10**18
+    if not fractional:
+        return f"{whole} RON"
+
+    fractional_display = str(fractional).rjust(18, "0").rstrip("0")
+    return f"{whole}.{fractional_display} RON"
+
+
 def grant_manual_access(wallet: str, notes: str = "manual access", duration_days: int = ACCESS_DAYS):
     now = datetime.now(timezone.utc)
     current_expiry = get_latest_active_access_expiry(wallet)
@@ -219,10 +236,124 @@ def grant_manual_access(wallet: str, notes: str = "manual access", duration_days
     save_access_record(wallet, "manual", reference, granted_at, notes, duration_days=duration_days)
 
 
-def iter_recent_target_wallet_transactions(cutoff: datetime, page_limit: int = SKYNET_PAGE_LIMIT, max_pages: int = SKYNET_MAX_PAGES):
+def parse_transaction_time(tx: dict):
+    timestamp = tx.get("timestamp")
+    if timestamp:
+        try:
+            return datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            pass
+
+    block_time = tx.get("blockTime") or tx.get("timeStamp")
+    if block_time:
+        try:
+            return datetime.fromtimestamp(int(block_time), tz=timezone.utc)
+        except (TypeError, ValueError, OSError):
+            return None
+
+    return None
+
+
+def parse_transaction_value_wei(tx: dict) -> int:
+    raw_value = tx.get("value")
+    if raw_value is None:
+        return 0
+
+    if isinstance(raw_value, int):
+        return raw_value
+
+    value = str(raw_value).strip()
+    if not value:
+        return 0
+
+    try:
+        return int(value, 16) if value.lower().startswith("0x") else int(value)
+    except ValueError:
+        return 0
+
+
+def parse_transaction_status(tx: dict) -> int:
+    raw_status = tx.get("status")
+    if raw_status == "ok":
+        return 1
+    if raw_status == "error":
+        return 0
+
+    if raw_status is None:
+        if str(tx.get("isError") or "").strip() == "0":
+            return 1
+        if str(tx.get("txreceipt_status") or "").strip() == "1":
+            return 1
+        return 0
+
+    if isinstance(raw_status, int):
+        return raw_status
+
+    status = str(raw_status).strip()
+    if not status:
+        return 0
+
+    try:
+        return int(status, 16) if status.lower().startswith("0x") else int(status)
+    except ValueError:
+        return 0
+
+
+def normalize_transaction_address(value) -> str:
+    if isinstance(value, dict):
+        value = value.get("hash")
+
+    return str(value or "").strip().lower()
+
+
+def get_transaction_hash(tx: dict) -> str:
+    return str(tx.get("hash") or tx.get("transactionHash") or "").strip()
+
+
+def iter_recent_blockscout_account_transactions(wallet: str, cutoff: datetime, max_pages: int = TRANSACTION_MAX_PAGES):
+    wallet = (wallet or "").strip().lower()
+    if not is_valid_wallet(wallet):
+        return
+
+    url = BLOCKSCOUT_TXS_URL.format(wallet=wallet)
+    for page_index in range(max_pages):
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+
+        payload = response.json()
+        items = payload.get("items", [])
+        if not items:
+            break
+
+        saw_older_transaction = False
+
+        for tx in items:
+            tx_time = parse_transaction_time(tx)
+            if not tx_time:
+                continue
+
+            if tx_time < cutoff:
+                saw_older_transaction = True
+                continue
+
+            yield tx
+
+        next_page_params = payload.get("next_page_params")
+        if saw_older_transaction or not next_page_params:
+            break
+
+        url = BLOCKSCOUT_TXS_URL.format(wallet=wallet)
+        url = f"{url}?{urlencode(next_page_params)}"
+
+
+def iter_recent_skynet_account_transactions(wallet: str, cutoff: datetime, page_limit: int = TRANSACTION_PAGE_LIMIT, max_pages: int = TRANSACTION_MAX_PAGES):
+    wallet = (wallet or "").strip().lower()
+    if not is_valid_wallet(wallet):
+        return
+
     for page_index in range(max_pages):
         offset = page_index * page_limit
-        url = SKYNET_TXS_URL.format(wallet=TARGET_WALLET, offset=offset, limit=page_limit)
+        url = SKYNET_TXS_URL.format(wallet=wallet, offset=offset, limit=page_limit)
         response = requests.get(url, timeout=20)
         response.raise_for_status()
 
@@ -234,11 +365,10 @@ def iter_recent_target_wallet_transactions(cutoff: datetime, page_limit: int = S
         saw_older_transaction = False
 
         for tx in items:
-            block_time = tx.get("blockTime")
-            if not block_time:
+            tx_time = parse_transaction_time(tx)
+            if not tx_time:
                 continue
 
-            tx_time = datetime.fromtimestamp(int(block_time), tz=timezone.utc)
             if tx_time < cutoff:
                 saw_older_transaction = True
                 continue
@@ -249,6 +379,27 @@ def iter_recent_target_wallet_transactions(cutoff: datetime, page_limit: int = S
             break
 
 
+def iter_recent_account_transactions(wallet: str, cutoff: datetime, page_limit: int = TRANSACTION_PAGE_LIMIT, max_pages: int = TRANSACTION_MAX_PAGES):
+    try:
+        yield from iter_recent_blockscout_account_transactions(wallet, cutoff=cutoff, max_pages=max_pages)
+    except Exception:
+        yield from iter_recent_skynet_account_transactions(
+            wallet,
+            cutoff=cutoff,
+            page_limit=page_limit,
+            max_pages=max_pages,
+        )
+
+
+def iter_recent_target_wallet_transactions(cutoff: datetime, page_limit: int = TRANSACTION_PAGE_LIMIT, max_pages: int = TRANSACTION_MAX_PAGES):
+    return iter_recent_account_transactions(
+        TARGET_WALLET,
+        cutoff=cutoff,
+        page_limit=page_limit,
+        max_pages=max_pages,
+    )
+
+
 def find_latest_qualifying_payment(wallet: str):
     wallet = (wallet or "").strip().lower()
 
@@ -256,18 +407,14 @@ def find_latest_qualifying_payment(wallet: str):
     latest_match = None
 
     for tx in iter_recent_target_wallet_transactions(cutoff=cutoff):
-        tx_from = str(tx.get("from") or "").strip().lower()
-        tx_to = str(tx.get("to") or "").strip().lower()
-        tx_status = int(tx.get("status") or 0)
-        tx_value_hex = str(tx.get("value") or "0x0")
-        tx_hash = str(tx.get("transactionHash") or "").strip()
-
-        try:
-            tx_value_wei = int(tx_value_hex, 16)
-        except ValueError:
+        tx_from = normalize_transaction_address(tx.get("from"))
+        tx_to = normalize_transaction_address(tx.get("to"))
+        tx_status = parse_transaction_status(tx)
+        tx_hash = get_transaction_hash(tx)
+        tx_value_wei = parse_transaction_value_wei(tx)
+        tx_time = parse_transaction_time(tx)
+        if not tx_time:
             continue
-
-        tx_time = datetime.fromtimestamp(int(tx.get("blockTime")), tz=timezone.utc)
         if tx_from != wallet:
             continue
         if tx_to != TARGET_WALLET:
@@ -289,6 +436,44 @@ def find_latest_qualifying_payment(wallet: str):
             latest_match = candidate
 
     return latest_match
+
+
+def get_recent_treasury_payment_rows(limit=10):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=365)
+    rows = []
+
+    for tx in iter_recent_target_wallet_transactions(cutoff=cutoff, max_pages=3):
+        tx_from = normalize_transaction_address(tx.get("from"))
+        tx_to = normalize_transaction_address(tx.get("to"))
+        tx_status = parse_transaction_status(tx)
+        tx_hash = get_transaction_hash(tx)
+        tx_value_wei = parse_transaction_value_wei(tx)
+        tx_time = parse_transaction_time(tx)
+
+        if not tx_time:
+            continue
+        if tx_to != TARGET_WALLET:
+            continue
+        if tx_status != 1:
+            continue
+
+        expires_at = tx_time + timedelta(days=ACCESS_DAYS)
+        rows.append(
+            {
+                "wallet_address": tx_from,
+                "to": tx_to,
+                "tx_hash": tx_hash,
+                "value": tx_value_wei,
+                "timestamp": tx_time,
+                "expires_at": expires_at,
+                "qualifies": tx_value_wei >= MIN_AMOUNT_WEI,
+            }
+        )
+
+        if len(rows) >= int(limit or 10):
+            break
+
+    return rows
 
 
 def has_wallet_access(wallet: str) -> bool:
@@ -386,6 +571,40 @@ def get_wallet_access_rows(limit=200):
     rows = [dict(row) for row in cur.fetchall()]
     conn.close()
     return rows
+
+
+def format_treasury_payment_rows(rows):
+    now = datetime.now(timezone.utc)
+    formatted = []
+
+    for row in rows or []:
+        timestamp = row.get("timestamp")
+        expires_at = row.get("expires_at")
+        value = row.get("value")
+        qualifies = bool(row.get("qualifies"))
+        wallet = str(row.get("wallet_address") or "").strip().lower()
+        tx_hash = str(row.get("tx_hash") or "").strip()
+
+        if qualifies and expires_at and expires_at > now:
+            access_status = "Active"
+        elif qualifies:
+            access_status = "Expired"
+        else:
+            access_status = "Below minimum"
+
+        formatted.append(
+            {
+                **row,
+                "wallet_short": f"{wallet[:6]}...{wallet[-4:]}" if len(wallet) > 12 else wallet,
+                "tx_hash_short": f"{tx_hash[:10]}...{tx_hash[-6:]}" if len(tx_hash) > 18 else tx_hash,
+                "value_display": format_ron_amount(value),
+                "timestamp_display": timestamp.strftime("%B %d, %Y %I:%M %p UTC") if timestamp else "",
+                "expires_at_display": expires_at.strftime("%B %d, %Y %I:%M %p UTC") if expires_at else "",
+                "access_status_display": access_status,
+            }
+        )
+
+    return formatted
 
 
 def format_wallet_access_rows(rows):
