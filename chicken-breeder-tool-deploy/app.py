@@ -118,6 +118,8 @@ from services.wallet_access import (
     grant_manual_access,
     get_wallet_access_rows,
     format_wallet_access_rows,
+    get_recent_treasury_payment_rows,
+    format_treasury_payment_rows,
     has_active_payment_access_in_db,
 )
 
@@ -183,6 +185,18 @@ def env_float(name, default):
         return default
 
 
+def env_int(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+APP_HOST = os.environ.get("APP_HOST", "127.0.0.1").strip() or "127.0.0.1"
+APP_PORT = env_int("APP_PORT", 5001)
 FLASK_DEBUG_ENABLED = env_flag("FLASK_DEBUG", default=False)
 SESSION_COOKIE_SECURE_ENABLED = env_flag(
     "SESSION_COOKIE_SECURE",
@@ -1756,10 +1770,12 @@ register_core_routes(app, {
     "clear_owner_admin_failures": clear_owner_admin_failures,
     "enrich_chicken_media": enrich_chicken_media,
     "format_wallet_access_rows": format_wallet_access_rows,
+    "format_treasury_payment_rows": format_treasury_payment_rows,
     "get_best_available_gene_build_info": get_best_available_gene_build_info,
     "get_owner_admin_password": lambda: OWNER_ADMIN_PASSWORD,
     "get_wallet_access_expiry_display": get_wallet_access_expiry_display,
     "get_wallet_access_rows": get_wallet_access_rows,
+    "get_recent_treasury_payment_rows": get_recent_treasury_payment_rows,
     "get_wallet_chickens": get_wallet_chickens,
     "grant_manual_access": grant_manual_access,
     "has_active_payment_access_in_db": has_active_payment_access_in_db,
@@ -1936,4 +1952,4 @@ register_match_routes(app, {
 })
 
 if __name__ == "__main__":
-    app.run(debug=FLASK_DEBUG_ENABLED)
+    app.run(host=APP_HOST, port=APP_PORT, debug=FLASK_DEBUG_ENABLED)
