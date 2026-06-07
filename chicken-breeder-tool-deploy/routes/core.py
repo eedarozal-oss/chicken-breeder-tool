@@ -52,6 +52,8 @@ def register_core_routes(app, deps):
         error = None
         success = None
         sync_results = []
+        treasury_payment_rows = []
+        treasury_payment_error = None
 
         if request.method == "POST":
             parsed_days = deps["safe_int"](duration_days)
@@ -102,6 +104,12 @@ def register_core_routes(app, deps):
                         error = f"Failed to grant access: {exc}"
 
         access_rows = deps["format_wallet_access_rows"](deps["get_wallet_access_rows"](limit=300))
+        try:
+            treasury_payment_rows = deps["format_treasury_payment_rows"](
+                deps["get_recent_treasury_payment_rows"](limit=10)
+            )
+        except Exception as exc:
+            treasury_payment_error = f"Failed to load latest treasury payments: {exc}"
 
         return render_template(
             "admin_whitelist.html",
@@ -112,6 +120,8 @@ def register_core_routes(app, deps):
             success=success,
             sync_results=sync_results,
             access_rows=access_rows,
+            treasury_payment_rows=treasury_payment_rows,
+            treasury_payment_error=treasury_payment_error,
             static_export_db_path=deps["static_export_db_path"],
         )
 
