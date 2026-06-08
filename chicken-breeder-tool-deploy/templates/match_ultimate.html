@@ -10,7 +10,7 @@
     data-auto-open-template-id="{{ auto_open_template_id or '' }}"
     data-auto-match-result-open="{{ 1 if auto_open_multi_match else 0 }}"
 >
-{% import 'partials/compare_color_helpers.html' as color %}
+{% import 'partials/compare_color_helpers.html' as color with context %}
     <div class="container breeding-page breeding-page-ultimate">
         <section class="breeding-hero breeding-hero-ultimate">
             <div class="panel breeding-hero-main">
