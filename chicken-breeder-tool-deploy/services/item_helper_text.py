@@ -1,5 +1,5 @@
 ITEM_NAME_ALIASES = {
-    "Cocktail's Beak": "Cocktail's Obsidian Beak",
+    "Cocktail's Obsidian Beak": "Cocktail's Beak",
 }
 
 ITEM_HELPER_TEXT = {
@@ -14,7 +14,7 @@ ITEM_HELPER_TEXT = {
     "Suave Scissors": "Increases this parent's Comb Genes inheritance chance by 50%.",
     "Simurgh's Sovereign": "Increases this parent's Wings Genes inheritance chance by 50%.",
     "St. Elmo's Fire": "Increases this parent's Instinct inheritance chance by 50%.",
-    "Cocktail's Obsidian Beak": "Increases this parent's Attack IP Genes inheritance chance by 50%.",
+    "Cocktail's Beak": "Increases this parent's Attack IP Genes inheritance chance by 50%.",
     "Pos2 Pellet": "Increases this parent's Defense IP Genes inheritance chance by 50%.",
     "Fetzzz Feet": "Increases this parent's Speed IP Genes inheritance chance by 50%.",
     "Vananderen's Vitality": "Increases this parent's Health IP Genes inheritance chance by 50%.",

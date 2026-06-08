@@ -19,7 +19,7 @@ BREEDING_ITEM_NAME_TO_TOKEN_ID: Dict[str, str] = {
     "Suave Scissors": "72",
     "Simurgh's Sovereign": "73",
     "St. Elmo's Fire": "74",
-    "Cocktail's Obsidian Beak": "76",
+    "Cocktail's Beak": "76",
     "Pos2 Pellet": "77",
     "Fetzzz Feet": "78",
     "Vananderen's Vitality": "79",
@@ -29,7 +29,7 @@ BREEDING_ITEM_NAME_TO_TOKEN_ID: Dict[str, str] = {
 }
 
 ITEM_NAME_ALIASES: Dict[str, str] = {
-    "Cocktail's Beak": "Cocktail's Obsidian Beak",
+    "Cocktail's Obsidian Beak": "Cocktail's Beak",
 }
 
 TOKEN_ID_TO_BREEDING_ITEM_NAME: Dict[str, str] = {
