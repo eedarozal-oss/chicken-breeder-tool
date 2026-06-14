@@ -90,17 +90,17 @@
 
                     {% if auto_match_kind != 'gene' %}
                         <div class="auto-match-field">
-                            <label for="{{ auto_match_kind }}-popup-ip-diff"><strong>IP Difference:</strong></label>
+                            <label for="{{ auto_match_kind }}-popup-ip-diff"><strong>{% if auto_match_kind == 'ip' %}Max IP Difference:{% else %}IP Difference:{% endif %}</strong></label>
                             <div class="auto-match-control">
-                                <input id="{{ auto_match_kind }}-popup-ip-diff" type="number" name="popup_ip_diff" min="0" value="{{ popup_ip_diff if popup_ip_diff is not none else 10 }}">
+                                <input id="{{ auto_match_kind }}-popup-ip-diff" type="number" name="popup_ip_diff" min="0" value="{{ popup_ip_diff if popup_ip_diff is not none else ('' if auto_match_kind == 'ip' else 10) }}">
                             </div>
                         </div>
                     {% endif %}
 
                     <div class="auto-match-field">
-                        <label for="{{ auto_match_kind }}-popup-breed-diff"><strong>Breed Count Difference:</strong></label>
+                        <label for="{{ auto_match_kind }}-popup-breed-diff"><strong>{% if auto_match_kind == 'ip' %}Max Breed Count Difference:{% else %}Breed Count Difference:{% endif %}</strong></label>
                         <div class="auto-match-control">
-                            <input id="{{ auto_match_kind }}-popup-breed-diff" type="number" name="popup_breed_diff" min="0" value="{{ popup_breed_diff if popup_breed_diff is not none else 1 }}">
+                            <input id="{{ auto_match_kind }}-popup-breed-diff" type="number" name="popup_breed_diff" min="0" value="{{ popup_breed_diff if popup_breed_diff is not none else ('' if auto_match_kind == 'ip' else 1) }}">
                         </div>
                     </div>
 

@@ -30,7 +30,7 @@
                             <span class="planner-export-icon">XLS</span>
                             <span>Export Excel</span>
                         </a>
-                        <a href="{{ url_for('planner_items_check', wallet_address=wallet, source_page='best_pairs') }}" class="link-btn secondary-link-btn">
+                        <a href="{{ url_for('planner_items_check', wallet_address=wallet, source_page='best_pairs') }}" class="link-btn secondary-link-btn" data-prepare-automation-link>
                             🤖 Prepare for Automation
                         </a>
                     </div>
@@ -67,16 +67,30 @@
                                     <div><strong>Ninuno</strong><span>{{ row.left.ninuno or 0 }}%</span></div>
                                     <div><strong>{% if row.mode == 'ip' %}Weakest Stat{% else %}Build Match{% endif %}</strong><span>{{ row.left.summary or 'No Build' }}</span></div>
                                 </div>
-                                <div class="multi-match-item-bar">
-                                    <div class="multi-match-item-inner multi-match-item-inner-right">
-                                        <div class="multi-match-item-text-single">
-                                            Recommended item: {{ row.left_item.name if row.left_item else 'No item recommended' }}
-                                        </div>
-                                        {% set left_item_image = get_item_image_url(row.left_item.name) if row.left_item else '' %}
-                                        {% if left_item_image %}
-                                            <img src="{{ left_item_image }}" alt="{{ row.left_item.name }}" class="multi-match-item-image">
-                                        {% endif %}
-                                    </div>
+                                <div class="multi-match-item-bar planner-item-slots">
+                                    {% for item in row.left_items %}
+                                        {% set other_item = row.left_items[1 - loop.index0] %}
+                                        {% set item_image = get_item_image_url(item.name) if item else '' %}
+                                        <button
+                                            type="button"
+                                            class="planner-item-slot{% if not item %} planner-item-slot-empty{% endif %}"
+                                            title="Click to change recommended item"
+                                            data-planner-item-slot
+                                            data-update-url="{{ url_for('update_breeding_planner_item') }}"
+                                            data-wallet="{{ wallet }}"
+                                            data-pair-key="{{ row.pair_key }}"
+                                            data-side="left"
+                                            data-slot="{{ loop.index0 }}"
+                                            data-current-name="{{ item.name if item else '' }}"
+                                            data-other-name="{{ other_item.name if other_item else '' }}"
+                                            data-options='{{ row.left_item_options|tojson }}'
+                                        >
+                                            {% if item_image %}
+                                                <img src="{{ item_image }}" alt="{{ item.name }}" class="multi-match-item-image">
+                                            {% endif %}
+                                            <span>{{ item.name if item else 'Blank item slot' }}</span>
+                                        </button>
+                                    {% endfor %}
                                 </div>
                             </div>
 
@@ -121,16 +135,30 @@
                                     <div><strong>Ninuno</strong><span>{{ row.right.ninuno or 0 }}%</span></div>
                                     <div><strong>{% if row.mode == 'ip' %}Matched Stat{% else %}Build Match{% endif %}</strong><span>{{ row.right.summary or 'No Build' }}</span></div>
                                 </div>
-                                <div class="multi-match-item-bar">
-                                    <div class="multi-match-item-inner multi-match-item-inner-left">
-                                        {% set right_item_image = get_item_image_url(row.right_item.name) if row.right_item else '' %}
-                                        {% if right_item_image %}
-                                            <img src="{{ right_item_image }}" alt="{{ row.right_item.name }}" class="multi-match-item-image">
-                                        {% endif %}
-                                        <div class="multi-match-item-text-single">
-                                            Recommended item: {{ row.right_item.name if row.right_item else 'No item recommended' }}
-                                        </div>
-                                    </div>
+                                <div class="multi-match-item-bar planner-item-slots">
+                                    {% for item in row.right_items %}
+                                        {% set other_item = row.right_items[1 - loop.index0] %}
+                                        {% set item_image = get_item_image_url(item.name) if item else '' %}
+                                        <button
+                                            type="button"
+                                            class="planner-item-slot{% if not item %} planner-item-slot-empty{% endif %}"
+                                            title="Click to change recommended item"
+                                            data-planner-item-slot
+                                            data-update-url="{{ url_for('update_breeding_planner_item') }}"
+                                            data-wallet="{{ wallet }}"
+                                            data-pair-key="{{ row.pair_key }}"
+                                            data-side="right"
+                                            data-slot="{{ loop.index0 }}"
+                                            data-current-name="{{ item.name if item else '' }}"
+                                            data-other-name="{{ other_item.name if other_item else '' }}"
+                                            data-options='{{ row.right_item_options|tojson }}'
+                                        >
+                                            {% if item_image %}
+                                                <img src="{{ item_image }}" alt="{{ item.name }}" class="multi-match-item-image">
+                                            {% endif %}
+                                            <span>{{ item.name if item else 'Blank item slot' }}</span>
+                                        </button>
+                                    {% endfor %}
                                 </div>
                             </div>
                         </div>
