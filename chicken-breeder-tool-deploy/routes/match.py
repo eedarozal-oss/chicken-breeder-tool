@@ -59,7 +59,6 @@ def register_match_routes(app, deps):
     parse_gene_csv_query_values = deps["parse_gene_csv_query_values"]
     parse_ip_csv_query_values = deps["parse_ip_csv_query_values"]
     parse_ultimate_csv_query_values = deps["parse_ultimate_csv_query_values"]
-    pair_has_usable_ip_items = deps["pair_has_usable_ip_items"]
     pick_best_gene_auto_match_from_pool = deps["pick_best_gene_auto_match_from_pool"]
     pick_best_ultimate_auto_match = deps["pick_best_ultimate_auto_match"]
     pick_multi_pairs_from_candidates = deps["pick_multi_pairs_from_candidates"]
@@ -139,10 +138,6 @@ def register_match_routes(app, deps):
         popup_ip_diff = safe_int(request.args.get("popup_ip_diff"))
         popup_breed_diff = safe_int(request.args.get("popup_breed_diff"))
         popup_same_build = str(request.args.get("popup_same_build") or "").strip().lower() in {"1", "true", "on", "yes"}
-        if popup_ip_diff is None:
-            popup_ip_diff = 10
-        if popup_breed_diff is None:
-            popup_breed_diff = 1
         return {
             "popup_ip_diff": popup_ip_diff,
             "popup_breed_diff": popup_breed_diff,
@@ -368,10 +363,14 @@ def register_match_routes(app, deps):
                             if source_breed is not None:
                                 candidate_pool = [row for row in candidate_pool if safe_int(row.get("breed_count")) is not None and abs(safe_int(row.get("breed_count")) - source_breed) <= effective_breed_diff]
                         matches = find_potential_matches(source, candidate_pool, settings=match_settings)
-                        matches = [row for row in matches if row.get("evaluation", {}).get("is_ip_recommended") and row.get("evaluation", {}).get("is_breed_count_recommended") and pair_has_usable_ip_items(source, row.get("candidate"))]
+                        matches = sort_ip_match_rows(source, matches)
                         if matches:
-                            ranked_sources.append({"source": source, "match_count": len(matches)})
-                    ranked_sources.sort(key=lambda row: (-(safe_int(row["source"].get("ip"), 0) or 0), safe_int(row["source"].get("breed_count"), 999999) or 999999, -(float(row["source"].get("ownership_percent") or 0)), -row["match_count"], safe_int(row["source"].get("token_id"), 999999999) or 999999999))
+                            ranked_sources.append({
+                                "source": source,
+                                "match_count": len(matches),
+                                "ranking": matches[0].get("ranking") or (),
+                            })
+                    ranked_sources.sort(key=lambda row: (row["ranking"], -row["match_count"], safe_int(row["source"].get("token_id"), 999999999) or 999999999))
                     if ranked_sources:
                         selected_token_id = str(ranked_sources[0]["source"]["token_id"])
                     elif should_mark_auto_match_empty(
@@ -414,13 +413,6 @@ def register_match_routes(app, deps):
                         if selected_breed is not None:
                             candidate_pool = [row for row in candidate_pool if safe_int(row.get("breed_count")) is not None and abs(safe_int(row.get("breed_count")) - selected_breed) <= popup_breed_diff]
                     potential_matches = find_potential_matches(selected_chicken, candidate_pool, settings=match_settings)
-                    if auto_match:
-                        potential_matches = [
-                            row for row in potential_matches
-                            if row.get("evaluation", {}).get("is_ip_recommended")
-                            and row.get("evaluation", {}).get("is_breed_count_recommended")
-                            and pair_has_usable_ip_items(selected_chicken, row.get("candidate"))
-                        ]
                     potential_matches = sort_ip_match_rows(selected_chicken, potential_matches)
                     if should_mark_auto_match_empty(
                         auto_match,
@@ -614,6 +606,13 @@ def register_match_routes(app, deps):
                                     "candidate_build_match_count": top_pair.get("candidate_build_match_count", 0),
                                     "gene_pair_metrics": top_pair.get("gene_pair_metrics") or {},
                                     "gene_priority_metrics": top_pair.get("gene_priority_metrics") or {},
+                                    "candidate_target_info": top_pair.get("candidate_target_info") or {},
+                                    "gene_pair_score": top_pair.get("gene_pair_score"),
+                                    "gene_pair_points": top_pair.get("gene_pair_points"),
+                                    "gene_pair_grade": top_pair.get("gene_pair_grade"),
+                                    "gene_pair_notes": top_pair.get("gene_pair_notes"),
+                                    "gene_pair_note_display": top_pair.get("gene_pair_note_display"),
+                                    "pair_quality": top_pair.get("pair_quality"),
                                     "ranking": top_pair.get("ranking"),
                                 }
                             ]
@@ -864,6 +863,16 @@ def register_match_routes(app, deps):
                                         "ultimate_ip_priority_metrics": top_pair.get("ultimate_ip_priority_metrics") or {},
                                         "ultimate_ip_threshold_metrics": top_pair.get("ultimate_ip_threshold_metrics") or {},
                                         "ultimate_ip_burden_metrics": top_pair.get("ultimate_ip_burden_metrics") or {},
+                                        "ultimate_pair_score": top_pair.get("ultimate_pair_score") or {},
+                                        "ultimate_pair_points": top_pair.get("ultimate_pair_points"),
+                                        "ultimate_build_score": top_pair.get("ultimate_build_score"),
+                                        "ultimate_ip_score": top_pair.get("ultimate_ip_score"),
+                                        "raw_gene_score": top_pair.get("raw_gene_score"),
+                                        "raw_gene_grade": top_pair.get("raw_gene_grade"),
+                                        "raw_gene_note_display": top_pair.get("raw_gene_note_display"),
+                                        "raw_ip_score": top_pair.get("raw_ip_score"),
+                                        "raw_ip_grade": top_pair.get("raw_ip_grade"),
+                                        "item_constraint_details": top_pair.get("item_constraint_details") or {},
                                     }
                                 ]
                             else:

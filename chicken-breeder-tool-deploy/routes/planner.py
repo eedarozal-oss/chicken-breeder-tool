@@ -1,8 +1,24 @@
 from datetime import datetime, timezone
+from pathlib import Path
+import re
 
-from flask import redirect, render_template, request, send_file, url_for
+from flask import current_app, jsonify, redirect, render_template, request, send_file, url_for
 
 from services.planner_bookmarklet import MAX_MASS_BREEDING_PAIRS
+
+
+def get_display_version():
+    index_template = Path(__file__).resolve().parent.parent / "templates" / "index.html"
+    try:
+        text = index_template.read_text(encoding="utf-8")
+    except OSError:
+        return "unknown"
+
+    match = re.search(r'class="welcome-version-badge">\s*Version\s+([^<\s]+)', text)
+    if not match:
+        return "unknown"
+
+    return match.group(1).strip()
 
 
 def register_planner_routes(app, deps):
@@ -16,8 +32,11 @@ def register_planner_routes(app, deps):
         pair_quality = str(request.form.get("pair_quality") or "").strip()
         left_item_name = str(request.form.get("left_item_name") or "").strip()
         right_item_name = str(request.form.get("right_item_name") or "").strip()
+        is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
         if not deps["require_authorized_wallet"](wallet):
+            if is_ajax:
+                return jsonify({"ok": False, "error": "Unauthorized wallet."}), 403
             return redirect(url_for("index"))
 
         redirect_kwargs = {"wallet_address": wallet}
@@ -43,29 +62,43 @@ def register_planner_routes(app, deps):
             if str(request.form.get("ninuno_100_only") or "").strip() in {"1", "true", "on", "yes"}:
                 redirect_kwargs["ninuno_100_only"] = 1
 
-        chickens = deps["get_wallet_chickens"](wallet, ensure_loaded=True)
-        chicken_lookup = {
-            str(row.get("token_id") or ""): deps["enrich_chicken_media"](row)
-            for row in chickens
-        }
-        left = chicken_lookup.get(left_token_id)
-        right = chicken_lookup.get(right_token_id)
-        if left and right and not deps["planner_pair_exists"](wallet, left_token_id, right_token_id):
-            left_item = {"name": left_item_name, "reason": ""} if left_item_name else None
-            right_item = {"name": right_item_name, "reason": ""} if right_item_name else None
-            queue_rows = deps["get_breeding_planner_queue"](wallet)
-            queue_rows.append(
-                deps["build_planner_queue_row"](
-                    mode=mode,
-                    left=left,
-                    right=right,
-                    left_item=left_item,
-                    right_item=right_item,
-                    pair_quality=pair_quality,
-                    build_type=build_type,
+        try:
+            chickens = deps["get_wallet_chickens"](wallet, ensure_loaded=True)
+            chicken_lookup = {
+                str(row.get("token_id") or ""): deps["enrich_chicken_media"](row)
+                for row in chickens
+            }
+            left = chicken_lookup.get(left_token_id)
+            right = chicken_lookup.get(right_token_id)
+            added = False
+            if left and right and not deps["planner_pair_exists"](wallet, left_token_id, right_token_id):
+                left_item = {"name": left_item_name, "reason": ""} if left_item_name else None
+                right_item = {"name": right_item_name, "reason": ""} if right_item_name else None
+                queue_rows = deps["get_breeding_planner_queue"](wallet)
+                queue_rows.append(
+                    deps["build_planner_queue_row"](
+                        mode=mode,
+                        left=left,
+                        right=right,
+                        left_item=left_item,
+                        right_item=right_item,
+                        pair_quality=pair_quality,
+                        build_type=build_type,
+                    )
                 )
-            )
-            deps["save_breeding_planner_queue"](wallet, queue_rows)
+                deps["save_breeding_planner_queue"](wallet, queue_rows)
+                added = True
+        except Exception as exc:
+            if is_ajax:
+                current_app.logger.exception("AJAX planner add failed")
+                return jsonify({"ok": False, "error": f"Planner add failed: {exc}"}), 500
+            raise
+
+        if is_ajax:
+            if not left or not right:
+                return jsonify({"ok": False, "error": "Planner chickens were not found."}), 404
+            return jsonify({"ok": True, "added": added})
+
         redirect_kwargs["skip_auto_open"] = 1
         return redirect(url_for(return_endpoint, **redirect_kwargs))
 
@@ -93,12 +126,76 @@ def register_planner_routes(app, deps):
             redirect_kwargs["ninuno_100_only"] = 1
         return redirect(url_for(return_endpoint, **redirect_kwargs))
 
+    def update_breeding_planner_item():
+        wallet = request.form.get("wallet_address", "").strip().lower()
+        pair_key = str(request.form.get("pair_key") or "").strip()
+        side = str(request.form.get("side") or "").strip().lower()
+        slot_raw = str(request.form.get("slot") or "").strip()
+        item_name = deps["normalize_item_name"](request.form.get("item_name"))
+
+        if not deps["require_authorized_wallet"](wallet):
+            return jsonify({"ok": False, "error": "Unauthorized wallet."}), 403
+
+        if side not in {"left", "right"}:
+            return jsonify({"ok": False, "error": "Invalid planner side."}), 400
+
+        try:
+            slot_index = int(slot_raw)
+        except (TypeError, ValueError):
+            slot_index = -1
+
+        if slot_index not in {0, 1}:
+            return jsonify({"ok": False, "error": "Invalid item slot."}), 400
+
+        queue_rows = deps["get_breeding_planner_queue"](wallet)
+        updated_row = None
+
+        for row in queue_rows:
+            if str(row.get("pair_key") or "") != pair_key:
+                continue
+
+            allowed_names = set(deps["get_all_breeding_item_names"]())
+            if item_name and item_name not in allowed_names:
+                return jsonify({"ok": False, "error": "Item is not a valid breeding item."}), 400
+
+            items_key = f"{side}_items"
+            items = list(row.get(items_key) or [])
+            while len(items) < 2:
+                items.append(None)
+
+            other_index = 1 - slot_index
+            other_item = items[other_index] if other_index < len(items) else None
+            other_name = deps["normalize_item_name"]((other_item or {}).get("name") if isinstance(other_item, dict) else "")
+            if item_name and other_name and item_name == other_name:
+                return jsonify({"ok": False, "error": "A chicken cannot use the same item twice."}), 400
+
+            items[slot_index] = {"name": item_name, "reason": ""} if item_name else None
+            row[items_key] = items[:2]
+            row[f"{side}_item"] = row[items_key][0]
+            updated_row = row
+            break
+
+        if updated_row is None:
+            return jsonify({"ok": False, "error": "Planner pair was not found."}), 404
+
+        deps["save_breeding_planner_queue"](wallet, queue_rows)
+        return jsonify({
+            "ok": True,
+            "item": updated_row[f"{side}_items"][slot_index],
+            "image": deps["get_item_image_url"](item_name) if item_name else "",
+        })
+
     def export_breeding_planner():
         wallet = request.args.get("wallet_address", "").strip().lower()
         if wallet and not deps["require_authorized_wallet"](wallet):
             return redirect(url_for("index"))
-        output = deps["export_breeding_planner_excel"](deps["get_breeding_planner_queue"](wallet))
-        filename = f"breeding_planner_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xlsx"
+        planner_queue = deps["get_breeding_planner_queue"](wallet)
+        output = deps["export_breeding_planner_excel"](planner_queue)
+        pair_count = len(planner_queue or [])
+        pair_label = "pair" if pair_count == 1 else "pairs"
+        version = get_display_version()
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        filename = f"{version} - {pair_count} {pair_label} - breeding planner_{timestamp}.xlsx"
         return send_file(
             output,
             as_attachment=True,
@@ -256,6 +353,7 @@ def register_planner_routes(app, deps):
 
     app.add_url_rule("/planner/add", endpoint="add_to_breeding_planner", view_func=add_to_breeding_planner, methods=["POST"])
     app.add_url_rule("/planner/remove", endpoint="remove_from_breeding_planner", view_func=remove_from_breeding_planner, methods=["POST"])
+    app.add_url_rule("/planner/item", endpoint="update_breeding_planner_item", view_func=update_breeding_planner_item, methods=["POST"])
     app.add_url_rule("/planner/export", endpoint="export_breeding_planner", view_func=export_breeding_planner, methods=["GET"])
     app.add_url_rule("/planner/items-check", endpoint="planner_items_check", view_func=planner_items_check, methods=["GET"])
     app.add_url_rule("/planner/script-generate", endpoint="planner_script_generate", view_func=planner_script_generate, methods=["GET"])
