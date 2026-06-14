@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import json
 from services.db.connection import DB_PATH, get_connection
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, jsonify, render_template, request, redirect, url_for, session
 import os
 import hmac
 import secrets
@@ -160,7 +160,13 @@ from services.planner_item_requirements import (
     build_wallet_planner_item_requirements_summary,
     build_per_pair_item_status,
 )
-from services.wallet_item_inventory import build_wallet_inventory_lookup
+from services.wallet_item_inventory import (
+    BREEDING_ITEM_NAME_TO_TOKEN_ID,
+    build_wallet_inventory_lookup,
+    get_breeding_item_image_url,
+    normalize_item_name,
+)
+from services.item_helper_text import get_item_short_effect_text
 from services.planner_bookmarklet import (
     build_apex_breeder_bookmarklet_code,
     build_bookmarklet_inventory_name_lookup,
@@ -327,7 +333,17 @@ def owner_password_is_valid(owner_password):
 
 @app.context_processor
 def inject_csrf_token():
-    return {"csrf_token": get_csrf_token()}
+    def static_asset_version(filename):
+        static_path = Path(app.static_folder or "static") / str(filename or "")
+        try:
+            return str(int(static_path.stat().st_mtime))
+        except OSError:
+            return "1"
+
+    return {
+        "csrf_token": get_csrf_token(),
+        "static_asset_version": static_asset_version,
+    }
 
 
 @app.before_request
@@ -522,6 +538,7 @@ HATCHED_STATIC_CACHE_FIELDS = [
     "body_h1",
     "body_h2",
     "body_h3",
+    "gene_profile_loaded",
     "innate_attack",
     "innate_defense",
     "innate_speed",
@@ -555,7 +572,7 @@ def merge_static_chicken_cache(record, static_row):
     return record
 
 def needs_recessive_enrichment(chicken):
-    return not chicken.get("gene_profile_loaded")
+    return not has_cached_recessive_ready_data(chicken)
 
 
 def enrich_missing_recessive_data_in_batches(chickens, wallet, page_key, batch_size=5, prioritized_token_id=None):
@@ -629,20 +646,22 @@ def enrich_missing_recessive_data_in_batches(chickens, wallet, page_key, batch_s
     }
 
 def has_cached_recessive_ready_data(record):
+    recessive_trait_fields = [
+        "beak_h1",
+        "comb_h1",
+        "eyes_h1",
+        "feet_h1",
+        "wings_h1",
+        "tail_h1",
+        "body_h1",
+    ]
+
     return bool(
         record.get("gene_profile_loaded")
         or record.get("recessive_build")
-        or any(
+        or all(
             str(record.get(field) or "").strip()
-            for field in [
-                "beak_h1", "beak_h2", "beak_h3",
-                "comb_h1", "comb_h2", "comb_h3",
-                "eyes_h1", "eyes_h2", "eyes_h3",
-                "feet_h1", "feet_h2", "feet_h3",
-                "wings_h1", "wings_h2", "wings_h3",
-                "tail_h1", "tail_h2", "tail_h3",
-                "body_h1", "body_h2", "body_h3",
-            ]
+            for field in recessive_trait_fields
         )
     )
 
@@ -779,6 +798,45 @@ def sync_wallet_data(wallet):
     return get_chickens_by_wallet(wallet)
 
 
+def hydrate_cached_wallet_chickens_from_static_cache(chickens):
+    rows = list(chickens or [])
+    candidates = [
+        row
+        for row in rows
+        if is_breedable(row) and needs_recessive_enrichment(row)
+    ]
+
+    if not candidates:
+        return rows
+
+    ensure_static_cache_tables_loaded()
+    static_lookup = get_static_chickens_by_token_ids(
+        [row.get("token_id") for row in candidates]
+    )
+
+    hydrated_any = False
+    for row in candidates:
+        token_id = str(row.get("token_id") or "").strip()
+        static_row = static_lookup.get(token_id)
+        if not static_row:
+            continue
+
+        hydrated = dict(row)
+        merge_static_chicken_cache(hydrated, static_row)
+
+        if not has_cached_recessive_ready_data(hydrated):
+            continue
+
+        hydrated = apply_gene_profile_classification(hydrated)
+        upsert_chicken(hydrated)
+        hydrated_any = True
+
+    if not hydrated_any:
+        return rows
+
+    return get_chickens_by_wallet(rows[0].get("wallet_address"))
+
+
 def get_wallet_chickens(wallet, ensure_loaded=False, force_refresh=False):
     if wallet:
         clear_stale_family_root_summaries(wallet, max_age_hours=24)
@@ -794,6 +852,8 @@ def get_wallet_chickens(wallet, ensure_loaded=False, force_refresh=False):
         if wallet:
             clear_stale_family_root_summaries(wallet, max_age_hours=24)
             chickens = get_chickens_by_wallet(wallet)
+    elif ensure_loaded:
+        chickens = hydrate_cached_wallet_chickens_from_static_cache(chickens)
 
     return chickens
 
@@ -988,6 +1048,271 @@ def build_planner_pair_key(left_token_id, right_token_id):
     return f"{pair[0]}::{pair[1]}" if len(pair) == 2 else ""
 
 
+def format_build_count_value(count, total=None):
+    count_value = safe_int(count, None)
+    total_value = safe_int(total, None)
+
+    if count_value is None:
+        return ""
+    if total_value:
+        return f"{count_value}/{total_value}"
+    return str(count_value)
+
+
+def get_planner_export_build_info(chicken, fallback_build=""):
+    chicken = chicken or {}
+    build_name = (
+        chicken.get("ultimate_build_display")
+        or chicken.get("build_label")
+        or chicken.get("gene_build_display")
+        or chicken.get("build_type")
+        or chicken.get("primary_build")
+        or chicken.get("gene_build_key")
+        or chicken.get("recessive_build")
+        or fallback_build
+        or ""
+    )
+    build_name = str(build_name or "").strip().title()
+
+    count_display = str(
+        chicken.get("ultimate_build_match_display")
+        or chicken.get("build_match_display")
+        or chicken.get("gene_build_match_display")
+        or ""
+    ).strip()
+
+    if not count_display:
+        count_sources = [
+            ("ultimate_build_match_count", "ultimate_build_match_total"),
+            ("primary_build_match_count", "primary_build_match_total"),
+            ("build_match_count", "build_match_total"),
+            ("gene_build_match_count", "gene_build_match_total"),
+            ("recessive_build_match_count", "recessive_build_match_total"),
+        ]
+        for count_key, total_key in count_sources:
+            count_display = format_build_count_value(chicken.get(count_key), chicken.get(total_key))
+            if count_display:
+                break
+
+    if is_missing_export_build_value(build_name) or is_missing_export_build_value(count_display):
+        best_info = get_best_available_gene_build_info(chicken)
+        if is_missing_export_build_value(build_name) and best_info.get("build_label"):
+            build_name = best_info["build_label"]
+        if is_missing_export_build_value(count_display) and best_info.get("build_count_display"):
+            count_display = best_info["build_count_display"]
+
+    return {
+        "build": build_name,
+        "count": count_display,
+    }
+
+
+def is_missing_export_build_value(value):
+    text = str(value or "").strip().lower()
+    return text in {"", "0", "0/0", "none", "no build"}
+
+
+def get_export_chicken_build_info(side_row, fallback_build=""):
+    side_row = dict(side_row or {})
+    token_id = str(side_row.get("token_id") or "").strip()
+    source = {}
+
+    if token_id:
+        source = get_chicken_by_token(token_id) or {}
+
+    source.update({
+        key: value
+        for key, value in side_row.items()
+        if value not in (None, "")
+    })
+
+    if is_missing_export_build_value(source.get("build")):
+        source.pop("build", None)
+    if is_missing_export_build_value(source.get("build_count")):
+        source.pop("build_count", None)
+    if is_missing_export_build_value(source.get("build_match_display")):
+        source.pop("build_match_display", None)
+
+    build_info = get_planner_export_build_info(source, fallback_build)
+    return {
+        "build": "" if is_missing_export_build_value(build_info["build"]) else build_info["build"],
+        "count": "" if is_missing_export_build_value(build_info["count"]) else build_info["count"],
+    }
+
+
+IP_PLANNER_ITEM_NAMES = {
+    "Cocktail's Beak",
+    "Pos2 Pellet",
+    "Vananderen's Vitality",
+    "Fetzzz Feet",
+    "Lockedin State",
+    "Ouchie's Ornament",
+    "Pinong's Bird",
+}
+
+GENE_PLANNER_ITEM_NAMES = {
+    "Gregor's Gift",
+    "Mendel's Memento",
+    "Quentin's Talon",
+    "Dragon's Whip",
+    "Chibidei's Curse",
+    "All-seeing Seed",
+    "Chim Lac's Curio",
+    "Suave Scissors",
+    "Simurgh's Sovereign",
+    "St. Elmo's Fire",
+}
+
+
+def _unique_item_candidates(candidates, allowed_names=None):
+    allowed_names = {normalize_item_name(name) for name in (allowed_names or []) if normalize_item_name(name)}
+    seen = set()
+    results = []
+
+    for item in candidates or []:
+        if not isinstance(item, dict):
+            continue
+
+        name = normalize_item_name(item.get("name"))
+        if not name or name in seen:
+            continue
+        if allowed_names and name not in allowed_names:
+            continue
+
+        row = dict(item)
+        row["name"] = name
+        results.append(row)
+        seen.add(name)
+
+    return results
+
+
+def get_planner_allowed_item_names(mode):
+    mode = str(mode or "").strip().lower()
+    if mode == "ip":
+        return sorted(IP_PLANNER_ITEM_NAMES)
+    if mode == "gene":
+        return sorted(GENE_PLANNER_ITEM_NAMES)
+    if mode == "ultimate":
+        return sorted(BREEDING_ITEM_NAME_TO_TOKEN_ID.keys())
+    return []
+
+
+def get_planner_item_candidates(row, side):
+    row = row or {}
+    mode = str(row.get("mode") or "").strip().lower()
+    side = str(side or "").strip().lower()
+    source = row.get("left") if side == "left" else row.get("right")
+    target = row.get("right") if side == "left" else row.get("left")
+    allowed_names = set(get_planner_allowed_item_names(mode))
+
+    if mode == "ip":
+        return _unique_item_candidates(get_ip_item_candidates(source, target), allowed_names)
+
+    if mode == "gene":
+        build_type = str(row.get("build_type") or "").strip().lower()
+        return _unique_item_candidates(get_gene_item_candidates(source, target, build_type), allowed_names)
+
+    if mode == "ultimate":
+        build_type = str(
+            row.get("build_type")
+            or (row.get("left") or {}).get("primary_build")
+            or (row.get("right") or {}).get("primary_build")
+            or ""
+        ).strip().lower()
+        return _unique_item_candidates(get_ultimate_item_candidates(source, target, build_type), allowed_names)
+
+    return []
+
+
+def normalize_planner_item_slots(items, fallback_item=None, candidates=None, allowed_names=None):
+    allowed_names = {normalize_item_name(name) for name in (allowed_names or []) if normalize_item_name(name)}
+    explicit_slots = isinstance(items, (list, dict))
+
+    if isinstance(items, list):
+        sources = items[:2]
+    elif isinstance(items, dict):
+        sources = [items]
+    else:
+        sources = []
+        if fallback_item:
+            sources.append(fallback_item)
+        sources.extend(candidates or [])
+
+    slots = []
+    seen = set()
+
+    for item in sources:
+        if not isinstance(item, dict):
+            continue
+
+        name = normalize_item_name(item.get("name"))
+        if not name or name in seen:
+            continue
+        if allowed_names and not explicit_slots and name not in allowed_names:
+            continue
+
+        row = dict(item)
+        row["name"] = name
+        slots.append(row)
+        seen.add(name)
+
+        if len(slots) >= 2:
+            break
+
+    while len(slots) < 2:
+        slots.append(None)
+
+    return slots
+
+
+def build_planner_item_options(row, side):
+    candidates = get_planner_item_candidates(row, side)
+    recommended_rank = {
+        normalize_item_name(item.get("name")): index + 1
+        for index, item in enumerate(candidates[:3])
+        if item and normalize_item_name(item.get("name"))
+    }
+
+    return [
+        {
+            "name": name,
+            "image": get_breeding_item_image_url(name),
+            "description": get_item_short_effect_text(name),
+            "recommended_rank": recommended_rank.get(name),
+        }
+        for name in sorted(BREEDING_ITEM_NAME_TO_TOKEN_ID.keys())
+    ]
+
+
+def hydrate_planner_item_row(row):
+    row = dict(row or {})
+    mode = str(row.get("mode") or "").strip().lower()
+    allowed_names = get_planner_allowed_item_names(mode)
+    left_candidates = get_planner_item_candidates(row, "left")
+    right_candidates = get_planner_item_candidates(row, "right")
+
+    row["left_items"] = normalize_planner_item_slots(
+        row.get("left_items"),
+        fallback_item=row.get("left_item"),
+        candidates=left_candidates,
+        allowed_names=allowed_names,
+    )
+    row["right_items"] = normalize_planner_item_slots(
+        row.get("right_items"),
+        fallback_item=row.get("right_item"),
+        candidates=right_candidates,
+        allowed_names=allowed_names,
+    )
+    row["left_item"] = row["left_items"][0]
+    row["right_item"] = row["right_items"][0]
+    row["left_item_candidates"] = left_candidates
+    row["right_item_candidates"] = right_candidates
+    row["left_item_options"] = build_planner_item_options(row, "left")
+    row["right_item_options"] = build_planner_item_options(row, "right")
+    return row
+
+
 def get_breeding_planner_queue(wallet):
     wallet = (wallet or "").strip().lower()
     queue = load_breeding_planner_queue_from_db(wallet)
@@ -1030,7 +1355,7 @@ def get_breeding_planner_queue(wallet):
         row = dict(row)
         row["left"] = left
         row["right"] = right
-        cleaned.append(row)
+        cleaned.append(hydrate_planner_item_row(row))
     return cleaned
 
 
@@ -1119,9 +1444,22 @@ def build_planner_queue_row(mode, left, right, left_item=None, right_item=None, 
                 if right_build else right_ultimate["ultimate_build_match_display"]
             )
 
-    return {
+    mode_key = str(mode or "").strip().lower()
+    recommendation_context = {
+        "mode": mode_key,
+        "build_type": str(build_type or "").strip().lower(),
+        "left": left,
+        "right": right,
+    }
+    allowed_names = get_planner_allowed_item_names(mode_key)
+    left_candidates = get_planner_item_candidates(recommendation_context, "left")
+    right_candidates = get_planner_item_candidates(recommendation_context, "right")
+    left_build_info = get_planner_export_build_info(left, build_type)
+    right_build_info = get_planner_export_build_info(right, build_type)
+
+    row = {
         "pair_key": pair_key,
-        "mode": str(mode or "").strip().lower(),
+        "mode": mode_key,
         "mode_label": f"{mode_text} Breeding" if mode_text else "Breeding",
         "build_type": str(build_type or "").strip().lower(),
         "build_label": build_text,
@@ -1132,6 +1470,8 @@ def build_planner_queue_row(mode, left, right, left_item=None, right_item=None, 
             "label": f"#{left_token_id}" if left_token_id else "",
             "ip": left.get("ip"),
             "breed_count": left.get("breed_count"),
+            "build": left_build_info["build"],
+            "build_count": left_build_info["count"],
             "generation_text": left.get("generation_text") or "",
             "ninuno": left.get("ownership_percent") or 0,
             "summary": left_summary,
@@ -1142,14 +1482,29 @@ def build_planner_queue_row(mode, left, right, left_item=None, right_item=None, 
             "label": f"#{right_token_id}" if right_token_id else "",
             "ip": right.get("ip"),
             "breed_count": right.get("breed_count"),
+            "build": right_build_info["build"],
+            "build_count": right_build_info["count"],
             "generation_text": right.get("generation_text") or "",
             "ninuno": right.get("ownership_percent") or 0,
             "summary": right_summary,
         },
         "left_item": left_item or None,
         "right_item": right_item or None,
+        "left_items": normalize_planner_item_slots(
+            None,
+            fallback_item=left_item,
+            candidates=left_candidates,
+            allowed_names=allowed_names,
+        ),
+        "right_items": normalize_planner_item_slots(
+            None,
+            fallback_item=right_item,
+            candidates=right_candidates,
+            allowed_names=allowed_names,
+        ),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    return hydrate_planner_item_row(row)
 
 
 def build_planner_summary(queue_rows):
@@ -1216,22 +1571,39 @@ def export_breeding_planner_excel(queue_rows):
     sheet = workbook.active
     sheet.title = "Breeding Planner"
     headers = [
-        "Mode", "Build", "Pair Quality",
-        "Left Chicken", "Left IP", "Left Breed Count", "Left Ninuno", "Left Item",
-        "Right Chicken", "Right IP", "Right Breed Count", "Right Ninuno", "Right Item",
+        "Mode", "Pair Quality",
+        "Left Chicken", "Left IP", "Left Build", "Left Build Count", "Left Breed Count", "Left Ninuno", "Left Item 1", "Left Item 2",
+        "Right Chicken", "Right IP", "Right Build", "Right Build Count", "Right Breed Count", "Right Ninuno", "Right Item 1", "Right Item 2",
     ]
     sheet.append(headers)
     for row in queue_rows:
         left = row.get("left") or {}
         right = row.get("right") or {}
-        left_item = row.get("left_item") or {}
-        right_item = row.get("right_item") or {}
+        left_items = [item for item in (row.get("left_items") or [row.get("left_item")]) if item]
+        right_items = [item for item in (row.get("right_items") or [row.get("right_item")]) if item]
+        left_items = (left_items + [None, None])[:2]
+        right_items = (right_items + [None, None])[:2]
+        left_build_info = get_export_chicken_build_info(left, row.get("build_type") or row.get("build_label") or "")
+        right_build_info = get_export_chicken_build_info(right, row.get("build_type") or row.get("build_label") or "")
         sheet.append([
             row.get("mode_label") or "",
-            row.get("build_label") or "",
             row.get("pair_quality") or "",
-            left.get("label") or "", left.get("ip") or "", left.get("breed_count") if left.get("breed_count") is not None else "", left.get("ninuno") or 0, left_item.get("name") or "",
-            right.get("label") or "", right.get("ip") or "", right.get("breed_count") if right.get("breed_count") is not None else "", right.get("ninuno") or 0, right_item.get("name") or "",
+            left.get("label") or "",
+            left.get("ip") or "",
+            left_build_info["build"],
+            left_build_info["count"],
+            left.get("breed_count") if left.get("breed_count") is not None else "",
+            left.get("ninuno") or left.get("ownership_percent") or 0,
+            (left_items[0] or {}).get("name") or "",
+            (left_items[1] or {}).get("name") or "",
+            right.get("label") or "",
+            right.get("ip") or "",
+            right_build_info["build"],
+            right_build_info["count"],
+            right.get("breed_count") if right.get("breed_count") is not None else "",
+            right.get("ninuno") or right.get("ownership_percent") or 0,
+            (right_items[0] or {}).get("name") or "",
+            (right_items[1] or {}).get("name") or "",
         ])
     for column_cells in sheet.columns:
         length = max(len(str(cell.value or "")) for cell in column_cells)
@@ -1841,8 +2213,12 @@ register_planner_routes(app, {
     "enrich_chicken_media": enrich_chicken_media,
     "export_breeding_planner_excel": export_breeding_planner_excel,
     "get_breeding_planner_queue": get_breeding_planner_queue,
+    "get_item_image_url": get_item_image_url,
+    "get_all_breeding_item_names": lambda: sorted(BREEDING_ITEM_NAME_TO_TOKEN_ID.keys()),
+    "get_planner_allowed_item_names": get_planner_allowed_item_names,
     "get_wallet_access_expiry_display": get_wallet_access_expiry_display,
     "get_wallet_chickens": get_wallet_chickens,
+    "normalize_item_name": normalize_item_name,
     "planner_pair_exists": planner_pair_exists,
     "require_authorized_wallet": require_authorized_wallet,
     "save_breeding_planner_queue": save_breeding_planner_queue,
