@@ -339,15 +339,13 @@
                         <strong>#{{ row["left"]["token_id"] }}</strong>
                         💜
                         <strong>#{{ row["right"]["token_id"] }}</strong>
-                        {% if row["left_item"] or row["right_item"] %}
+                        {% set left_items = row["left_items"] if row["left_items"] is defined else ([row["left_item"]] if row["left_item"] else []) %}
+                        {% set right_items = row["right_items"] if row["right_items"] is defined else ([row["right_item"]] if row["right_item"] else []) %}
+                        {% set left_names = left_items|select|map(attribute="name")|select|list %}
+                        {% set right_names = right_items|select|map(attribute="name")|select|list %}
+                        {% if left_names or right_names %}
                             <br>
-                            {% if row["left_item"] %}
-                                {{ row["left_item"]["name"] }}
-                            {% endif %}
-                            {% if row["left_item"] and row["right_item"] %} | {% endif %}
-                            {% if row["right_item"] %}
-                                {{ row["right_item"]["name"] }}
-                            {% endif %}
+                            {{ left_names|join(", ") }}{% if left_names and right_names %} | {% endif %}{{ right_names|join(", ") }}
                         {% endif %}
                     </div>
                 {% endfor %}

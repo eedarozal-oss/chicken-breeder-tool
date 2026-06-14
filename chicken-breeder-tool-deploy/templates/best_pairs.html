@@ -157,44 +157,6 @@
                             </div>
                         </div>
 
-                        <div class="best-pair-items-panel">
-                            <div class="best-pair-detail-title">Item Recommendations</div>
-                            <div class="best-pair-item-grid">
-                                <div class="best-pair-item-card">
-                                    <span>Left #{{ row.left.token_id }}</span>
-                                    {% if row.left_item %}
-                                        <div class="best-pair-item-body">
-                                            <img src="{{ get_item_image_url(row.left_item.name) }}" alt="{{ row.left_item.name }}">
-                                            <div>
-                                                <strong>{{ row.left_item.name }}</strong>
-                                                {% if row.left_item.reason %}
-                                                    <p>{{ row.left_item.reason }}</p>
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                    {% else %}
-                                        <strong>No item</strong>
-                                    {% endif %}
-                                </div>
-                                <div class="best-pair-item-card">
-                                    <span>Right #{{ row.right.token_id }}</span>
-                                    {% if row.right_item %}
-                                        <div class="best-pair-item-body">
-                                            <img src="{{ get_item_image_url(row.right_item.name) }}" alt="{{ row.right_item.name }}">
-                                            <div>
-                                                <strong>{{ row.right_item.name }}</strong>
-                                                {% if row.right_item.reason %}
-                                                    <p>{{ row.right_item.reason }}</p>
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                    {% else %}
-                                        <strong>No item</strong>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
                         <div class="best-pair-card-actions">
                             <form method="POST" action="{{ url_for('add_to_breeding_planner') }}" data-best-pair-add-form>
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -349,6 +311,6 @@
             refreshBestPairState();
         });
     </script>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v=static_asset_version('app.js')) }}"></script>
 </body>
 </html>

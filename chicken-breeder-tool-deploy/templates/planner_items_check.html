@@ -236,6 +236,8 @@
 
 		.pair-items-side {
 			display: flex;
+			flex-direction: column;
+			gap: 8px;
 		}
 
 		.pair-items-left {
@@ -579,12 +581,12 @@
 						</div>
 
 						{% if pair["items"] %}
-							{% set left_item = pair["items"][0] if pair["items"]|length > 0 else None %}
-							{% set right_item = pair["items"][1] if pair["items"]|length > 1 else None %}
+							{% set left_items = pair["items"]|selectattr("side", "equalto", "left")|list %}
+							{% set right_items = pair["items"]|selectattr("side", "equalto", "right")|list %}
 
 							<div class="pair-items-grid">
 								<div class="pair-items-side pair-items-left">
-									{% if left_item %}
+									{% for left_item in left_items %}
 										<div class="pair-item pair-item-compact">
 											<img src="{{ left_item['image'] }}" alt="{{ left_item['name'] }}">
 											<div class="pair-item-text">
@@ -594,13 +596,13 @@
 												</div>
 											</div>
 										</div>
-									{% endif %}
+									{% endfor %}
 								</div>
 
 								<div class="pair-items-middle"></div>
 
 								<div class="pair-items-side pair-items-right">
-									{% if right_item %}
+									{% for right_item in right_items %}
 										<div class="pair-item pair-item-compact">
 											<img src="{{ right_item['image'] }}" alt="{{ right_item['name'] }}">
 											<div class="pair-item-text">
@@ -610,7 +612,7 @@
 												</div>
 											</div>
 										</div>
-									{% endif %}
+									{% endfor %}
 								</div>
 							</div>
 						{% else %}

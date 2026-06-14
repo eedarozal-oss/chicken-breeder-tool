@@ -308,6 +308,6 @@
         </section>
     </div>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v=static_asset_version('app.js')) }}"></script>
 </body>
 </html>

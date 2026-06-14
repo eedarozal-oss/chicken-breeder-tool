@@ -23,7 +23,7 @@
 
 			<form method="POST" class="welcome-wallet-form" id="wallet-load-form">
 				<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-				<div class="welcome-version-badge">Version 1.7.4</div>
+				<div class="welcome-version-badge">Version 1.7.5</div>
 				<div class="wallet-input-shell">
 					<input
 						type="text"
@@ -62,7 +62,7 @@
 			</form>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js', v=static_asset_version('app.js')) }}"></script>
 	<script>
 		document.addEventListener("DOMContentLoaded", function () {
 			const form = document.getElementById("wallet-load-form");
