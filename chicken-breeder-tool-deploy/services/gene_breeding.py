@@ -3,7 +3,8 @@ from services.build_eval import (
     count_added_missing_traits,
     build_gene_pair_metrics,
 )
-from services.builds_config import BUILD_INSTINCT_TIERS
+from services.builds_config import BUILD_INSTINCT_TIERS, BUILD_RULES
+from services.build_utils import trait_matches_allowed_value
 from services.match_rules import (
     is_generation_gap_allowed,
     is_parent_offspring,
@@ -38,6 +39,10 @@ GENE_PRIMARY_MIN_MATCH = 2
 GENE_PRIMARY_QUALIFIED_MATCH = 5
 GENE_RECESSIVE_MIN_MATCH = 4
 GENE_RECESSIVE_OVERRIDE_DIFF = 3
+GENE_EXCELLENT_POINTS = 300
+GENE_STRONG_POINTS = 220
+GENE_GOOD_POINTS = 120
+GENE_SITUATIONAL_POINTS = 40
 
 GENE_PRIORITY_SLOTS = {
     "killua": ["beak", "tail", "feet", "body"],
@@ -45,6 +50,12 @@ GENE_PRIORITY_SLOTS = {
     "levi": ["beak", "tail", "feet", "body"],
     "hybrid 2": ["wings"],
     "hybrid 1": [],
+}
+
+GENE_RECESSIVE_POTENTIAL_POINTS = {
+    "h1": {"normal": 2, "priority": 3},
+    "h2": {"normal": 1, "priority": 2},
+    "h3": {"normal": 0, "priority": 1},
 }
 
 def get_gene_build_compatibility(build_type):
@@ -150,6 +161,86 @@ def build_gene_priority_metrics(selected_eval, candidate_eval, build_type):
         "candidate_priority_satisfied": candidate_priority_satisfied,
         "priority_any_satisfied": selected_priority_satisfied or candidate_priority_satisfied,
     }
+
+
+def get_gene_priority_trait_value_points(priority_metrics):
+    priority_metrics = priority_metrics or {}
+    selected_matched = set(priority_metrics.get("shared_priority_slots") or [])
+    selected_matched.update(priority_metrics.get("candidate_resolved_priority_slots") or [])
+    candidate_matched = set(priority_metrics.get("shared_priority_slots") or [])
+    candidate_matched.update(priority_metrics.get("selected_resolved_priority_slots") or [])
+
+    selected_points = len(selected_matched) * 2
+    candidate_points = len(candidate_matched) * 3
+
+    return {
+        "selected_priority_trait_count": len(selected_matched),
+        "candidate_priority_trait_count": len(candidate_matched),
+        "selected_points": selected_points,
+        "candidate_points": candidate_points,
+        "points": selected_points + candidate_points,
+    }
+
+
+def get_gene_recessive_potential_for_parent(parent, build_type):
+    parent = parent or {}
+    build_type = str(build_type or "").strip().lower()
+    build_rules = BUILD_RULES.get(build_type) or {}
+    slot_rules = build_rules.get("slots") or {}
+    priority_slots = set(get_gene_priority_slots(build_type))
+    details = []
+    total_points = 0
+
+    if not build_type or not slot_rules:
+        return {"points": 0, "traits": []}
+
+    for slot in TRAIT_SLOT_ORDER:
+        allowed_values = slot_rules.get(slot) or []
+        if not allowed_values:
+            continue
+
+        if trait_matches_allowed_value(parent.get(slot), allowed_values):
+            continue
+
+        is_priority = slot in priority_slots
+        best_detail = None
+        for tier in ("h1", "h2", "h3"):
+            trait_value = parent.get(f"{slot}_{tier}")
+            if not trait_matches_allowed_value(trait_value, allowed_values):
+                continue
+
+            point_key = "priority" if is_priority else "normal"
+            points = GENE_RECESSIVE_POTENTIAL_POINTS[tier][point_key]
+            if points <= 0:
+                continue
+
+            best_detail = {
+                "slot": slot,
+                "tier": tier.upper(),
+                "trait": trait_value,
+                "priority": is_priority,
+                "points": points,
+            }
+            break
+
+        if best_detail:
+            details.append(best_detail)
+            total_points += best_detail["points"]
+
+    return {"points": total_points, "traits": details}
+
+
+def get_gene_recessive_potential_points(selected_chicken, candidate, build_type):
+    selected_detail = get_gene_recessive_potential_for_parent(selected_chicken, build_type)
+    candidate_detail = get_gene_recessive_potential_for_parent(candidate, build_type)
+    return {
+        "selected_points": selected_detail["points"],
+        "candidate_points": candidate_detail["points"],
+        "points": selected_detail["points"] + candidate_detail["points"],
+        "selected_traits": selected_detail["traits"],
+        "candidate_traits": candidate_detail["traits"],
+    }
+
 
 def get_gene_priority_item_slots(parent, other_parent, build_type):
     build_type = str(build_type or "").strip().lower()
@@ -596,28 +687,174 @@ def _resolve_gene_pair_items_for_quality(row, build_type):
 
 
 def cap_gene_pair_quality_by_item_plan(quality, row, build_type, selected_count, candidate_count, total):
-    if quality not in {"Excellent match", "Strong match"}:
-        return quality
+    return quality
 
-    if not (row or {}).get("left") or not ((row or {}).get("right") or (row or {}).get("candidate")):
-        return quality
 
-    left_item, right_item = _resolve_gene_pair_items_for_quality(row, build_type)
-    left_allowed = bool(left_item) or _gene_pair_side_has_high_coverage_exception(
-        selected_count,
-        candidate_count,
-        total,
-    )
-    right_allowed = bool(right_item) or _gene_pair_side_has_high_coverage_exception(
-        candidate_count,
-        selected_count,
-        total,
-    )
+def get_gene_quality_rank(quality):
+    return {
+        "Excellent match": 0,
+        "Strong match": 1,
+        "Good match": 2,
+        "Situational": 3,
+        "Poor": 4,
+    }.get(str(quality or "").strip(), 99)
 
-    if left_allowed and right_allowed:
-        return quality
 
-    return "Good match"
+def _get_gene_pair_side_missing_count(side_count, total):
+    side_count = safe_int(side_count, 0) or 0
+    total = safe_int(total, 0) or 0
+    return max(0, total - side_count)
+
+
+def get_gene_pair_burden_metrics(pair_metrics):
+    pair_metrics = pair_metrics or {}
+    total = safe_int(pair_metrics.get("total"), 0) or 0
+    left_count = safe_int(pair_metrics.get("left_count"), 0) or 0
+    right_count = safe_int(pair_metrics.get("right_count"), 0) or 0
+    combined_count = safe_int(pair_metrics.get("combined_count"), 0) or 0
+    left_missing_count = _get_gene_pair_side_missing_count(left_count, total)
+    right_missing_count = _get_gene_pair_side_missing_count(right_count, total)
+
+    return {
+        "left_missing_count": left_missing_count,
+        "right_missing_count": right_missing_count,
+        "total_missing_count": left_missing_count + right_missing_count,
+        "unresolved_count": max(0, total - combined_count),
+        "extra_missing_count": max(0, left_missing_count - 2) + max(0, right_missing_count - 2),
+    }
+
+
+def candidate_has_gene_instinct_fit(candidate, build_type):
+    return bool(build_type and build_prefers_instinct(candidate, build_type))
+
+
+def build_gene_pair_notes(score):
+    score = score or {}
+    burden_metrics = score.get("burden_metrics") or {}
+    pair_metrics = score.get("metrics") or {}
+    notes = []
+
+    if score.get("aligned_instinct"):
+        notes.append({"priority": 0, "text": "Candidate instinct fit"})
+
+    unresolved_count = safe_int(burden_metrics.get("unresolved_count"), 0) or 0
+    if unresolved_count == 0:
+        notes.append({"priority": 10, "text": "Full build coverage"})
+    elif unresolved_count == 1:
+        notes.append({"priority": 10, "text": "1 build trait unresolved"})
+    else:
+        notes.append({"priority": 10, "text": f"{unresolved_count} build traits unresolved"})
+
+    left_only_count = safe_int(pair_metrics.get("left_only_count"), 0) or 0
+    right_only_count = safe_int(pair_metrics.get("right_only_count"), 0) or 0
+    if left_only_count and right_only_count:
+        notes.append({"priority": 20, "text": "Mutual trait support"})
+    elif left_only_count or right_only_count:
+        notes.append({"priority": 20, "text": "One-sided trait support"})
+
+    shared_count = safe_int(pair_metrics.get("shared_count"), 0) or 0
+    if shared_count >= 5:
+        notes.append({"priority": 50, "text": f"{shared_count} shared build traits"})
+
+    notes.sort(key=lambda row: row["priority"])
+    return notes
+
+
+def compute_gene_pair_score(
+    selected_chicken,
+    candidate,
+    build_type,
+    pair_metrics=None,
+    candidate_target_info=None,
+    priority_metrics=None,
+    added_missing_traits=0,
+):
+    selected_chicken = selected_chicken or {}
+    candidate = candidate or {}
+    build_type = str(build_type or "").strip().lower()
+    pair_metrics = pair_metrics or {}
+    candidate_target_info = candidate_target_info or {}
+    priority_metrics = priority_metrics or {}
+    added_missing_traits = safe_int(added_missing_traits, 0) or 0
+
+    total = safe_int(pair_metrics.get("total"), 0) or 0
+    shared_count = safe_int(pair_metrics.get("shared_count"), 0) or 0
+    combined_count = safe_int(pair_metrics.get("combined_count"), 0) or 0
+    left_count = safe_int(pair_metrics.get("left_count"), 0) or 0
+    right_count = safe_int(pair_metrics.get("right_count"), 0) or 0
+    left_only_count = safe_int(pair_metrics.get("left_only_count"), 0) or 0
+    right_only_count = safe_int(pair_metrics.get("right_only_count"), 0) or 0
+    mutual_fix_count = left_only_count + right_only_count
+    burden_metrics = get_gene_pair_burden_metrics(pair_metrics)
+    unresolved_count = safe_int(burden_metrics.get("unresolved_count"), 0) or 0
+    left_missing_count = safe_int(burden_metrics.get("left_missing_count"), 0) or 0
+    right_missing_count = safe_int(burden_metrics.get("right_missing_count"), 0) or 0
+    extra_missing_count = safe_int(burden_metrics.get("extra_missing_count"), 0) or 0
+    both_5_plus = min(left_count, right_count) >= 5
+    both_4_plus = min(left_count, right_count) >= 4
+    aligned_instinct = candidate_has_gene_instinct_fit(candidate, build_type)
+
+    priority_bonus = 0
+    priority_bonus += (safe_int(priority_metrics.get("selected_priority_resolved_count"), 0) or 0) * 10
+    priority_bonus += (safe_int(priority_metrics.get("candidate_priority_resolved_count"), 0) or 0) * 10
+    priority_bonus += (safe_int(priority_metrics.get("priority_shared_count"), 0) or 0) * 4
+    priority_trait_value = get_gene_priority_trait_value_points(priority_metrics)
+    recessive_potential = get_gene_recessive_potential_points(selected_chicken, candidate, build_type)
+
+    points = 0
+    points += shared_count * 50
+    points += mutual_fix_count * 40
+    if total > 0 and combined_count >= total:
+        points += 40
+    if left_only_count and right_only_count:
+        points += 30
+    if both_5_plus:
+        points += 50
+    elif both_4_plus:
+        points += 25
+    if aligned_instinct:
+        points += 25
+    points += priority_bonus
+    points += priority_trait_value["points"]
+    points += recessive_potential["points"]
+
+    points -= unresolved_count * 90
+    points -= (left_missing_count + right_missing_count) * 35
+    points -= extra_missing_count * 60
+
+    if total <= 0:
+        grade = "Poor"
+    elif points >= GENE_EXCELLENT_POINTS:
+        grade = "Excellent match"
+    elif points >= GENE_STRONG_POINTS:
+        grade = "Strong match"
+    elif points >= GENE_GOOD_POINTS:
+        grade = "Good match"
+    elif points >= GENE_SITUATIONAL_POINTS:
+        grade = "Situational"
+    else:
+        grade = "Poor"
+
+    score = {
+        "points": points,
+        "grade": grade,
+        "shared_trait_count": shared_count,
+        "mutual_fix_count": mutual_fix_count,
+        "aligned_instinct": aligned_instinct,
+        "both_5_plus": both_5_plus,
+        "both_4_plus": both_4_plus,
+        "priority_bonus": priority_bonus,
+        "priority_trait_value": priority_trait_value,
+        "recessive_potential": recessive_potential,
+        "metrics": pair_metrics,
+        "priority_metrics": priority_metrics,
+        "burden_metrics": burden_metrics,
+        "candidate_target_info": candidate_target_info,
+        "added_missing_traits": added_missing_traits,
+    }
+    score["notes"] = build_gene_pair_notes(score)
+    score["note_display"] = " | ".join(note["text"] for note in score["notes"][:2])
+    return score
 
 
 def build_gene_pair_quality(row):
@@ -634,8 +871,13 @@ def build_gene_pair_quality(row):
         candidate_count = metrics["candidate_count"]
 
         pair_metrics = {
+            "left_count": selected_count,
+            "right_count": candidate_count,
+            "total": combined_total,
             "shared_count": max(0, min(selected_count, candidate_count) - max(0, combined_count - max(selected_count, candidate_count))),
             "combined_count": combined_count,
+            "left_only_count": max(0, combined_count - candidate_count),
+            "right_only_count": max(0, combined_count - selected_count),
             "edge_count": max(0, combined_count - max(selected_count, candidate_count)),
             "elite_stabilization": False,
             "anchor_finisher": False,
@@ -644,6 +886,7 @@ def build_gene_pair_quality(row):
         priority_metrics = {
             "selected_priority_satisfied": True,
             "selected_priority_resolved_count": 0,
+            "candidate_priority_resolved_count": 0,
             "priority_shared_count": 0,
         }
 
@@ -661,94 +904,24 @@ def build_gene_pair_quality(row):
             "sort_match_count": safe_int((candidate_eval or {}).get("match_count"), 0) or 0,
         }
 
-    if combined_total <= 0:
-        return "Poor"
-
-    selected_count = safe_int((selected_eval or {}).get("match_count"), 0)
-    if selected_count is None:
-        selected_count = metrics["selected_count"] if not selected_eval or not candidate_eval else 0
-
-    candidate_count = safe_int((candidate_eval or {}).get("match_count"), 0)
-    if candidate_count is None:
-        candidate_count = metrics["candidate_count"] if not selected_eval or not candidate_eval else 0
-
-    selected_count = selected_count or 0
-    candidate_count = candidate_count or 0
-
-    shared_count = safe_int(pair_metrics.get("shared_count"), 0) or 0
-    edge_count = safe_int(pair_metrics.get("edge_count"), 0) or 0
-
-    left_finishes = combined_count > selected_count
-    right_finishes = combined_count > candidate_count
-    both_finish = left_finishes and right_finishes
-    both_complete = selected_count >= combined_total and candidate_count >= combined_total
-    one_complete_one_near = (
-        max(selected_count, candidate_count) >= combined_total
-        and min(selected_count, candidate_count) >= max(0, combined_total - 1)
+    score = compute_gene_pair_score(
+        selected_chicken=row.get("left") or {},
+        candidate=row.get("right") or row.get("candidate") or {},
+        build_type=build_type,
+        pair_metrics=pair_metrics,
+        candidate_target_info=candidate_target_info,
+        priority_metrics=priority_metrics,
+        added_missing_traits=added_missing_traits,
     )
-    pure_fill = added_missing_traits >= 1 and shared_count == 0
 
-    if both_complete:
-        return cap_gene_pair_quality_by_item_plan(
-            "Excellent match",
-            row,
-            build_type,
-            selected_count,
-            candidate_count,
-            combined_total,
-        )
-
-    if both_finish and combined_count >= combined_total and shared_count >= max(3, combined_total - 2):
-        return cap_gene_pair_quality_by_item_plan(
-            "Excellent match",
-            row,
-            build_type,
-            selected_count,
-            candidate_count,
-            combined_total,
-        )
-
-    if one_complete_one_near and combined_count >= combined_total and shared_count >= max(3, combined_total - 2):
-        return cap_gene_pair_quality_by_item_plan(
-            "Excellent match",
-            row,
-            build_type,
-            selected_count,
-            candidate_count,
-            combined_total,
-        )
-
-    if (
-        combined_count >= max(4, combined_total - 1)
-        and shared_count >= max(2, combined_total - 3)
-        and (both_finish or added_missing_traits >= 2)
-    ):
-        return cap_gene_pair_quality_by_item_plan(
-            "Strong match",
-            row,
-            build_type,
-            selected_count,
-            candidate_count,
-            combined_total,
-        )
-
-    if pure_fill:
-        return "Situational"
-
-    if shared_count <= 1 and added_missing_traits <= 1:
-        return "Poor"
-
-    if (
-        (shared_count in {1, 2} and added_missing_traits >= 2)
-        or (shared_count >= 3 and added_missing_traits == 0 and not both_complete)
-        or (shared_count >= 2 and added_missing_traits >= 1)
-    ):
-        return "Good match"
-
-    if shared_count == 0 and added_missing_traits >= 1:
-        return "Situational"
-
-    return "Poor"
+    return cap_gene_pair_quality_by_item_plan(
+        score["grade"],
+        row,
+        build_type,
+        safe_int(pair_metrics.get("left_count"), 0) or 0,
+        safe_int(pair_metrics.get("right_count"), 0) or 0,
+        combined_total,
+    )
 
 
 def build_gene_pair_quality_from_score(
@@ -818,57 +991,6 @@ def get_gene_overlap_penalty(shared_count):
     return 0
 
 
-def compute_gene_pair_score(
-    selected_chicken,
-    candidate,
-    build_type,
-    pair_metrics=None,
-    candidate_target_info=None,
-    priority_metrics=None,
-    added_missing_traits=0,
-):
-    selected_chicken = selected_chicken or {}
-    candidate = candidate or {}
-    pair_metrics = pair_metrics or {}
-    candidate_target_info = candidate_target_info or {}
-    priority_metrics = priority_metrics or {}
-    added_missing_traits = safe_int(added_missing_traits, 0) or 0
-
-    combined_count = safe_int(pair_metrics.get("combined_count"), 0) or 0
-    shared_count = safe_int(pair_metrics.get("shared_count"), 0) or 0
-    candidate_match_count = safe_int(candidate_target_info.get("sort_match_count"), 0) or 0
-
-    priority_bonus = 0
-    if priority_metrics.get("selected_priority_resolved_count", 0):
-        priority_bonus += 20
-    elif priority_metrics.get("selected_priority_satisfied"):
-        priority_bonus += 10
-
-    if priority_metrics.get("priority_shared_count", 0):
-        priority_bonus += 6
-
-    left_item_candidates = get_gene_item_candidates(selected_chicken, candidate, build_type)
-    right_item_candidates = get_gene_item_candidates(candidate, selected_chicken, build_type)
-    left_item, right_item = resolve_pair_item_recommendations(left_item_candidates, right_item_candidates)
-
-    item_bonus = max(
-        get_gene_item_score_bonus(left_item),
-        get_gene_item_score_bonus(right_item),
-    )
-
-    overlap_penalty = get_gene_overlap_penalty(shared_count)
-
-    score = 0
-    score += combined_count * 100
-    score += shared_count * 20
-    score += added_missing_traits * 15
-    score += candidate_match_count * 5
-    score += priority_bonus
-    score += item_bonus
-    score -= overlap_penalty
-
-    return score
-
 def rank_gene_pair(
     selected_chicken,
     candidate,
@@ -896,40 +1018,33 @@ def rank_gene_pair(
         added_missing_traits=added_missing_traits,
     )
 
-    quality_rank = {
-        "Excellent match": 0,
-        "Strong match": 1,
-        "Good match": 2,
-        "Situational": 3,
-        "Poor": 4,
-    }.get(
-        build_gene_pair_quality_from_score(
-            selected_chicken=selected_chicken,
-            candidate=candidate,
-            build_type=build_type,
-            pair_metrics=pair_metrics,
-            candidate_target_info=candidate_target_info,
-            priority_metrics=priority_metrics,
-            added_missing_traits=added_missing_traits,
-        ),
-        99,
-    )
+    quality_rank = get_gene_quality_rank(gene_score["grade"])
     shared_count = pair_metrics.get("shared_count") or 0
     combined_count = pair_metrics.get("combined_count") or 0
+    burden_metrics = gene_score["burden_metrics"]
     has_added_missing_traits = added_missing_traits > 0
     added_missing_sort = added_missing_traits if has_added_missing_traits else 999
+    selected_item_gap_count = min(2, len(get_gene_item_candidates(selected_chicken, candidate, build_type)))
+    candidate_item_gap_count = min(2, len(get_gene_item_candidates(candidate, selected_chicken, build_type)))
 
     return (
         quality_rank,
+        -gene_score["points"],
+        burden_metrics["unresolved_count"] or 0,
+        burden_metrics["right_missing_count"] or 0,
+        burden_metrics["total_missing_count"] or 0,
         -int(has_added_missing_traits),
         -(candidate_target_info.get("sort_match_count") or 0),
         -shared_count,
+        -selected_item_gap_count,
+        -candidate_item_gap_count,
         added_missing_sort,
-        -gene_score,
         -combined_count,
+        -int(bool(gene_score["aligned_instinct"])),
         -(candidate_target_info.get("sort_match_count") or 0),
         -int(bool(priority_metrics.get("selected_priority_satisfied"))),
         -(priority_metrics.get("selected_priority_resolved_count") or 0),
+        -(priority_metrics.get("candidate_priority_resolved_count") or 0),
         -(priority_metrics.get("priority_shared_count") or 0),
         candidate_target_info.get("sort_source_rank", 9),
         instinct_rank,
@@ -940,6 +1055,41 @@ def rank_gene_pair(
         -(float(selected_chicken.get("ownership_percent") or 0)),
         safe_int(selected_chicken.get("token_id"), 999999999) or 999999999,
     )
+
+
+def enrich_gene_pair_score_fields(row, selected_chicken, candidate):
+    row = row or {}
+    build_type = str(row.get("build_type") or "").strip().lower()
+    pair_metrics = row.get("gene_pair_metrics") or {}
+    priority_metrics = row.get("gene_priority_metrics") or {}
+    candidate_target_info = row.get("candidate_target_info") or {}
+    score = compute_gene_pair_score(
+        selected_chicken=selected_chicken,
+        candidate=candidate,
+        build_type=build_type,
+        pair_metrics=pair_metrics,
+        candidate_target_info=candidate_target_info,
+        priority_metrics=priority_metrics,
+        added_missing_traits=row.get("added_missing_traits") or 0,
+    )
+    row["gene_pair_score"] = score
+    row["gene_pair_points"] = score["points"]
+    row["gene_pair_grade"] = score["grade"]
+    row["gene_pair_notes"] = score["notes"]
+    row["gene_pair_note_display"] = score["note_display"]
+    row["pair_quality"] = score["grade"]
+    row["ranking"] = rank_gene_pair(
+        selected_chicken=selected_chicken,
+        candidate=candidate,
+        build_type=build_type,
+        pair_metrics=pair_metrics,
+        candidate_target_info=candidate_target_info,
+        instinct_rank=row.get("instinct_rank", 999),
+        priority_metrics=priority_metrics,
+        added_missing_traits=row.get("added_missing_traits") or 0,
+    )
+    return row
+
 
 def build_gene_potential_matches(selected_chicken, breedable_chickens, build_type):
     if not selected_chicken or not build_type:
@@ -985,33 +1135,23 @@ def build_gene_potential_matches(selected_chicken, breedable_chickens, build_typ
             else 999
         )
 
-        scored_matches.append(
-            {
-                "candidate": candidate,
-                "candidate_eval": candidate_eval,
-                "candidate_target_info": candidate_target_info,
-                "selected_eval": selected_eval,
-                "build_type": build_type,
-                "added_missing_traits": added_missing_traits,
-                "combined_match_count": completion["combined_count"],
-                "combined_match_total": completion["combined_total"],
-                "selected_build_match_count": completion["selected_count"],
-                "candidate_build_match_count": completion["candidate_count"],
-                "gene_pair_metrics": pair_metrics,
-                "gene_priority_metrics": priority_metrics,
-                "instinct_rank": instinct_rank,
-                "ranking": rank_gene_pair(
-                    selected_chicken=selected_chicken,
-                    candidate=candidate,
-                    build_type=build_type,
-                    pair_metrics=pair_metrics,
-                    candidate_target_info=candidate_target_info,
-                    instinct_rank=instinct_rank,
-                    priority_metrics=priority_metrics,
-                    added_missing_traits=added_missing_traits,
-                ),
-            }
-        )
+        row = {
+            "candidate": candidate,
+            "candidate_eval": candidate_eval,
+            "candidate_target_info": candidate_target_info,
+            "selected_eval": selected_eval,
+            "build_type": build_type,
+            "added_missing_traits": added_missing_traits,
+            "combined_match_count": completion["combined_count"],
+            "combined_match_total": completion["combined_total"],
+            "selected_build_match_count": completion["selected_count"],
+            "candidate_build_match_count": completion["candidate_count"],
+            "gene_pair_metrics": pair_metrics,
+            "gene_priority_metrics": priority_metrics,
+            "instinct_rank": instinct_rank,
+        }
+        enrich_gene_pair_score_fields(row, selected_chicken, candidate)
+        scored_matches.append(row)
 
     scored_matches.sort(key=lambda row: row["ranking"])
     return scored_matches
@@ -1159,36 +1299,29 @@ def build_gene_available_auto_candidates_same_build(
                 chosen_build,
             )
 
-            pair_rows.append(
-                {
-                    "left": chosen_left,
-                    "right": chosen_right,
-                    "left_item": left_item,
-                    "right_item": right_item,
-                    "build_type": chosen_build,
-                    "selected_eval": chosen_match.get("selected_eval"),
-                    "candidate_eval": chosen_match.get("candidate_eval"),
-                    "combined_match_count": chosen_match.get("combined_match_count", 0),
-                    "combined_match_total": chosen_match.get("combined_match_total", 0),
-                    "selected_build_match_count": chosen_match.get("selected_build_match_count", 0),
-                    "candidate_build_match_count": chosen_match.get("candidate_build_match_count", 0),
-                    "same_instinct": normalize_instinct_name(chosen_left.get("instinct"))
-                    == normalize_instinct_name(chosen_right.get("instinct")),
-                    "added_missing_traits": chosen_match.get("added_missing_traits") or 0,
-                    "gene_pair_metrics": pair_metrics,
-                    "gene_priority_metrics": priority_metrics,
-                    "ranking": rank_gene_pair(
-                        selected_chicken=chosen_left,
-                        candidate=chosen_right,
-                        build_type=chosen_build,
-                        pair_metrics=pair_metrics,
-                        candidate_target_info=chosen_match.get("candidate_target_info") or {},
-                        instinct_rank=chosen_match.get("instinct_rank", 999),
-                        priority_metrics=priority_metrics,
-                        added_missing_traits=chosen_match.get("added_missing_traits") or 0,
-                    ),
-                }
-            )
+            row = {
+                "left": chosen_left,
+                "right": chosen_right,
+                "left_item": left_item,
+                "right_item": right_item,
+                "build_type": chosen_build,
+                "selected_eval": chosen_match.get("selected_eval"),
+                "candidate_eval": chosen_match.get("candidate_eval"),
+                "candidate_target_info": chosen_match.get("candidate_target_info") or {},
+                "combined_match_count": chosen_match.get("combined_match_count", 0),
+                "combined_match_total": chosen_match.get("combined_match_total", 0),
+                "selected_build_match_count": chosen_match.get("selected_build_match_count", 0),
+                "candidate_build_match_count": chosen_match.get("candidate_build_match_count", 0),
+                "same_instinct": normalize_instinct_name(chosen_left.get("instinct"))
+                == normalize_instinct_name(chosen_right.get("instinct")),
+                "aligned_instinct": candidate_has_gene_instinct_fit(chosen_right, chosen_build),
+                "added_missing_traits": chosen_match.get("added_missing_traits") or 0,
+                "gene_pair_metrics": pair_metrics,
+                "gene_priority_metrics": priority_metrics,
+                "instinct_rank": chosen_match.get("instinct_rank", 999),
+            }
+            enrich_gene_pair_score_fields(row, chosen_left, chosen_right)
+            pair_rows.append(row)
 
     pair_rows.sort(key=lambda row: row["ranking"])
     return pair_rows
@@ -1196,22 +1329,20 @@ def build_gene_available_auto_candidates_same_build(
 
 def sort_gene_match_rows(selected_chicken, match_rows):
     rows = list(match_rows or [])
+    for row in rows:
+        candidate = row.get("candidate") or {}
+        enrich_gene_pair_score_fields(row, selected_chicken, candidate)
 
     def sort_key(row):
         candidate = row.get("candidate") or {}
-        pair_metrics = row.get("gene_pair_metrics") or {}
-        priority_metrics = row.get("gene_priority_metrics") or {}
-        candidate_target_info = row.get("candidate_target_info") or {}
-        build_type = str(row.get("build_type") or "").strip().lower()
-
         return rank_gene_pair(
             selected_chicken=selected_chicken,
             candidate=candidate,
-            build_type=build_type,
-            pair_metrics=pair_metrics,
-            candidate_target_info=candidate_target_info,
+            build_type=str(row.get("build_type") or "").strip().lower(),
+            pair_metrics=row.get("gene_pair_metrics") or {},
+            candidate_target_info=row.get("candidate_target_info") or {},
             instinct_rank=row.get("instinct_rank", 999),
-            priority_metrics=priority_metrics,
+            priority_metrics=row.get("gene_priority_metrics") or {},
             added_missing_traits=row.get("added_missing_traits") or 0,
         )
 

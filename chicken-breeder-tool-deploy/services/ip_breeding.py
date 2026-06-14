@@ -1,4 +1,4 @@
-from services.match_rules import find_potential_matches, get_ip_difference
+from services.match_rules import find_potential_matches
 from services.gene_build_picker import get_best_available_gene_build_info
 from services.validation_thresholds import EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
 
@@ -7,6 +7,11 @@ MATCH_SETTINGS = {
     "max_ip_diff": 10,
     "max_breed_count_diff": 1,
 }
+
+IP_EXCELLENT_POINTS = 300
+IP_STRONG_POINTS = 220
+IP_GOOD_POINTS = 120
+IP_SITUATIONAL_POINTS = 40
 
 IP_STAT_PRIORITY = [
     "attack",
@@ -592,30 +597,104 @@ def get_ip_quality_rank(quality):
     return order.get(quality, 99)
 
 
-def qualifies_for_ip_excellent_threshold_profile(threshold_metrics):
-    threshold_metrics = threshold_metrics or {}
-
-    left_below_count = threshold_metrics.get("left_below_count", 0) or 0
-    right_below_count = threshold_metrics.get("right_below_count", 0) or 0
-    left_fixes_right_count = threshold_metrics.get("left_fixes_right_count", 0) or 0
-    right_fixes_left_count = threshold_metrics.get("right_fixes_left_count", 0) or 0
-
-    if left_below_count > 1 or right_below_count > 1:
-        return False
-
-    if threshold_metrics.get("combined_below_remaining_count", 0) != 0:
-        return False
-
-    if left_below_count and right_fixes_left_count < left_below_count:
-        return False
-
-    if right_below_count and left_fixes_right_count < right_below_count:
-        return False
-
-    return True
+def get_extra_below_threshold_count(*below_counts):
+    return sum(max(0, (safe_int(value, 0) or 0) - 2) for value in below_counts)
 
 
-def rank_ip_pair(selected_chicken, candidate):
+def clamp_ip_score_value(value):
+    return max(0, min(safe_int(value, 0) or 0, 40))
+
+
+def get_ip_pair_value_points(left_chicken, right_chicken):
+    value_points = 0
+    detail = {
+        "shared_strength_points": 0,
+        "coverage_strength_points": 0,
+        "fix_strength_points": 0,
+        "below_gap_penalty": 0,
+    }
+
+    for stat_name in IP_STAT_PRIORITY:
+        left_value = clamp_ip_score_value(get_effective_ip_stat(left_chicken, stat_name))
+        right_value = clamp_ip_score_value(get_effective_ip_stat(right_chicken, stat_name))
+        best_value = max(left_value, right_value)
+
+        if left_value >= EXCELLENT_CHICKEN_VALIDATION_THRESHOLD and right_value >= EXCELLENT_CHICKEN_VALIDATION_THRESHOLD:
+            shared_bonus = min(left_value, right_value) - EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+            detail["shared_strength_points"] += shared_bonus
+            value_points += shared_bonus
+
+        if best_value >= EXCELLENT_CHICKEN_VALIDATION_THRESHOLD:
+            coverage_bonus = best_value - EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+            detail["coverage_strength_points"] += coverage_bonus
+            value_points += coverage_bonus
+
+        if left_value < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD <= right_value:
+            fix_bonus = right_value - EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+            detail["fix_strength_points"] += fix_bonus
+            value_points += fix_bonus
+        elif right_value < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD <= left_value:
+            fix_bonus = left_value - EXCELLENT_CHICKEN_VALIDATION_THRESHOLD
+            detail["fix_strength_points"] += fix_bonus
+            value_points += fix_bonus
+
+        if left_value < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD:
+            gap_penalty = EXCELLENT_CHICKEN_VALIDATION_THRESHOLD - left_value
+            detail["below_gap_penalty"] += gap_penalty
+            value_points -= gap_penalty
+        if right_value < EXCELLENT_CHICKEN_VALIDATION_THRESHOLD:
+            gap_penalty = EXCELLENT_CHICKEN_VALIDATION_THRESHOLD - right_value
+            detail["below_gap_penalty"] += gap_penalty
+            value_points -= gap_penalty
+
+    detail["raw_value_points"] = value_points
+    detail["value_points"] = int(value_points / 2)
+    return detail
+
+
+def pair_has_same_build(left_chicken, right_chicken):
+    left_build = get_chicken_build_key(left_chicken)
+    right_build = get_chicken_build_key(right_chicken)
+    return bool(left_build and right_build and left_build == right_build)
+
+
+def build_ip_pair_notes(score):
+    score = score or {}
+    threshold_metrics = score.get("threshold_metrics") or {}
+    shared_30_count = safe_int(score.get("shared_30_count"), 0) or 0
+    unresolved_count = safe_int(threshold_metrics.get("combined_below_remaining_count"), 0) or 0
+    left_fixes_right = safe_int(threshold_metrics.get("left_fixes_right_count"), 0) or 0
+    right_fixes_left = safe_int(threshold_metrics.get("right_fixes_left_count"), 0) or 0
+    left_below = safe_int(threshold_metrics.get("left_below_count"), 0) or 0
+    right_below = safe_int(threshold_metrics.get("right_below_count"), 0) or 0
+    max_side_below = max(left_below, right_below)
+
+    notes = []
+    if score.get("same_build"):
+        notes.append({"priority": 5, "text": "Same build"})
+
+    if right_below >= 3:
+        notes.append({"priority": 10, "text": f"Candidate weak stats: {right_below}"})
+    elif unresolved_count == 0:
+        notes.append({"priority": 10, "text": "Full 30+ pair coverage"})
+    elif unresolved_count == 1:
+        notes.append({"priority": 10, "text": "1 IP stat unresolved"})
+    else:
+        notes.append({"priority": 10, "text": f"{unresolved_count} IP stats unresolved"})
+
+    if left_fixes_right and right_fixes_left:
+        notes.append({"priority": 20, "text": "Mutual weak-stat coverage"})
+    elif left_fixes_right or right_fixes_left:
+        notes.append({"priority": 20, "text": "One-sided IP support"})
+
+    if shared_30_count >= 5:
+        notes.append({"priority": 50, "text": f"{shared_30_count} shared 30+ stats"})
+
+    notes.sort(key=lambda row: row["priority"])
+    return notes
+
+
+def compute_ip_pair_score(selected_chicken, candidate):
     metrics = build_ip_pair_metrics(selected_chicken, candidate)
     priority_metrics = get_ip_priority_metrics(selected_chicken, candidate)
     threshold_metrics = get_pair_threshold_metrics(
@@ -628,57 +707,132 @@ def rank_ip_pair(selected_chicken, candidate):
         candidate,
         threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
     )
-    unresolved_load_too_high = has_excess_below_threshold_load(burden_metrics)
 
     candidate = candidate or {}
     selected_chicken = selected_chicken or {}
+    shared_30_count = safe_int(metrics.get("shared_strong_count"), 0) or 0
+    left_below_count = safe_int(threshold_metrics.get("left_below_count"), 0) or 0
+    right_below_count = safe_int(threshold_metrics.get("right_below_count"), 0) or 0
+    unresolved_count = safe_int(threshold_metrics.get("combined_below_remaining_count"), 0) or 0
+    left_fixes_right_count = safe_int(threshold_metrics.get("left_fixes_right_count"), 0) or 0
+    right_fixes_left_count = safe_int(threshold_metrics.get("right_fixes_left_count"), 0) or 0
+    mutual_fix_count = left_fixes_right_count + right_fixes_left_count
+    same_build = pair_has_same_build(selected_chicken, candidate)
+    both_5_plus = min(
+        safe_int(metrics.get("left_strong_count"), 0) or 0,
+        safe_int(metrics.get("right_strong_count"), 0) or 0,
+    ) >= 5
+    both_4_plus = min(
+        safe_int(metrics.get("left_strong_count"), 0) or 0,
+        safe_int(metrics.get("right_strong_count"), 0) or 0,
+    ) >= 4
+    extra_below_count = get_extra_below_threshold_count(left_below_count, right_below_count)
+    value_detail = get_ip_pair_value_points(selected_chicken, candidate)
+
+    points = 0
+    points += shared_30_count * 50
+    points += mutual_fix_count * 40
+    if threshold_metrics.get("all_threshold_gaps_resolved"):
+        points += 40
+    if left_fixes_right_count and right_fixes_left_count:
+        points += 30
+    if both_5_plus:
+        points += 50
+    elif both_4_plus:
+        points += 25
+    if same_build:
+        points += 25
+    else:
+        points -= 25
+
+    points -= unresolved_count * 90
+    points -= (left_below_count + right_below_count) * 35
+    points -= extra_below_count * 60
+    points += value_detail["value_points"]
+
+    if points >= IP_EXCELLENT_POINTS:
+        grade = "Excellent match"
+    elif points >= IP_STRONG_POINTS:
+        grade = "Strong match"
+    elif points >= IP_GOOD_POINTS:
+        grade = "Good match"
+    elif points >= IP_SITUATIONAL_POINTS:
+        grade = "Situational"
+    else:
+        grade = "Poor"
+
+    score = {
+        "points": points,
+        "grade": grade,
+        "shared_30_count": shared_30_count,
+        "mutual_fix_count": mutual_fix_count,
+        "same_build": same_build,
+        "both_5_plus": both_5_plus,
+        "both_4_plus": both_4_plus,
+        "extra_below_count": extra_below_count,
+        "value_detail": value_detail,
+        "metrics": metrics,
+        "priority_metrics": priority_metrics,
+        "threshold_metrics": threshold_metrics,
+        "burden_metrics": burden_metrics,
+    }
+    score["notes"] = build_ip_pair_notes(score)
+    score["note_display"] = " | ".join(note["text"] for note in score["notes"][:2])
+    return score
+
+
+def rank_ip_pair(selected_chicken, candidate):
+    candidate = candidate or {}
+    selected_chicken = selected_chicken or {}
+    score = compute_ip_pair_score(selected_chicken, candidate)
+    threshold_metrics = score["threshold_metrics"]
+    burden_metrics = score["burden_metrics"]
+    metrics = score["metrics"]
+    priority_metrics = score["priority_metrics"]
 
     return (
-        int(bool(priority_metrics["shared_unresolved_weakness"])),
-        int(bool(unresolved_load_too_high)),
-        -int(bool(threshold_metrics["all_threshold_gaps_resolved"])),
-        -(threshold_metrics["right_fixes_left_count"] or 0),
+        get_ip_quality_rank(score["grade"]),
+        -score["points"],
+        threshold_metrics["combined_below_remaining_count"] or 0,
         burden_metrics["candidate_below_count"] or 0,
         burden_metrics["total_below_count"] or 0,
+        -(threshold_metrics["right_fixes_left_count"] or 0),
         -(threshold_metrics["left_fixes_right_count"] or 0),
-        threshold_metrics["combined_below_remaining_count"] or 0,
-        -int(bool(metrics["elite_stabilization"])) if not priority_metrics["shared_unresolved_weakness"] else 0,
-        -int(bool(metrics["anchor_finisher"])) if not priority_metrics["shared_unresolved_weakness"] else 0,
-        -int(bool(priority_metrics["selected_priority_resolved"])),
+        -int(bool(score["same_build"])),
         -(metrics["shared_strong_count"] or 0),
-        -(metrics["shared_usable_count"] or 0),
-        -(metrics["edge_count"] or 0),
-        -(metrics["combined_usable_count"] or 0),
-        -(priority_metrics["candidate_on_selected_priority"] or 0),
+        -int(bool(priority_metrics["selected_priority_resolved"])),
+        -int(bool(priority_metrics["candidate_priority_resolved"])),
         safe_int(candidate.get("breed_count"), 999999) or 999999,
         -(float(candidate.get("ownership_percent") or 0)),
         safe_int(candidate.get("token_id"), 999999999) or 999999999,
         safe_int(selected_chicken.get("breed_count"), 999999) or 999999,
         -(float(selected_chicken.get("ownership_percent") or 0)),
-        -(safe_int(selected_chicken.get("ip"), 0) or 0),
         safe_int(selected_chicken.get("token_id"), 999999999) or 999999999,
     )
 
 
+def enrich_ip_pair_score_fields(row, selected_chicken, candidate):
+    row = row or {}
+    score = compute_ip_pair_score(selected_chicken, candidate)
+    row["ip_pair_score"] = score
+    row["ip_pair_points"] = score["points"]
+    row["ip_pair_grade"] = score["grade"]
+    row["ip_pair_notes"] = score["notes"]
+    row["ip_pair_note_display"] = score["note_display"]
+    row["ranking"] = rank_ip_pair(selected_chicken, candidate)
+    return row
+
+
 def sort_ip_match_rows(selected_chicken, match_rows):
     rows = list(match_rows or [])
+    for row in rows:
+        candidate = row.get("candidate") or {}
+        enrich_ip_pair_score_fields(row, selected_chicken, candidate)
 
     def sort_key(row):
-        evaluation = row.get("evaluation") or {}
         candidate = row.get("candidate") or {}
-        quality_rank = get_ip_quality_rank(build_ip_pair_quality(selected_chicken, candidate, row))
 
-        is_ip_recommended = bool(evaluation.get("is_ip_recommended"))
-        is_breed_count_recommended = bool(evaluation.get("is_breed_count_recommended"))
-        is_clean_recommended = is_ip_recommended and is_breed_count_recommended
-
-        return (
-            -int(is_clean_recommended),
-            -int(is_ip_recommended),
-            -int(is_breed_count_recommended),
-            quality_rank,
-            *rank_ip_pair(selected_chicken, candidate),
-        )
+        return rank_ip_pair(selected_chicken, candidate)
 
     rows.sort(key=sort_key)
     return rows
@@ -710,88 +864,15 @@ def _resolve_ip_pair_items_for_quality(left, right, row=None):
 
 
 def cap_ip_pair_quality_by_item_plan(quality, selected_chicken, candidate, row=None):
-    if quality not in {"Excellent match", "Strong match"}:
-        return quality
-
-    left_item, right_item = _resolve_ip_pair_items_for_quality(selected_chicken, candidate, row)
-    left_allowed = bool(left_item) or _ip_pair_side_has_high_coverage_exception(selected_chicken, candidate)
-    right_allowed = bool(right_item) or _ip_pair_side_has_high_coverage_exception(candidate, selected_chicken)
-
-    if left_allowed and right_allowed:
-        return quality
-
-    return "Good match"
+    return quality
 
 
 def build_ip_pair_quality(selected_chicken, candidate, row=None):
     if not selected_chicken or not candidate:
         return "Poor"
 
-    metrics = build_ip_pair_metrics(selected_chicken, candidate)
-    priority_metrics = get_ip_priority_metrics(selected_chicken, candidate)
-    threshold_metrics = get_pair_threshold_metrics(
-        selected_chicken,
-        candidate,
-        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
-    )
-    burden_metrics = get_ip_pair_burden_metrics(
-        selected_chicken,
-        candidate,
-        threshold=EXCELLENT_CHICKEN_VALIDATION_THRESHOLD,
-    )
-    ip_difference = get_ip_difference(selected_chicken, candidate)
-    evaluation = (row or {}).get("evaluation") or {}
-
-    if evaluation:
-        if not evaluation.get("is_ip_recommended") or not evaluation.get("is_breed_count_recommended"):
-            if evaluation.get("is_ip_recommended") or evaluation.get("is_breed_count_recommended"):
-                return "Situational"
-            return "Poor"
-
-    if ip_difference is None:
-        return "Poor"
-
-    unresolved_load_too_high = has_excess_below_threshold_load(burden_metrics)
-
-    if priority_metrics.get("shared_unresolved_weakness"):
-        if (
-            threshold_metrics.get("all_threshold_gaps_resolved")
-            and threshold_metrics.get("mutual_fix_count", 0) >= 2
-            and not unresolved_load_too_high
-        ):
-            return cap_ip_pair_quality_by_item_plan("Strong match", selected_chicken, candidate, row)
-        if threshold_metrics.get("right_fixes_left_count", 0) >= 1:
-            return "Good match"
-        return "Situational"
-
-    if (
-        ip_difference < 10
-        and not unresolved_load_too_high
-        and qualifies_for_ip_excellent_threshold_profile(threshold_metrics)
-    ):
-        return cap_ip_pair_quality_by_item_plan("Excellent match", selected_chicken, candidate, row)
-
-    if (
-        threshold_metrics.get("right_fixes_left_count", 0) >= 1
-        and threshold_metrics.get("combined_below_remaining_count", 0) <= 1
-        and ip_difference <= 10
-        and not unresolved_load_too_high
-    ):
-        return cap_ip_pair_quality_by_item_plan("Strong match", selected_chicken, candidate, row)
-
-    if (
-        threshold_metrics.get("right_fixes_left_count", 0) >= 1
-        or threshold_metrics.get("left_fixes_right_count", 0) >= 1
-    ):
-        return "Good match"
-
-    if (
-        metrics.get("shared_usable_count", 0) >= 2
-        or metrics.get("edge_count", 0) >= 1
-    ):
-        return "Situational"
-
-    return "Poor"
+    score = compute_ip_pair_score(selected_chicken, candidate)
+    return cap_ip_pair_quality_by_item_plan(score["grade"], selected_chicken, candidate, row)
 
 
 def pick_best_ip_auto_match(breedable_chickens, enable_ip_diff=False, ip_diff=None):
@@ -818,13 +899,6 @@ def pick_best_ip_auto_match(breedable_chickens, enable_ip_diff=False, ip_diff=No
                 ]
 
         matches = find_potential_matches(selected, candidate_pool, settings=MATCH_SETTINGS)
-        matches = [
-            row
-            for row in matches
-            if row.get("evaluation", {}).get("is_ip_recommended")
-            and row.get("evaluation", {}).get("is_breed_count_recommended")
-            and pair_has_usable_ip_items(selected, row.get("candidate"))
-        ]
         matches = sort_ip_match_rows(selected, matches)
 
         if not matches:
@@ -928,16 +1002,10 @@ def build_ip_available_auto_candidates(breedable_chickens, ip_diff=None, breed_d
             forward = [
                 row
                 for row in find_potential_matches(source, [candidate], settings=MATCH_SETTINGS)
-                if row.get("evaluation", {}).get("is_ip_recommended")
-                and row.get("evaluation", {}).get("is_breed_count_recommended")
-                and pair_has_usable_ip_items(source, row.get("candidate"))
             ]
             reverse = [
                 row
                 for row in find_potential_matches(candidate, [source], settings=MATCH_SETTINGS)
-                if row.get("evaluation", {}).get("is_ip_recommended")
-                and row.get("evaluation", {}).get("is_breed_count_recommended")
-                and pair_has_usable_ip_items(candidate, row.get("candidate"))
             ]
 
             if forward:
@@ -964,6 +1032,7 @@ def build_ip_available_auto_candidates(breedable_chickens, ip_diff=None, breed_d
             )
 
             metrics = build_ip_pair_metrics(chosen_left, chosen_right)
+            pair_score = compute_ip_pair_score(chosen_left, chosen_right)
 
             pair_rows.append(
                 {
@@ -979,6 +1048,11 @@ def build_ip_available_auto_candidates(breedable_chickens, ip_diff=None, breed_d
                     "ip_difference": chosen_match.get("evaluation", {}).get("ip_difference"),
                     "ip_overlap_metrics": metrics,
                     "ranking": rank_ip_pair(chosen_left, chosen_right),
+                    "ip_pair_score": pair_score,
+                    "ip_pair_points": pair_score["points"],
+                    "ip_pair_grade": pair_score["grade"],
+                    "ip_pair_notes": pair_score["notes"],
+                    "ip_pair_note_display": pair_score["note_display"],
                     "ip_priority_metrics": get_ip_priority_metrics(chosen_left, chosen_right),
                     "ip_threshold_metrics": get_pair_threshold_metrics(
                         chosen_left,
@@ -1026,13 +1100,6 @@ def pick_best_ip_auto_match_from_pool(pool, ip_diff=10, breed_diff=1):
                 ]
 
         matches = find_potential_matches(selected, candidate_pool, settings=MATCH_SETTINGS)
-        matches = [
-            row
-            for row in matches
-            if row.get("evaluation", {}).get("is_ip_recommended")
-            and row.get("evaluation", {}).get("is_breed_count_recommended")
-            and pair_has_usable_ip_items(selected, row.get("candidate"))
-        ]
         matches = sort_ip_match_rows(selected, matches)
 
         if not matches:
@@ -1100,13 +1167,6 @@ def build_ip_multi_matches(breedable_chickens, ip_diff=10, breed_diff=1, ninuno_
                     ]
 
             matches = find_potential_matches(selected, candidate_pool, settings=MATCH_SETTINGS)
-            matches = [
-                row
-                for row in matches
-                if row.get("evaluation", {}).get("is_ip_recommended")
-                and row.get("evaluation", {}).get("is_breed_count_recommended")
-                and pair_has_usable_ip_items(selected, row.get("candidate"))
-            ]
             matches = sort_ip_match_rows(selected, matches)
 
         if not selected:
@@ -1133,9 +1193,6 @@ def build_ip_multi_matches(breedable_chickens, ip_diff=10, breed_diff=1, ninuno_
                     continue
                 if abs(candidate_breed - selected_breed) > breed_diff:
                     continue
-
-            if not pair_has_usable_ip_items(selected, candidate):
-                continue
 
             filtered_matches.append(row)
 
@@ -1164,6 +1221,7 @@ def build_ip_multi_matches(breedable_chickens, ip_diff=10, breed_diff=1, ninuno_
         left_candidates = get_ip_item_candidates(selected, candidate)
         right_candidates = get_ip_item_candidates(candidate, selected)
         left_item, right_item = resolve_pair_item_recommendations(left_candidates, right_candidates)
+        pair_score = compute_ip_pair_score(selected, candidate)
 
         results.append(
             {
@@ -1173,6 +1231,11 @@ def build_ip_multi_matches(breedable_chickens, ip_diff=10, breed_diff=1, ninuno_
                 "right_item": right_item,
                 "selected_weakest_stat_display": selected_weakest_stat_display,
                 "ip_overlap_metrics": build_ip_pair_metrics(selected, candidate),
+                "ip_pair_score": pair_score,
+                "ip_pair_points": pair_score["points"],
+                "ip_pair_grade": pair_score["grade"],
+                "ip_pair_notes": pair_score["notes"],
+                "ip_pair_note_display": pair_score["note_display"],
                 "ip_priority_metrics": get_ip_priority_metrics(selected, candidate),
                 "ip_threshold_metrics": get_pair_threshold_metrics(
                     selected,

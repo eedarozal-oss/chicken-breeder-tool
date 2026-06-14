@@ -19,17 +19,23 @@ def _extract_item_name(item_obj: Optional[Dict[str, Any]]) -> str:
     return normalize_item_name(item_obj.get("name"))
 
 
+def _extract_side_item_names(row: Dict[str, Any], side: str) -> List[str]:
+    items = row.get(f"{side}_items")
+    if isinstance(items, list):
+        names = [_extract_item_name(item) for item in items]
+    else:
+        names = [_extract_item_name(row.get(f"{side}_item"))]
+    return [name for name in names if name]
+
+
 def collect_planner_required_items(queue_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     counts: Dict[str, int] = defaultdict(int)
 
     for row in queue_rows or []:
-        left_item_name = _extract_item_name(row.get("left_item"))
-        right_item_name = _extract_item_name(row.get("right_item"))
-
-        if left_item_name:
-            counts[left_item_name] += 1
-        if right_item_name:
-            counts[right_item_name] += 1
+        for item_name in _extract_side_item_names(row, "left"):
+            counts[item_name] += 1
+        for item_name in _extract_side_item_names(row, "right"):
+            counts[item_name] += 1
 
     results: List[Dict[str, Any]] = []
 
@@ -139,29 +145,27 @@ def build_per_pair_item_status(
 ) -> Dict[str, Any]:
     wallet_inventory_lookup = wallet_inventory_lookup or {}
 
-    left_item_name = _extract_item_name(planner_row.get("left_item"))
-    right_item_name = _extract_item_name(planner_row.get("right_item"))
-
     item_rows: List[Dict[str, Any]] = []
 
-    for side, item_name in (("left", left_item_name), ("right", right_item_name)):
-        if not item_name:
-            continue
+    for side in ("left", "right"):
+        for item_name in _extract_side_item_names(planner_row, side):
+            if not item_name:
+                continue
 
-        token_id = get_breeding_item_token_id(item_name)
-        inventory_row = wallet_inventory_lookup.get(str(token_id or "").strip(), {})
-        available_count = int(inventory_row.get("balance") or 0)
+            token_id = get_breeding_item_token_id(item_name)
+            inventory_row = wallet_inventory_lookup.get(str(token_id or "").strip(), {})
+            available_count = int(inventory_row.get("balance") or 0)
 
-        item_rows.append({
-            "side": side,
-            "name": item_name,
-            "token_id": str(token_id or ""),
-            "image": get_breeding_item_image_url(item_name),
-            "required_count": 1,
-            "available_count": available_count,
-            "missing_count": max(0, 1 - available_count),
-            "status": "ready" if available_count >= 1 else ("unknown" if not token_id else "missing"),
-        })
+            item_rows.append({
+                "side": side,
+                "name": item_name,
+                "token_id": str(token_id or ""),
+                "image": get_breeding_item_image_url(item_name),
+                "required_count": 1,
+                "available_count": available_count,
+                "missing_count": max(0, 1 - available_count),
+                "status": "ready" if available_count >= 1 else ("unknown" if not token_id else "missing"),
+            })
 
     has_unknown = any(row["status"] == "unknown" for row in item_rows)
     has_missing = any(row["missing_count"] > 0 for row in item_rows)

@@ -23,6 +23,27 @@ ITEM_HELPER_TEXT = {
     "Lockedin State": "Increases this parent's Evasion IP Genes inheritance chance by 50%.",
 }
 
+ITEM_SHORT_EFFECT_TEXT = {
+    "Soulknot": "4 random IP Genes",
+    "Gregor's Gift": "Primary Genes",
+    "Mendel's Memento": "Recessive Genes",
+    "Quentin's Talon": "Feet Genes",
+    "Dragon's Whip": "Tail Genes",
+    "Chibidei's Curse": "Body Genes",
+    "All-seeing Seed": "Eyes Genes",
+    "Chim Lac's Curio": "Beak Genes",
+    "Suave Scissors": "Comb Genes",
+    "Simurgh's Sovereign": "Wings Genes",
+    "St. Elmo's Fire": "Instinct",
+    "Cocktail's Beak": "Attack IP Genes",
+    "Pos2 Pellet": "Defense IP Genes",
+    "Fetzzz Feet": "Speed IP Genes",
+    "Vananderen's Vitality": "Health IP Genes",
+    "Pinong's Bird": "Cockrage IP Genes",
+    "Ouchie's Ornament": "Ferocity IP Genes",
+    "Lockedin State": "Evasion IP Genes",
+}
+
 
 def normalize_item_name(item_name):
     raw = str(item_name or "").strip()
@@ -32,3 +53,8 @@ def normalize_item_name(item_name):
 def get_item_helper_text(item_name):
     normalized = normalize_item_name(item_name)
     return ITEM_HELPER_TEXT.get(normalized, "")
+
+
+def get_item_short_effect_text(item_name):
+    normalized = normalize_item_name(item_name)
+    return ITEM_SHORT_EFFECT_TEXT.get(normalized, "")

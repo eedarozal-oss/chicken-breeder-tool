@@ -44,26 +44,40 @@ def build_bookmarklet_payload_rows(
     for row in list(planner_queue or [])[:max_pairs]:
         left = row.get("left") or {}
         right = row.get("right") or {}
-        left_item = row.get("left_item") or {}
-        right_item = row.get("right_item") or {}
+        left_items = row.get("left_items") if isinstance(row.get("left_items"), list) else [row.get("left_item")]
+        right_items = row.get("right_items") if isinstance(row.get("right_items"), list) else [row.get("right_item")]
 
-        left_item_name = normalize_item_name(left_item.get("name"))
-        right_item_name = normalize_item_name(right_item.get("name"))
+        left_item_names = [
+            normalize_item_name((item or {}).get("name"))
+            for item in left_items[:2]
+            if isinstance(item, dict) and normalize_item_name(item.get("name"))
+        ]
+        right_item_names = [
+            normalize_item_name((item or {}).get("name"))
+            for item in right_items[:2]
+            if isinstance(item, dict) and normalize_item_name(item.get("name"))
+        ]
 
         if script_mode == "no_items":
-            left_item_name = ""
-            right_item_name = ""
+            left_item_names = []
+            right_item_names = []
 
         elif script_mode == "partial":
-            if not left_item_name or inventory_remaining.get(left_item_name, 0) <= 0:
-                left_item_name = ""
-            else:
-                inventory_remaining[left_item_name] -= 1
+            available_left_names = []
+            for item_name in left_item_names:
+                if inventory_remaining.get(item_name, 0) <= 0:
+                    continue
+                inventory_remaining[item_name] -= 1
+                available_left_names.append(item_name)
+            left_item_names = available_left_names
 
-            if not right_item_name or inventory_remaining.get(right_item_name, 0) <= 0:
-                right_item_name = ""
-            else:
-                inventory_remaining[right_item_name] -= 1
+            available_right_names = []
+            for item_name in right_item_names:
+                if inventory_remaining.get(item_name, 0) <= 0:
+                    continue
+                inventory_remaining[item_name] -= 1
+                available_right_names.append(item_name)
+            right_item_names = available_right_names
 
         payload_rows.append(
             {
@@ -71,8 +85,10 @@ def build_bookmarklet_payload_rows(
                 "mode": str(row.get("mode") or "").strip(),
                 "left_token_id": str(left.get("token_id") or "").strip(),
                 "right_token_id": str(right.get("token_id") or "").strip(),
-                "left_item_name": left_item_name,
-                "right_item_name": right_item_name,
+                "left_item_name": left_item_names[0] if left_item_names else "",
+                "right_item_name": right_item_names[0] if right_item_names else "",
+                "left_item_names": left_item_names[:2],
+                "right_item_names": right_item_names[:2],
             }
         )
 
@@ -116,6 +132,10 @@ javascript:(async()=>{{
 
   function visibleAll(selector, root = document) {{
     return Array.from(root.querySelectorAll(selector)).filter(isVisible);
+  }}
+
+  function uniqueElements(elements) {{
+    return Array.from(new Set(elements.filter(Boolean)));
   }}
 
   function findVisibleByText(selector, expectedText, root = document) {{
@@ -258,31 +278,37 @@ javascript:(async()=>{{
     return null;
   }}
 
-  function getItemSlotWrappers() {{
+  function getItemSlotWrappers(slotLabel) {{
+    const normalized = String(slotLabel || '').trim().toLowerCase();
+
     return visibleAll('div.flex.flex-col.items-center.gap-2').filter(wrapper => {{
       const t = textOf(wrapper).toLowerCase();
-      return t.includes('parent 1 items') || t.includes('parent 2 items');
+      return t.includes(normalized) && t.includes('add item');
     }});
   }}
 
   function getItemSlotButtonByPairIndex(pairIndex, slotLabel) {{
-    const wrappers = getItemSlotWrappers();
-    const normalized = String(slotLabel || '').trim().toLowerCase();
-
-    const slotOffset = normalized === 'parent 2 items' ? 1 : 0;
-    const wrapperIndex = (pairIndex * 2) + slotOffset;
-    const wrapper = wrappers[wrapperIndex];
+    const wrappers = getItemSlotWrappers(slotLabel);
+    const wrapper = wrappers[pairIndex] || wrappers[wrappers.length - 1];
 
     if (!wrapper) {{
       return null;
     }}
 
-    const addBtn = visibleAll('button', wrapper).find(btn => textOf(btn).toLowerCase() === 'add item');
+    const addBtn = visibleAll('button', wrapper).find(btn => textOf(btn).toLowerCase().includes('add item'));
     return addBtn || null;
   }}
 
   async function openItemSlot(pairIndex, slotLabel) {{
-    const btn = getItemSlotButtonByPairIndex(pairIndex, slotLabel);
+    let btn = null;
+    for (let attempt = 0; attempt < 10; attempt++) {{
+      btn = getItemSlotButtonByPairIndex(pairIndex, slotLabel);
+      if (btn) {{
+        break;
+      }}
+      await sleep(300);
+    }}
+
     if (!btn) throw new Error('Add Item button not found for pair #' + (pairIndex + 1) + ' ' + slotLabel);
 
     btn.scrollIntoView({{ block: 'center', behavior: 'instant' }});
@@ -302,6 +328,38 @@ javascript:(async()=>{{
       const t = textOf(btn).toLowerCase();
       return t === 'close' || t === 'cancel' || t === 'x';
     }}) || null;
+  }}
+
+  function getDoneItemDialogButton(dialog) {{
+    if (!dialog) return null;
+
+    return visibleAll('button', dialog).find(btn => textOf(btn).toLowerCase().includes('done')) ||
+      visibleAll('button').find(btn => {{
+        const t = textOf(btn).toLowerCase();
+        return isVisible(btn) && t.includes('done');
+      }}) || null;
+  }}
+
+  function findItemOptionByName(dialog, itemName) {{
+    if (!dialog || !itemName) return null;
+
+    const wanted = String(itemName).trim().toLowerCase();
+    const selectors = [
+      'button',
+      '[role="button"]',
+      'div.cursor-pointer',
+      'div[class*="cursor-pointer"]',
+      'div[class*="rounded"]'
+    ];
+
+    const candidates = uniqueElements(selectors.flatMap(selector => visibleAll(selector, dialog)))
+      .filter(el => {{
+        const t = textOf(el).toLowerCase();
+        return t.includes(wanted) && !t.includes('save current mix') && !t.includes('select up to');
+      }});
+
+    candidates.sort((a, b) => textOf(a).length - textOf(b).length);
+    return candidates[0] || null;
   }}
 
   async function closeItemDialogIfOpen() {{
@@ -325,8 +383,13 @@ javascript:(async()=>{{
     await sleep(500);
   }}
 
-  async function selectItemByName(itemName, pairIndex, slotLabel, strictItems) {{
-    if (!itemName) return false;
+  async function selectItemsByNames(itemNames, pairIndex, slotLabel, strictItems) {{
+    const wantedItems = (Array.isArray(itemNames) ? itemNames : [itemNames])
+      .map(itemName => String(itemName || '').trim())
+      .filter(Boolean)
+      .slice(0, 2);
+
+    if (!wantedItems.length) return true;
 
     await openItemSlot(pairIndex, slotLabel);
 
@@ -336,24 +399,40 @@ javascript:(async()=>{{
       return false;
     }}
 
-    const wanted = (itemName || '').trim().toLowerCase();
+    const missingItems = [];
 
-    const itemButtons = visibleAll('button', dialog).filter(btn => {{
-      const t = textOf(btn).toLowerCase();
-      return t.includes(wanted);
-    }});
+    for (const itemName of wantedItems) {{
+      let itemOption = null;
 
-    if (!itemButtons.length) {{
+      for (let attempt = 0; attempt < 8; attempt++) {{
+        dialog = getItemDialog();
+        itemOption = findItemOptionByName(dialog, itemName);
+
+        if (itemOption) {{
+          break;
+        }}
+
+        await sleep(300);
+      }}
+
+      if (!itemOption) {{
+        missingItems.push(itemName);
+        continue;
+      }}
+
+      itemOption.scrollIntoView({{ block: 'center', behavior: 'instant' }});
+      itemOption.click();
+      await sleep(500);
+    }}
+
+    if (missingItems.length) {{
       if (strictItems) {{
-        throw new Error('Item not found in modal: ' + itemName);
+        throw new Error('Item not found in modal: ' + missingItems.join(', '));
       }}
 
       await closeItemDialogIfOpen();
       return false;
     }}
-
-    itemButtons[0].click();
-    await sleep(700);
 
     dialog = getItemDialog();
 
@@ -361,12 +440,7 @@ javascript:(async()=>{{
       return true;
     }}
 
-    let doneButton =
-      visibleAll('button', dialog).find(btn => textOf(btn).toLowerCase().includes('done')) ||
-      visibleAll('button').find(btn => {{
-        const t = textOf(btn).toLowerCase();
-        return isVisible(btn) && t.includes('done');
-      }});
+    let doneButton = getDoneItemDialogButton(dialog);
 
     if (!doneButton) {{
       await sleep(500);
@@ -376,12 +450,7 @@ javascript:(async()=>{{
         return true;
       }}
 
-      doneButton =
-        visibleAll('button', dialog).find(btn => textOf(btn).toLowerCase().includes('done')) ||
-        visibleAll('button').find(btn => {{
-          const t = textOf(btn).toLowerCase();
-          return isVisible(btn) && t.includes('done');
-        }});
+      doneButton = getDoneItemDialogButton(dialog);
     }}
 
     if (!doneButton) {{
@@ -419,8 +488,11 @@ javascript:(async()=>{{
     await fillChickenByToken(pair.left_token_id);
     await fillChickenByToken(pair.right_token_id);
 
-    await selectItemByName(pair.left_item_name, pairIndex, 'parent 1 items', strictItems);
-    await selectItemByName(pair.right_item_name, pairIndex, 'parent 2 items', strictItems);
+    const leftItems = Array.isArray(pair.left_item_names) ? pair.left_item_names : [pair.left_item_name].filter(Boolean);
+    const rightItems = Array.isArray(pair.right_item_names) ? pair.right_item_names : [pair.right_item_name].filter(Boolean);
+
+    await selectItemsByNames(leftItems, pairIndex, 'parent 1 items', strictItems);
+    await selectItemsByNames(rightItems, pairIndex, 'parent 2 items', strictItems);
   }}
 
   try {{
