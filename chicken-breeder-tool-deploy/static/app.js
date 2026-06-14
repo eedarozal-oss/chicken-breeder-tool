@@ -716,8 +716,20 @@ document.addEventListener("DOMContentLoaded", function () {
                 redirect: "follow"
             });
 
-            if (!response.ok) {
-                throw new Error("Planner update failed");
+            const responseType = response.headers.get("content-type") || "";
+            const responseText = await response.text();
+            let payload = null;
+
+            if (responseType.includes("application/json") && responseText) {
+                try {
+                    payload = JSON.parse(responseText);
+                } catch (jsonError) {
+                    payload = null;
+                }
+            }
+
+            if (!response.ok || (payload && !payload.ok)) {
+                throw new Error((payload && payload.error) || responseText || "Planner update failed");
             }
 
 			if (mode === "add") {
@@ -764,7 +776,7 @@ document.addEventListener("DOMContentLoaded", function () {
             button.classList.remove("is-pending");
             form.dataset.submitting = "0";
             console.error(error);
-            showPageNotice("Planner update failed. Please try again.", "error");
+            showPageNotice(error.message || "Planner update failed. Please try again.", "error");
         }
     }
 
@@ -804,8 +816,214 @@ document.addEventListener("DOMContentLoaded", function () {
 		bindPlannerAjaxForms(document);
 	});
 
+	let activePlannerItemSlot = null;
+	let selectedPlannerItemName = "";
+	let plannerItemSavePromise = Promise.resolve();
+
+	function parsePlannerItemOptions(button) {
+		try {
+			const raw = button?.dataset?.options || "[]";
+			const parsed = JSON.parse(raw);
+			return Array.isArray(parsed) ? parsed : [];
+		} catch (error) {
+			console.error(error);
+			return [];
+		}
+	}
+
+	function getPlannerItemPickerModal() {
+		let modal = document.getElementById("planner-item-picker-modal");
+		if (modal) return modal;
+
+		modal = document.createElement("div");
+		modal.id = "planner-item-picker-modal";
+		modal.className = "compare-modal hidden";
+		modal.innerHTML = `
+			<div class="compare-backdrop" data-close-planner-item-picker></div>
+			<div class="compare-dialog compare-dialog-small planner-item-picker-dialog">
+				<div class="compare-header">
+					<div class="compare-header-main">
+						<h3>Choose Breeding Item</h3>
+					</div>
+					<button type="button" class="selected-chicken-clear-btn" data-close-planner-item-picker aria-label="Close" title="Close">x</button>
+				</div>
+				<div class="compare-body">
+					<div class="planner-item-picker-grid" data-planner-item-picker-grid></div>
+					<div class="planner-item-picker-actions">
+						<button type="button" class="link-btn secondary-link-btn" data-close-planner-item-picker>Cancel</button>
+						<button type="button" class="link-btn" data-save-planner-item disabled>Save</button>
+					</div>
+				</div>
+			</div>
+		`;
+		document.body.appendChild(modal);
+
+		modal.querySelectorAll("[data-close-planner-item-picker]").forEach((node) => {
+			node.addEventListener("click", closePlannerItemPicker);
+		});
+
+		const saveButton = modal.querySelector("[data-save-planner-item]");
+		if (saveButton) {
+			saveButton.addEventListener("click", savePlannerItemSelection);
+		}
+
+		return modal;
+	}
+
+	function closePlannerItemPicker() {
+		const modal = document.getElementById("planner-item-picker-modal");
+		if (!modal) return;
+		modal.classList.add("hidden");
+		activePlannerItemSlot = null;
+		selectedPlannerItemName = "";
+		unlockBodyIfNoModalOpen();
+	}
+
+	function openPlannerItemPicker(button) {
+		const modal = getPlannerItemPickerModal();
+		const grid = modal.querySelector("[data-planner-item-picker-grid]");
+		const saveButton = modal.querySelector("[data-save-planner-item]");
+		const options = parsePlannerItemOptions(button);
+		const currentName = (button.dataset.currentName || "").trim();
+		const otherName = (button.dataset.otherName || "").trim();
+
+		activePlannerItemSlot = button;
+		selectedPlannerItemName = "";
+		if (saveButton) saveButton.disabled = true;
+		if (grid) {
+			grid.innerHTML = "";
+			options.forEach((item) => {
+				const itemName = (item.name || "").trim();
+				if (!itemName) return;
+
+				const isDuplicate = otherName && itemName === otherName;
+				const card = document.createElement("button");
+				card.type = "button";
+				card.className = "planner-item-picker-card";
+				if (item.recommended_rank) card.classList.add("is-recommended");
+				card.dataset.itemName = itemName;
+				if (itemName === currentName) card.classList.add("is-selected");
+				if (isDuplicate) {
+					card.classList.add("is-disabled");
+					card.disabled = true;
+					card.title = "Already selected in the other slot";
+				}
+				card.innerHTML = `
+					${item.image ? `<img src="${item.image}" alt="${itemName}">` : "<span></span>"}
+					<span>
+						<strong>${itemName}</strong>
+						${item.description ? `<em>${item.description}</em>` : ""}
+						${item.recommended_rank ? `<small>Top ${item.recommended_rank} recommendation</small>` : ""}
+					</span>
+				`;
+				card.addEventListener("click", function () {
+					if (card.disabled) return;
+					grid.querySelectorAll(".planner-item-picker-card").forEach((node) => node.classList.remove("is-selected"));
+					card.classList.add("is-selected");
+					selectedPlannerItemName = itemName;
+					if (saveButton) saveButton.disabled = false;
+				});
+				grid.appendChild(card);
+			});
+		}
+
+		modal.classList.remove("hidden");
+		lockBody();
+	}
+
+	async function savePlannerItemSelection() {
+		if (!activePlannerItemSlot || !selectedPlannerItemName) return;
+		const slotToUpdate = activePlannerItemSlot;
+		const itemNameToSave = selectedPlannerItemName;
+
+		const formData = new FormData();
+		formData.append("wallet_address", slotToUpdate.dataset.wallet || "");
+		formData.append("pair_key", slotToUpdate.dataset.pairKey || "");
+		formData.append("side", slotToUpdate.dataset.side || "");
+		formData.append("slot", slotToUpdate.dataset.slot || "");
+		formData.append("item_name", itemNameToSave);
+		formData.append("csrf_token", getCsrfToken());
+
+		plannerItemSavePromise = (async function () {
+			const response = await fetch(slotToUpdate.dataset.updateUrl || "/planner/item", {
+				method: "POST",
+				body: formData,
+				headers: {
+					"X-Requested-With": "XMLHttpRequest",
+					"X-CSRF-Token": getCsrfToken()
+				},
+				credentials: "same-origin"
+			});
+			const payload = await response.json();
+			if (!response.ok || !payload.ok) {
+				throw new Error(payload.error || "Planner item update failed");
+			}
+
+			const slotSelector =
+				`[data-planner-item-slot][data-pair-key="${CSS.escape(slotToUpdate.dataset.pairKey || "")}"][data-side="${CSS.escape(slotToUpdate.dataset.side || "")}"][data-slot="${slotToUpdate.dataset.slot || ""}"]`;
+			document.querySelectorAll(slotSelector).forEach(function (slotNode) {
+				slotNode.dataset.currentName = itemNameToSave;
+				slotNode.classList.remove("planner-item-slot-empty");
+				slotNode.innerHTML = `
+					${payload.image ? `<img src="${payload.image}" alt="${itemNameToSave}" class="multi-match-item-image">` : ""}
+					<span>${itemNameToSave}</span>
+				`;
+			});
+			const partnerSlot = document.querySelector(
+				`[data-planner-item-slot][data-pair-key="${CSS.escape(slotToUpdate.dataset.pairKey || "")}"][data-side="${CSS.escape(slotToUpdate.dataset.side || "")}"][data-slot="${slotToUpdate.dataset.slot === "0" ? "1" : "0"}"]`
+			);
+			if (partnerSlot) {
+				const partnerName = partnerSlot.dataset.currentName || "";
+				document.querySelectorAll(
+					`[data-planner-item-slot][data-pair-key="${CSS.escape(slotToUpdate.dataset.pairKey || "")}"][data-side="${CSS.escape(slotToUpdate.dataset.side || "")}"][data-slot="${slotToUpdate.dataset.slot === "0" ? "1" : "0"}"]`
+				).forEach(function (slotNode) {
+					slotNode.dataset.otherName = itemNameToSave;
+				});
+				document.querySelectorAll(slotSelector).forEach(function (slotNode) {
+					slotNode.dataset.otherName = partnerName;
+				});
+			}
+			plannerStateChanged = true;
+			showPageNotice("Item slot updated.", "success");
+			closePlannerItemPicker();
+		})();
+
+		try {
+			await plannerItemSavePromise;
+		} catch (error) {
+			console.error(error);
+			showPageNotice(error.message || "Planner item update failed.", "error");
+		}
+	}
+
+	document.addEventListener("click", function (event) {
+		const link = event.target.closest("[data-prepare-automation-link]");
+		if (!link) return;
+
+		event.preventDefault();
+		const href = link.href;
+		plannerItemSavePromise
+			.catch(() => null)
+			.then(function () {
+				window.location.href = href;
+			});
+	});
+
+	document.addEventListener("click", function (event) {
+		const slot = event.target.closest("[data-planner-item-slot]");
+		if (!slot) return;
+		event.preventDefault();
+		openPlannerItemPicker(slot);
+	});
+
     document.addEventListener("keydown", function (event) {
         if (event.key !== "Escape") return;
+
+		const itemPickerModal = document.getElementById("planner-item-picker-modal");
+		if (itemPickerModal && !itemPickerModal.classList.contains("hidden")) {
+			closePlannerItemPicker();
+			return;
+		}
 
         if (plannerModal && !plannerModal.classList.contains("hidden")) {
             closePlannerModal();
